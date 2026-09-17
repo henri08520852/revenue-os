@@ -1,0 +1,1 @@
+{"version":1,"functions":{"/api/cron/process-queue":{"maxDuration":60},"/api/actions/generate":{}}}
