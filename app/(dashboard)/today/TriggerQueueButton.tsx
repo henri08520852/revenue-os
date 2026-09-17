@@ -16,9 +16,10 @@ export default function TriggerQueueButton({ projectId }: { projectId?: string }
       const params = new URLSearchParams()
       if (projectId) params.set('project_id', projectId)
 
-      const res = await fetch(`/api/cron/process-queue?${params}`, {
+      const res = await fetch('/api/trigger-queue', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${process.env.NEXT_PUBLIC_CRON_SECRET || ''}` },
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: projectId }),
       })
       const data = await res.json()
 
