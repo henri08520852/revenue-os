@@ -1,194 +1,124 @@
-import { createClient } from '@/lib/supabase/server'
+'use client'
+
+import { useState, useEffect } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
-import AddCompanyButton from './AddCompanyButton'
- 
+
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
- 
-const STATUS_STYLES: Record<string, { pill: string; dot: string }> = {
-  target:      { pill: 'bg-gray-100 text-gray-600',        dot: 'bg-gray-400' },
-  warm:        { pill: 'bg-yellow-50 text-yellow-700 border border-yellow-200', dot: 'bg-yellow-500' },
-  hot:         { pill: 'bg-orange-50 text-orange-700 border border-orange-200', dot: 'bg-orange-500' },
-  active_deal: { pill: 'bg-emerald-50 text-emerald-700 border border-emerald-200', dot: 'bg-emerald-500' },
-  customer:    { pill: 'bg-sky-50 text-sky-700 border border-sky-200',           dot: 'bg-sky-500' },
-  inactive:    { pill: 'bg-gray-50 text-gray-400',          dot: 'bg-gray-300' },
-}
- 
-const STATUS_LABELS: Record<string, string> = {
-  target: 'Target', warm: 'Warm', hot: '🔥 Hot', active_deal: '💼 Active Deal',
-  customer: 'Customer', inactive: 'Inactive',
-}
- 
-export default async function CompaniesPage({
-  searchParams,
-}: {
-  searchParams: { status?: string; q?: string }
-}) {
+
+export default function CompaniesPage() {
+  const [companies, setCompanies] = useState<any[]>([])
+  const [filter, setFilter] = useState('all')
+  const [search, setSearch] = useState('')
   const supabase = createClient()
- 
-  let query = supabase
-    .from('companies')
-    .select('id, name, domain, account_status, account_score, icp_score, signal_score, current_metrics, last_signal_at')
-    .eq('project_id', PROJECT_ID)
-    .order('account_score', { ascending: false })
-    .limit(100)
- 
-  if (searchParams.status) query = query.eq('account_status', searchParams.status)
-  if (searchParams.q) query = query.ilike('name', `%${searchParams.q}%`)
- 
-  const { data: companies, error } = await query
- 
-  // Count per status
-  const { data: statusCounts } = await supabase
-    .from('companies')
-    .select('account_status')
-    .eq('project_id', PROJECT_ID)
- 
-  const counts: Record<string, number> = {}
-  ;(statusCounts || []).forEach((r: any) => {
-    counts[r.account_status] = (counts[r.account_status] || 0) + 1
-  })
- 
-  const statuses = ['target', 'warm', 'hot', 'active_deal', 'customer', 'inactive']
- 
+
+  useEffect(() => {
+    async function load() {
+      let query = supabase
+        .from('companies')
+        .select('*, signals(count)')
+        .eq('project_id', PROJECT_ID)
+        .order('created_at', { ascending: false })
+
+      if (filter !== 'all') query = query.eq('status', filter)
+      const { data } = await query
+      setCompanies(data ?? [])
+    }
+    load()
+  }, [filter])
+
+  const filtered = companies.filter(c =>
+    c.name?.toLowerCase().includes(search.toLowerCase()) ||
+    c.domain?.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const statusColor: Record<string, string> = {
+    target: '#dbeafe',
+    warm: '#d1fae5',
+    active_deal: '#fef3c7',
+    customer: '#ede9fe',
+    inactive: '#f3f4f6',
+  }
+  const statusText: Record<string, string> = {
+    target: '#1d4ed8',
+    warm: '#065f46',
+    active_deal: '#92400e',
+    customer: '#5b21b6',
+    inactive: '#6b7280',
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div style={{ padding: '32px 40px' }}>
       {/* Header */}
-      <div className="relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #0a0f1e 0%, #0f1e3a 100%)' }}>
-        <div className="px-8 py-7">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-white">Companies</h1>
-              <p className="text-white/40 text-sm mt-1">{statusCounts?.length || 0} Unternehmen im CRM</p>
-            </div>
-            <AddCompanyButton projectId={PROJECT_ID} />
-          </div>
- 
-          {/* Status pills */}
-          <div className="flex items-center gap-2 mt-5 flex-wrap">
-            <a
-              href="/companies"
-              className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-all ${
-                !searchParams.status
-                  ? 'bg-white text-gray-900 shadow'
-                  : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
-              }`}
-            >
-              Alle <span className="ml-1 opacity-70">{statusCounts?.length || 0}</span>
-            </a>
-            {statuses.map(s => (
-              <a
-                key={s}
-                href={`/companies?status=${s}`}
-                className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-all ${
-                  searchParams.status === s
-                    ? 'bg-white text-gray-900 shadow'
-                    : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
-                }`}
-              >
-                {STATUS_LABELS[s]} {counts[s] ? <span className="ml-1 opacity-60">{counts[s]}</span> : null}
-              </a>
-            ))}
- 
-            <form className="ml-auto" method="get">
-              {searchParams.status && <input type="hidden" name="status" value={searchParams.status} />}
-              <input
-                name="q"
-                defaultValue={searchParams.q}
-                placeholder="🔍 Suche…"
-                className="px-3.5 py-1.5 bg-white/10 border border-white/20 rounded-full text-sm text-white placeholder-white/40 focus:outline-none focus:bg-white/20 w-44"
-              />
-            </form>
-          </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: '#111827' }}>Companies</h1>
+          <p style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>{filtered.length} Unternehmen im CRM</p>
         </div>
+        <Link href="/companies/new" style={{ background: '#2563eb', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 14, fontWeight: 500, textDecoration: 'none' }}>
+          + Unternehmen
+        </Link>
       </div>
- 
+
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        {['all','target','warm','active_deal','customer','inactive'].map(f => (
+          <button key={f} onClick={() => setFilter(f)} style={{
+            padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 500, border: 'none', cursor: 'pointer',
+            background: filter === f ? '#2563eb' : '#f3f4f6',
+            color: filter === f ? '#fff' : '#374151',
+          }}>
+            {f === 'all' ? 'Alle' : f === 'active_deal' ? '🏆 Active Deal' : f === 'warm' ? '🔥 Warm' : f === 'target' ? 'Target' : f === 'customer' ? '⭐ Customer' : 'Inactive'}
+          </button>
+        ))}
+      </div>
+
+      {/* Search */}
+      <input
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Suche..."
+        style={{ width: '100%', maxWidth: 320, padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14, marginBottom: 20, outline: 'none' }}
+      />
+
       {/* Table */}
-      <div className="px-8 py-6">
-        {error && <p className="text-sm text-red-500 mb-4">Fehler: {error.message}</p>}
- 
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/80">
-                <th className="text-left px-5 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wider">Unternehmen</th>
-                <th className="text-left px-5 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wider">Status</th>
-                <th className="text-right px-5 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wider">Score</th>
-                <th className="text-right px-5 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wider">ICP</th>
-                <th className="text-right px-5 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wider">Signale</th>
-                <th className="text-right px-5 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wider">Jobs</th>
-                <th className="text-right px-5 py-3 font-semibold text-gray-500 text-xs uppercase tracking-wider">Letztes Signal</th>
+      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
+              {['Unternehmen','Status','Score','ICP','Signale','Jobs','Letztes Signal'].map(h => (
+                <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((c, i) => (
+              <tr key={c.id} style={{ borderBottom: i < filtered.length - 1 ? '1px solid #f9fafb' : 'none' }}>
+                <td style={{ padding: '14px 16px' }}>
+                  <Link href={`/companies/${c.id}`} style={{ fontWeight: 600, color: '#111827', textDecoration: 'none', fontSize: 14 }}>{c.name}</Link>
+                  <p style={{ fontSize: 12, color: '#9ca3af' }}>{c.domain}</p>
+                </td>
+                <td style={{ padding: '14px 16px' }}>
+                  <span style={{ background: statusColor[c.status] ?? '#f3f4f6', color: statusText[c.status] ?? '#6b7280', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500 }}>
+                    {c.status ?? '—'}
+                  </span>
+                </td>
+                <td style={{ padding: '14px 16px', fontSize: 14, color: '#374151' }}>{c.icp_score ?? '—'}</td>
+                <td style={{ padding: '14px 16px', fontSize: 14, color: '#374151' }}>{c.icp_fit ?? '—'}</td>
+                <td style={{ padding: '14px 16px', fontSize: 14, color: '#374151' }}>{c.signals?.[0]?.count ?? '—'}</td>
+                <td style={{ padding: '14px 16px', fontSize: 14, color: '#374151' }}>{c.open_jobs ?? '—'}</td>
+                <td style={{ padding: '14px 16px', fontSize: 12, color: '#9ca3af' }}>{c.last_signal_at ? new Date(c.last_signal_at).toLocaleDateString('de-DE') : '—'}</td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {(companies || []).map(company => {
-                const metrics = company.current_metrics as any || {}
-                const style = STATUS_STYLES[company.account_status] || STATUS_STYLES.target
-                return (
-                  <tr key={company.id} className="hover:bg-blue-50/30 transition-colors group">
-                    <td className="px-5 py-3.5">
-                      <Link href={`/companies/${company.id}`} className="group-hover:text-sky-600 transition-colors">
-                        <p className="font-semibold text-gray-900 group-hover:text-sky-600">{company.name}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">{company.domain || '—'}</p>
-                      </Link>
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${style.pill}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
-                        {company.account_status?.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3.5 text-right">
-                      <ScoreBar value={company.account_score || 0} />
-                    </td>
-                    <td className="px-5 py-3.5 text-right text-gray-600 font-medium">
-                      {company.icp_score ?? '—'}
-                    </td>
-                    <td className="px-5 py-3.5 text-right text-gray-600 font-medium">
-                      {company.signal_score ?? '—'}
-                    </td>
-                    <td className="px-5 py-3.5 text-right text-gray-600 font-medium">
-                      {metrics.open_jobs ?? '—'}
-                    </td>
-                    <td className="px-5 py-3.5 text-right text-xs text-gray-400 font-medium">
-                      {company.last_signal_at ? formatRelative(company.last_signal_at) : '—'}
-                    </td>
-                  </tr>
-                )
-              })}
-              {!companies?.length && (
-                <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center">
-                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-xl mx-auto mb-3">🏢</div>
-                    <p className="text-gray-500 font-medium text-sm">Noch keine Unternehmen</p>
-                    <p className="text-gray-400 text-xs mt-1">Füge dein erstes Zielunternehmen hinzu</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
- 
-        <p className="text-xs text-gray-400 mt-3">{companies?.length || 0} Unternehmen geladen</p>
+            ))}
+          </tbody>
+        </table>
+        {!filtered.length && (
+          <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af' }}>
+            <p>Keine Unternehmen gefunden</p>
+          </div>
+        )}
       </div>
+      <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 12 }}>{filtered.length} Unternehmen geladen</p>
     </div>
   )
-}
- 
-function ScoreBar({ value }: { value: number }) {
-  const color = value >= 70 ? 'from-emerald-500 to-emerald-400' : value >= 40 ? 'from-yellow-500 to-amber-400' : 'from-gray-300 to-gray-200'
-  return (
-    <div className="flex items-center gap-2 justify-end">
-      <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full bg-gradient-to-r ${color} rounded-full transition-all`} style={{ width: `${value}%` }} />
-      </div>
-      <span className="text-gray-700 font-semibold w-6 text-right text-xs">{value || '—'}</span>
-    </div>
-  )
-}
- 
-function formatRelative(dateStr: string): string {
-  const diffDays = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
-  if (diffDays === 0) return 'heute'
-  if (diffDays === 1) return 'gestern'
-  return `vor ${diffDays}d`
 }
