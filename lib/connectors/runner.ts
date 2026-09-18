@@ -9,6 +9,9 @@ import { processJobObservations } from '@/lib/signals/job-processor'
 
 // Import connectors to register them
 import '@/lib/connectors/career-page'
+import '@/lib/connectors/google-news'
+import { processNewsObservations } from '@/lib/signals/news-processor'
+import { runDueDiscoverySearches } from '@/lib/connectors/google-news-discovery'
 
 const BATCH_SIZE = 20        // Process up to N subscriptions per cron tick
 const TIMEOUT_MS = 50_000    // 50s — Vercel Pro limit is 60s
@@ -136,15 +139,19 @@ export async function processQueue(projectId?: string): Promise<{
     // Store observations
     let signalsCreated = 0
     if (result.success && result.observations.length > 0) {
-      const { jobsAdded, jobsRemoved } = await processJobObservations(
-        supabase,
-        sub.project_id,
-        company.id,
-        sub.data_source_id,
-        result.observations,
-      )
-      signalsCreated = await generateSignals(supabase, sub.project_id, company.id)
-      result.metadata.recordsChanged = jobsAdded + jobsRemoved
+      if (dataSource.connector_type === 'news') {
+        const { signalsCreated: ns, observationsSaved } = await processNewsObservations(
+          supabase, sub.project_id, company.id, sub.data_source_id, result.observations,
+        )
+        signalsCreated = ns
+        result.metadata.recordsChanged = observationsSaved
+      } else {
+        const { jobsAdded, jobsRemoved } = await processJobObservations(
+          supabase, sub.project_id, company.id, sub.data_source_id, result.observations,
+        )
+        signalsCreated = await generateSignals(supabase, sub.project_id, company.id)
+        result.metadata.recordsChanged = jobsAdded + jobsRemoved
+      }
     }
 
     // Update connector run
