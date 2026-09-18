@@ -70,7 +70,8 @@ class GoogleNewsConnector implements Connector {
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
     const { company } = ctx
     const subConfig = (ctx.subscription?.config ?? {}) as Record<string, string>
-    const queryName = (company.name ?? '') + (subConfig.query_suffix ?? '')
+    const queryName = company.name ?? ''
+    const querySuffix = subConfig.query_suffix ?? ''
     if (!queryName) {
       return {
         success: false,
@@ -81,7 +82,7 @@ class GoogleNewsConnector implements Connector {
     }
 
     // Build RSS URL — quoted exact-match query
-    const q = encodeURIComponent(`"${queryName}"`)
+    const q = encodeURIComponent(`"${queryName}"${querySuffix}`)
     const rssUrl = `https://news.google.com/rss/search?q=${q}&hl=en-US&gl=US&ceid=US:en&num=20`
 
     let xml: string
