@@ -69,7 +69,8 @@ class GoogleNewsConnector implements Connector {
 
   async fetch(ctx: ConnectorContext): Promise<ConnectorResult> {
     const { company } = ctx
-    const queryName = company.name ?? ''
+    const subConfig = (ctx.subscription?.config ?? {}) as Record<string, string>
+    const queryName = (company.name ?? '') + (subConfig.query_suffix ?? '')
     if (!queryName) {
       return {
         success: false,
