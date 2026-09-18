@@ -27,22 +27,22 @@ async function loadRules(
   projectId: string,
   observationType: string,
 ): Promise<SignalRule[]> {
-  const { data, error } = await supabase
-    .from('signal_rules')
-    .select('*')
-    .eq('observation_type', observationType)
-    .eq('enabled', true)
-    .or(`project_id.is.null,project_id.eq.${projectId}`)
-    .order('priority', { ascending: false })
+  // Load global rules (project_id IS NULL) and project-specific rules separately
+  // (avoids PostgREST .or() null-check issues)
+  const [{ data: globalData, error: e1 }, { data: projData, error: e2 }] = await Promise.all([
+    supabase.from('signal_rules').select('*')
+      .eq('observation_type', observationType).eq('enabled', true).is('project_id', null)
+      .order('priority', { ascending: false }),
+    supabase.from('signal_rules').select('*')
+      .eq('observation_type', observationType).eq('enabled', true).eq('project_id', projectId)
+      .order('priority', { ascending: false }),
+  ])
 
-  if (error) {
-    console.error('[news-processor] failed to load signal_rules:', error.message)
-    return []
-  }
+  if (e1) console.error('[news-processor] failed to load global rules:', e1.message)
+  if (e2) console.error('[news-processor] failed to load project rules:', e2.message)
 
-  // Project-specific rules (project_id = projectId) override globals of same signal_type
-  const projectRules = (data ?? []).filter((r: SignalRule) => r.project_id === projectId)
-  const globalRules = (data ?? []).filter((r: SignalRule) => r.project_id === null)
+  const projectRules = projData ?? []
+  const globalRules = globalData ?? []
 
   const overriddenTypes = new Set(projectRules.map((r: SignalRule) => r.signal_type))
   const effectiveGlobals = globalRules.filter((r: SignalRule) => !overriddenTypes.has(r.signal_type))
