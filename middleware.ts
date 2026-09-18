@@ -8,6 +8,6 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     // Skip static files and API routes that have their own auth
-    '/((?!_next/static|_next/image|favicon.ico|api/cron|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/cron|api/trigger-queue|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
