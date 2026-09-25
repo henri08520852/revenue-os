@@ -189,11 +189,19 @@ export async function processQueue(projectId?: string): Promise<{
   }
 
   // Run due discovery searches (find new candidate companies)
-  const projectIds = projectId
-    ? [projectId]
-    : [...new Set((subscriptions as any[]).map((s) => s.project_id as string))]
+  let discoveryProjectIds: string[]
+  if (projectId) {
+    discoveryProjectIds = [projectId]
+  } else {
+    const { data: dueSearches } = await supabase
+      .from('discovery_searches')
+      .select('project_id')
+      .eq('enabled', true)
+      .lte('next_run_at', new Date().toISOString())
+    discoveryProjectIds = [...new Set((dueSearches ?? []).map((s: any) => s.project_id as string))]
+  }
 
-  for (const pid of projectIds) {
+  for (const pid of discoveryProjectIds) {
     try {
       const disc = await runDueDiscoverySearches(supabase, pid)
       if (disc.searchesRun > 0) {
