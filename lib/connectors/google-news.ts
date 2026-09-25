@@ -88,7 +88,7 @@ async function isRelevantArticle(
       max_tokens: 5,
       messages: [{
         role: 'user',
-        content: `Is this news article specifically about the company "${companyName}" (${context})? Reply only "yes" or "no".\nArticle title: "${title}"`,
+        content: `Does this news article MENTION the company "${companyName}" by name? Reply only "yes" or "no".\nArticle title: "${title}"`,
       }],
     })
     const text = msg.content[0].type === 'text' ? msg.content[0].text.toLowerCase() : 'no'
