@@ -188,6 +188,22 @@ export async function processQueue(projectId?: string): Promise<{
     await sleep(500)
   }
 
+  // Run due discovery searches (find new candidate companies)
+  const projectIds = projectId
+    ? [projectId]
+    : [...new Set((subscriptions as any[]).map((s) => s.project_id as string))]
+
+  for (const pid of projectIds) {
+    try {
+      const disc = await runDueDiscoverySearches(supabase, pid)
+      if (disc.searchesRun > 0) {
+        console.log(`[runner] Discovery: ${disc.searchesRun} searches, ${disc.candidatesCreated} new candidates`)
+      }
+    } catch (err) {
+      console.error('[runner] Discovery error:', err)
+    }
+  }
+
   return stats
 }
 
