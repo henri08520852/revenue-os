@@ -12,6 +12,9 @@ import '@/lib/connectors/career-page'
 import '@/lib/connectors/google-news'
 import { processNewsObservations } from '@/lib/signals/news-processor'
 import { runDueDiscoverySearches } from '@/lib/connectors/google-news-discovery'
+import { runJobboardDiscovery } from '@/lib/connectors/jobboard-discovery'
+import { runGooglePlacesDiscovery } from '@/lib/connectors/google-places-discovery'
+import { runNorthdataEnrichment } from '@/lib/connectors/northdata-enrichment'
 
 const BATCH_SIZE = 20        // Process up to N subscriptions per cron tick
 const TIMEOUT_MS = 50_000    // 50s — Vercel Pro limit is 60s
@@ -210,6 +213,18 @@ export async function processQueue(projectId?: string): Promise<{
     } catch (err) {
       console.error('[runner] Discovery error:', err)
     }
+          try {
+        const jb = await runJobboardDiscovery(supabase, pid)
+        if (jb.jobsScanned > 0) console.log(`[runner] Jobboard: ${jb.jobsScanned} jobs scanned, ${jb.candidatesCreated} new candidates`)
+      } catch (err) { console.error('[runner] Jobboard discovery error:', err) }
+      try {
+        const gp = await runGooglePlacesDiscovery(supabase, pid)
+        if (gp.placesScanned > 0) console.log(`[runner] Places: ${gp.placesScanned} scanned, ${gp.candidatesCreated} new candidates`)
+      } catch (err) { console.error('[runner] Places discovery error:', err) }
+      try {
+        const nd = await runNorthdataEnrichment(supabase, pid)
+        if (nd.enriched > 0) console.log(`[runner] Northdata: ${nd.enriched} enriched, ${nd.skipped} skipped`)
+      } catch (err) { console.error('[runner] Northdata enrichment error:', err) }
   }
 
   return stats
