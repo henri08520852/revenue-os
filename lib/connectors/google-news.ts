@@ -5,6 +5,35 @@ import type { Connector, ConnectorContext, ConnectorResult, Observation } from '
 // ---------------------------------------------------------------------------
 import Anthropic from '@anthropic-ai/sdk'
 
+
+// ---------------------------------------------------------------------------
+// LLM relevance filter  (only runs when subConfig.priority === 'high')
+// ---------------------------------------------------------------------------
+
+const _anthropic = new Anthropic()
+
+async function isRelevantArticle(
+  title: string,
+  companyName: string,
+  context: string,
+): Promise<boolean> {
+  if (!title) return false
+  try {
+    const msg = await _anthropic.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 5,
+      messages: [{
+        role: 'user',
+        content: `Does this news article MENTION the company "${companyName}" by name? Reply only "yes" or "no".\nArticle title: "${title}"`,
+      }],
+    })
+    const text = msg.content[0].type === 'text' ? msg.content[0].text.toLowerCase() : 'no'
+    return text.includes('yes')
+  } catch {
+    return true // on error, keep the article
+  }
+}
+
 // Simple RSS parser — no external deps, works server-side
 // ---------------------------------------------------------------------------
 
