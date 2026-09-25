@@ -200,9 +200,8 @@ export async function runDiscoverySearch(
     const normalized = name.toLowerCase().trim()
     if (knownNames.has(normalized) || pendingNames.has(normalized)) continue
     rows.push({
-      project_id:       search.project_id,
+      project_id:  search.project_id,
       name,
-      normalized_name:  normalized,
       source_type: 'news_discovery',
       search_id:   search.id,
       evidence:    evidence.slice(0, 5),   // max 5 articles as evidence
