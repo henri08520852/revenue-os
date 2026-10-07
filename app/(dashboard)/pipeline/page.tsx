@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
+import StageMoveButtons from './StageMoveButtons'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
 
@@ -11,17 +12,26 @@ const STAGE_LABELS: Record<Stage, string> = {
   evaluation:  'Evaluation',
   proposal:    'Proposal',
   negotiation: 'Verhandlung',
-  won:         'Gewonnen ✓',
+  won:         'Gewonnen',
   lost:        'Verloren',
 }
 
 const STAGE_COLORS: Record<Stage, string> = {
-  discovery:   'border-t-gray-300',
-  evaluation:  'border-t-blue-400',
-  proposal:    'border-t-yellow-400',
-  negotiation: 'border-t-orange-400',
-  won:         'border-t-green-500',
-  lost:        'border-t-gray-200',
+  discovery:   'border-t-gray-300 bg-gray-50/50',
+  evaluation:  'border-t-blue-400 bg-blue-50/30',
+  proposal:    'border-t-yellow-400 bg-yellow-50/30',
+  negotiation: 'border-t-orange-400 bg-orange-50/30',
+  won:         'border-t-green-500 bg-green-50/30',
+  lost:        'border-t-gray-200 bg-gray-50/30',
+}
+
+const STAGE_DOT: Record<Stage, string> = {
+  discovery:   'bg-gray-400',
+  evaluation:  'bg-blue-400',
+  proposal:    'bg-yellow-400',
+  negotiation: 'bg-orange-400',
+  won:         'bg-green-500',
+  lost:        'bg-gray-300',
 }
 
 export default async function PipelinePage() {
@@ -29,11 +39,10 @@ export default async function PipelinePage() {
 
   const { data: opps } = await supabase
     .from('opportunities')
-    .select('*, companies(id, name, domain, account_score)')
+    .select('*, companies(id, name, domain, account_score, signal_score)')
     .eq('project_id', PROJECT_ID)
     .order('value_eur', { ascending: false })
 
-  // Group by stage
   const byStage: Record<Stage, any[]> = {
     discovery: [], evaluation: [], proposal: [], negotiation: [], won: [], lost: []
   }
@@ -47,82 +56,142 @@ export default async function PipelinePage() {
     .flatMap(s => byStage[s])
     .reduce((sum, o) => sum + (o.value_eur || 0), 0)
 
+  const wonTotal = byStage.won.reduce((s, o) => s + (o.value_eur || 0), 0)
+
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Pipeline</h1>
-        <div className="text-right">
-          <p className="text-2xl font-bold text-gray-900">€{totalPipeline.toLocaleString('de-DE')}</p>
-          <p className="text-xs text-gray-400">Gesamt Pipeline</p>
-        </div>
-      </div>
-
-      {/* Kanban board — horizontal scroll on small screens */}
-      <div className="flex gap-4 overflow-x-auto pb-4">
-        {activeStages.map(stage => (
-          <div key={stage} className="flex-none w-64">
-            <div className={`bg-white border border-gray-200 border-t-4 ${STAGE_COLORS[stage]} rounded-xl overflow-hidden`}>
-              {/* Column header */}
-              <div className="px-3 py-2.5 border-b border-gray-100">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-gray-700">{STAGE_LABELS[stage]}</h3>
-                  <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-                    {byStage[stage].length}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  €{byStage[stage].reduce((s, o) => s + (o.value_eur || 0), 0).toLocaleString('de-DE')}
-                </p>
+    <div className="min-h-screen bg-gray-50">
+      <div className="relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #0a0f1e 0%, #0f1e3a 100%)' }}>
+        <div className="px-8 py-7">
+          <div className="flex items-end justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Pipeline</h1>
+              <p className="text-white/40 text-sm mt-1">{(opps || []).length} Deals gesamt</p>
+            </div>
+            <div className="flex gap-6 text-right">
+              <div>
+                <p className="text-2xl font-bold text-white">€{totalPipeline.toLocaleString('de-DE')}</p>
+                <p className="text-xs text-white/40">Aktive Pipeline</p>
               </div>
-
-              {/* Cards */}
-              <div className="p-2 space-y-2 min-h-24">
-                {byStage[stage].map(opp => (
-                  <OppCard key={opp.id} opp={opp} />
-                ))}
-                {byStage[stage].length === 0 && (
-                  <p className="text-xs text-gray-300 text-center py-4">Leer</p>
-                )}
+              <div>
+                <p className="text-2xl font-bold text-green-400">€{wonTotal.toLocaleString('de-DE')}</p>
+                <p className="text-xs text-white/40">Gewonnen</p>
               </div>
             </div>
           </div>
-        ))}
+          <div className="flex items-center gap-1 mt-6">
+            {activeStages.map((stage, i) => (
+              <div key={stage} className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-white/70 text-xs">
+                  <span className={`w-1.5 h-1.5 rounded-full ${STAGE_DOT[stage]}`} />
+                  {STAGE_LABELS[stage]}
+                  <span className="text-white/40">{byStage[stage].length}</span>
+                </div>
+                {i < activeStages.length - 1 && <span className="text-white/20">›</span>}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* Won / Lost summary */}
-      <div className="grid grid-cols-2 gap-4 mt-6">
-        {(['won', 'lost'] as Stage[]).map(stage => (
-          <div key={stage} className="bg-white border border-gray-200 rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">{STAGE_LABELS[stage]}</h3>
-            <p className="text-xl font-bold text-gray-900">
-              €{byStage[stage].reduce((s, o) => s + (o.value_eur || 0), 0).toLocaleString('de-DE')}
-            </p>
-            <p className="text-xs text-gray-400">{byStage[stage].length} Deals</p>
-          </div>
-        ))}
+      <div className="px-6 py-6">
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {activeStages.map(stage => (
+            <div key={stage} className="flex-none w-64">
+              <div className={`border border-gray-200 border-t-4 ${STAGE_COLORS[stage]} rounded-xl overflow-hidden shadow-sm`}>
+                <div className="px-3 py-2.5 border-b border-gray-100 bg-white/80">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-700">{STAGE_LABELS[stage]}</h3>
+                    <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                      {byStage[stage].length}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5 font-medium">
+                    €{byStage[stage].reduce((s, o) => s + (o.value_eur || 0), 0).toLocaleString('de-DE')}
+                  </p>
+                </div>
+                <div className="p-2 space-y-2 min-h-32">
+                  {byStage[stage].map(opp => (
+                    <OppCard key={opp.id} opp={opp} currentStage={stage} allStages={STAGES} stageLabels={STAGE_LABELS} />
+                  ))}
+                  {byStage[stage].length === 0 && (
+                    <p className="text-xs text-gray-300 text-center py-6">Keine Deals</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 mt-4">
+          {(['won', 'lost'] as Stage[]).map(stage => (
+            <div key={stage} className={`bg-white border border-gray-200 border-t-4 ${STAGE_COLORS[stage]} rounded-xl p-4 shadow-sm`}>
+              <h3 className="text-sm font-semibold text-gray-600 mb-3">{STAGE_LABELS[stage]}</h3>
+              <div className="flex items-end justify-between mb-3">
+                <p className="text-xl font-bold text-gray-900">
+                  €{byStage[stage].reduce((s, o) => s + (o.value_eur || 0), 0).toLocaleString('de-DE')}
+                </p>
+                <p className="text-xs text-gray-400">{byStage[stage].length} Deals</p>
+              </div>
+              <div className="space-y-1.5">
+                {byStage[stage].slice(0, 5).map(opp => (
+                  <div key={opp.id} className="flex items-center justify-between text-xs">
+                    <Link href={`/companies/${opp.companies?.id}`} className="text-gray-600 hover:text-gray-900 truncate max-w-[140px]">
+                      {opp.companies?.name}
+                    </Link>
+                    <span className="text-gray-400 shrink-0 ml-2">
+                      {opp.value_eur ? `€${opp.value_eur.toLocaleString('de-DE')}` : '—'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
 }
 
-function OppCard({ opp }: { opp: any }) {
+function OppCard({ opp, currentStage, allStages, stageLabels }: {
+  opp: any
+  currentStage: Stage
+  allStages: readonly Stage[]
+  stageLabels: Record<Stage, string>
+}) {
   const company = opp.companies
   const isOverdue = opp.next_step_due_at && new Date(opp.next_step_due_at) < new Date()
+  const stageIdx = allStages.indexOf(currentStage)
+  const prevStage = stageIdx > 0 ? allStages[stageIdx - 1] : null
+  const nextStage = stageIdx < allStages.length - 1 ? allStages[stageIdx + 1] : null
 
   return (
-    <div className={`bg-gray-50 rounded-lg p-2.5 border ${isOverdue ? 'border-red-200' : 'border-gray-100'}`}>
-      <Link href={`/companies/${company?.id}`} className="text-sm font-medium text-gray-900 hover:text-primary-600 block truncate">
+    <div className={`bg-white rounded-lg p-2.5 border shadow-sm hover:shadow-md transition-shadow ${isOverdue ? 'border-red-200' : 'border-gray-100'}`}>
+      <Link href={`/companies/${company?.id}`} className="text-sm font-medium text-gray-900 hover:text-sky-600 block truncate">
         {company?.name || '—'}
       </Link>
-      {opp.value_eur && (
-        <p className="text-xs text-gray-600 font-medium">€{opp.value_eur.toLocaleString('de-DE')}</p>
+      <div className="flex items-center gap-2 mt-1">
+        {opp.value_eur && (
+          <p className="text-xs font-semibold text-gray-700">€{opp.value_eur.toLocaleString('de-DE')}</p>
+        )}
+        {company?.signal_score >= 50 && (
+          <span className="text-xs text-orange-500">🔥{company.signal_score}</span>
+        )}
+      </div>
+      {opp.next_step && (
+        <p className="text-xs text-gray-500 mt-1 truncate">→ {opp.next_step}</p>
       )}
       {opp.next_step_due_at && (
-        <p className={`text-xs mt-1 ${isOverdue ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
-          {isOverdue ? '⚠ ' : ''}
+        <p className={`text-xs mt-0.5 ${isOverdue ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+          {isOverdue ? '⚠ ' : '📅 '}
           {new Date(opp.next_step_due_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
         </p>
       )}
+      <StageMoveButtons
+        oppId={opp.id}
+        prevStage={prevStage}
+        nextStage={nextStage}
+        stageLabels={stageLabels}
+      />
     </div>
   )
 }
