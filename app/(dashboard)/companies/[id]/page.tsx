@@ -310,7 +310,7 @@ function Section({ title, count, children }: { title: string; count: number; chi
 function ScorePill({ label, value }: { label: string; value: number }) {
   const color = value >= 70 ? 'text-green-600' : value >= 40 ? 'text-yellow-600' : 'text-gray-400'
   return (
-    <div className="bg-white border border-gray-200 rounded-xl px-4 py-2 text-center">
+    <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 12, padding: '8px 16px', textAlign: 'center', minWidth: 64 }}>
       <p className={`text-xl font-bold ${color}`}>{value}</p>
       <p className="text-xs text-gray-400">{label}</p>
     </div>
