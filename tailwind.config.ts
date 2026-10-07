@@ -1,16 +1,22 @@
-
 import type { Config } from 'tailwindcss'
- 
+
 const config: Config = {
   content: [
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
     './app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
+  safelist: [
+    'border-t-gray-300', 'border-t-blue-400', 'border-t-yellow-400',
+    'border-t-orange-400', 'border-t-green-500', 'border-t-gray-200',
+    'bg-gray-50/50', 'bg-blue-50/30', 'bg-yellow-50/30',
+    'bg-orange-50/30', 'bg-green-50/30',
+    'bg-gray-400', 'bg-blue-400', 'bg-yellow-400',
+    'bg-orange-400', 'bg-green-500', 'bg-gray-300',
+  ],
   theme: {
     extend: {
       colors: {
-        // Brand palette — modern SaaS
         primary: {
           50:  '#f0f9ff',
           100: '#e0f2fe',
@@ -20,7 +26,6 @@ const config: Config = {
           700: '#0369a1',
           900: '#0c4a6e',
         },
-        // Sidebar / brand dark
         navy: {
           900: '#0a0f1e',
           800: '#111827',
@@ -45,5 +50,5 @@ const config: Config = {
   },
   plugins: [],
 }
- 
+
 export default config
