@@ -16,7 +16,6 @@ const STAGE_LABELS: Record<Stage, string> = {
   lost:        'Verloren',
 }
 
-// Hex values for inline styles (dynamic — Tailwind would purge these)
 const STAGE_COLOR: Record<Stage, string> = {
   discovery:   '#9ca3af',
   evaluation:  '#60a5fa',
@@ -92,9 +91,10 @@ export default async function PipelinePage() {
 
       {/* Kanban board */}
       <div className="px-6 py-6">
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        {/* ↓ display:flex als inline style — Tailwind flex wird hier ignoriert */}
+        <div style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 16 }}>
           {activeStages.map(stage => (
-            <div key={stage} className="shrink-0 w-64">
+            <div key={stage} style={{ flexShrink: 0, width: 256 }}>
               <div
                 className="border border-gray-200 rounded-xl overflow-hidden shadow-sm"
                 style={{ borderTop: `4px solid ${STAGE_COLOR[stage]}` }}
