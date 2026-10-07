@@ -110,7 +110,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
         </div>
 
         {/* Score summary */}
-        <div className="flex gap-4 text-center">
+        <div style={{ display: 'flex', gap: '1rem', flexShrink: 0 }}>
           <ScorePill label="Account" value={company.account_score || 0} />
           <ScorePill label="ICP" value={company.icp_score || 0} />
           <ScorePill label="Signale" value={company.signal_score || 0} />

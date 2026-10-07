@@ -67,7 +67,7 @@ export default function AddDealButton({ companyId, companyName, projectId }: Pro
 
       {open && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '16px' }}
           onClick={() => setOpen(false)}
         >
           <div
