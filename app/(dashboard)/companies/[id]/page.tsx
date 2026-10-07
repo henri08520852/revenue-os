@@ -9,41 +9,37 @@ import EnrichButton from './EnrichButton'
 import QuickNoteButton from './QuickNoteButton'
 import FollowUpButton from './FollowUpButton'
 
+const SIGNAL_LABELS: Record<string, { label: string; icon: string; color: string }> = {
+  news_funding:    { label: 'Funding',            icon: '💰', color: '#10b981' },
+  news_leadership: { label: 'Leadership',          icon: '👔', color: '#6366f1' },
+  news_press:      { label: 'Presseartikel',       icon: '📰', color: '#64748b' },
+  news_expansion:  { label: 'Expansion',           icon: '🚀', color: '#f59e0b' },
+  news_product:    { label: 'Neues Produkt',       icon: '✨', color: '#8b5cf6' },
+  job_posting:     { label: 'Stellenanzeige',      icon: '💼', color: '#0ea5e9' },
+  job_growth:      { label: 'Hiring-Signal',       icon: '📈', color: '#22c55e' },
+  tech_change:     { label: 'Tech-Wechsel',        icon: '⚙️', color: '#ef4444' },
+  funding_round:   { label: 'Finanzierungsrunde',  icon: '💵', color: '#10b981' },
+}
+
+const ACTIVITY_ICONS: Record<string, string> = {
+  call: '📞', email: '✉️', linkedin: '💼', meeting: '🤝', note: '📝',
+}
+
+const BUYER_ROLE_LABELS: Record<string, string> = {
+  economic_buyer: '💰 Budget', champion: '⭐ Champion',
+  influencer: '💡 Influencer', user: '👤 Nutzer', blocker: '🚧 Blocker',
+}
+
 export default async function CompanyPage({ params }: { params: { id: string } }) {
   const supabase = createClient()
 
-  // Parallel data load
   const [companyRes, signalsRes, jobsRes, actionsRes, activitiesRes, peopleRes] = await Promise.all([
-    supabase.from('companies')
-      .select('*')
-      .eq('id', params.id)
-      .single(),
-    supabase.from('signals')
-      .select('*')
-      .eq('company_id', params.id)
-      .eq('status', 'active')
-      .order('strength', { ascending: false }),
-    supabase.from('jobs')
-      .select('*')
-      .eq('company_id', params.id)
-      .eq('status', 'active')
-      .order('first_seen_at', { ascending: false })
-      .limit(30),
-    supabase.from('actions')
-      .select('*')
-      .eq('company_id', params.id)
-      .in('status', ['pending', 'done'])
-      .order('generated_at', { ascending: false })
-      .limit(10),
-    supabase.from('activities')
-      .select('*, people(first_name, last_name)')
-      .eq('company_id', params.id)
-      .order('occurred_at', { ascending: false })
-      .limit(20),
-    supabase.from('people')
-      .select('*')
-      .eq('company_id', params.id)
-      .order('created_at', { ascending: false }),
+    supabase.from('companies').select('*').eq('id', params.id).single(),
+    supabase.from('signals').select('*').eq('company_id', params.id).eq('status', 'active').order('strength', { ascending: false }),
+    supabase.from('jobs').select('*').eq('company_id', params.id).eq('status', 'active').order('first_seen_at', { ascending: false }).limit(30),
+    supabase.from('actions').select('*').eq('company_id', params.id).in('status', ['pending', 'done']).order('generated_at', { ascending: false }).limit(10),
+    supabase.from('activities').select('*, people(first_name, last_name)').eq('company_id', params.id).order('occurred_at', { ascending: false }).limit(20),
+    supabase.from('people').select('*').eq('company_id', params.id).order('created_at', { ascending: false }),
   ])
 
   if (companyRes.error || !companyRes.data) notFound()
@@ -56,238 +52,166 @@ export default async function CompanyPage({ params }: { params: { id: string } }
   const activities = activitiesRes.data || []
   const people = peopleRes.data || []
   const metrics = (company.current_metrics as any) || {}
-
   const linkedinSearchUrl = `https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(company.name)}`
-
-  const BUYER_ROLE_LABELS: Record<string, string> = {
-    economic_buyer: '💰 Budget',
-    champion: '⭐ Champion',
-    influencer: '💡 Influencer',
-    user: '👤 Nutzer',
-    blocker: '🚧 Blocker',
-  }
-
-  const ACTIVITY_ICONS: Record<string, string> = {
-    call: '📞',
-    email: '✉️',
-    linkedin: '💼',
-    meeting: '🤝',
-    note: '📝',
-  }
+  const scoreColor = (v: number) => v >= 70 ? '#16a34a' : v >= 40 ? '#d97706' : '#9ca3af'
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
-        <Link href="/companies" className="hover:text-gray-600">Companies</Link>
+    <div style={{ padding: '24px 32px', maxWidth: 1100, margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#9ca3af', marginBottom: 20 }}>
+        <Link href="/companies" style={{ color: '#9ca3af', textDecoration: 'none' }}>Companies</Link>
         <span>›</span>
-        <span className="text-gray-700">{company.name}</span>
+        <span style={{ color: '#374151' }}>{company.name}</span>
       </div>
 
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{company.name}</h1>
-          <div className="flex items-center gap-3 mt-1">
-            <a
-              href={`https://${company.domain}`}
-              target="_blank"
-              rel="noopener"
-              className="text-sm text-gray-400 hover:text-primary-600"
-            >
-              {company.domain} ↗
-            </a>
-            <a
-              href={linkedinSearchUrl}
-              target="_blank"
-              rel="noopener"
-              className="text-sm text-blue-500 hover:text-blue-700 font-medium"
-            >
-              LinkedIn ↗
-            </a>
-            <StatusBadge status={company.account_status} companyId={company.id} />
+      <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 16, padding: '24px 28px', marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <h1 style={{ fontSize: 24, fontWeight: 700, color: '#111827', margin: 0 }}>{company.name}</h1>
+              <StatusBadge status={company.account_status} companyId={company.id} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8, flexWrap: 'wrap' }}>
+              <a href={`https://${company.domain}`} target="_blank" rel="noopener" style={{ fontSize: 13, color: '#9ca3af', textDecoration: 'none' }}>{company.domain} ↗</a>
+              <a href={linkedinSearchUrl} target="_blank" rel="noopener" style={{ fontSize: 13, color: '#3b82f6', textDecoration: 'none', fontWeight: 500 }}>LinkedIn ↗</a>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 12, flexShrink: 0 }}>
+            {[
+              { label: 'Account', value: company.account_score || 0 },
+              { label: 'ICP',     value: company.icp_score || 0 },
+              { label: 'Signale', value: company.signal_score || 0 },
+            ].map(s => (
+              <div key={s.label} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 12, padding: '10px 16px', textAlign: 'center', minWidth: 72 }}>
+                <p style={{ fontSize: 22, fontWeight: 700, color: scoreColor(s.value), margin: 0 }}>{s.value}</p>
+                <p style={{ fontSize: 11, color: '#9ca3af', margin: '2px 0 0' }}>{s.label}</p>
+              </div>
+            ))}
           </div>
         </div>
-
-        {/* Score summary */}
-        <div style={{ display: 'flex', gap: '1rem', flexShrink: 0 }}>
-          <ScorePill label="Account" value={company.account_score || 0} />
-          <ScorePill label="ICP" value={company.icp_score || 0} />
-          <ScorePill label="Signale" value={company.signal_score || 0} />
-        </div>
+        {projectId && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
+            <LogActivityButton companyId={company.id} projectId={projectId} />
+            <AddContactButton companyId={company.id} projectId={projectId} />
+            <AddDealButton companyId={company.id} companyName={company.name} projectId={projectId} />
+            <EnrichButton companyId={company.id} companyName={company.name} />
+            <QuickNoteButton companyId={company.id} projectId={projectId} />
+            <FollowUpButton companyId={company.id} projectId={projectId} currentFollowUp={(metrics.next_follow_up_at as string) || null} />
+          </div>
+        )}
       </div>
 
-      {/* Action buttons */}
-      {projectId && (
-        <div className="flex items-center gap-2 mb-6">
-          <LogActivityButton companyId={company.id} projectId={projectId} />
-          <AddContactButton companyId={company.id} projectId={projectId} />
-          <AddDealButton companyId={company.id} companyName={company.name} projectId={projectId} />
-          <EnrichButton companyId={company.id} companyName={company.name} />
-          <QuickNoteButton companyId={company.id} projectId={projectId} />
-          <FollowUpButton
-            companyId={company.id}
-            projectId={projectId}
-            currentFollowUp={(metrics.next_follow_up_at as string) || null}
-          />
-        </div>
-      )}
-
-      <div className="grid grid-cols-3 gap-6">
-        {/* Left column: signals + contacts + activities + jobs */}
-        <div className="col-span-2 space-y-5">
-
-          {/* Contacts */}
-          <Section title="Kontakte" count={people.length}>
-            {people.length === 0 && <EmptyState text="Noch keine Kontakte" />}
-            <div className="space-y-2">
-              {people.map((person: any) => (
-                <div key={person.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-sm font-medium text-gray-600">
-                      {person.first_name?.[0]}{person.last_name?.[0]}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {person.first_name} {person.last_name}
-                        {person.is_decision_maker && (
-                          <span className="ml-1.5 text-xs text-amber-600 font-medium">★ DM</span>
-                        )}
-                      </p>
-                      <p className="text-xs text-gray-400">{person.job_title || '—'}</p>
-                    </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Card title="Kontakte" count={people.length}>
+            {people.length === 0 ? <EmptyState text="Noch keine Kontakte" /> : people.map((person: any) => (
+              <div key={person.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f3f4f6' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, color: '#6b7280', flexShrink: 0 }}>
+                    {person.first_name?.[0]}{person.last_name?.[0]}
                   </div>
-                  <div className="flex items-center gap-2">
-                    {person.buyer_role && (
-                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                        {BUYER_ROLE_LABELS[person.buyer_role] || person.buyer_role}
-                      </span>
-                    )}
-                    {person.linkedin_url && (
-                      <a
-                        href={person.linkedin_url}
-                        target="_blank"
-                        rel="noopener"
-                        className="text-xs text-blue-500 hover:text-blue-700"
-                      >
-                        Li ↗
-                      </a>
-                    )}
-                    {person.email && (
-                      <a href={`mailto:${person.email}`} className="text-xs text-gray-400 hover:text-gray-600">
-                        ✉
-                      </a>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Section>
-
-          {/* Active Signals */}
-          <Section title="Aktive Signale" count={signals.length}>
-            {signals.length === 0 && <EmptyState text="Keine aktiven Signale" />}
-            <div className="space-y-2">
-              {signals.map((sig: any) => (
-                <div key={sig.id} className="bg-gray-50 rounded-lg px-4 py-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-gray-900">
-                      {sig.signal_type.replace(/_/g, ' ')}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                        <div className="h-full bg-primary-500 rounded-full" style={{ width: `${sig.strength}%` }} />
-                      </div>
-                      <span className="text-xs text-gray-500">{sig.strength}</span>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">{sig.reason}</p>
-                </div>
-              ))}
-            </div>
-          </Section>
-
-          {/* Activity Log */}
-          <Section title="Aktivitäten" count={activities.length}>
-            {activities.length === 0 && <EmptyState text="Noch keine Aktivitäten" />}
-            <div className="space-y-2">
-              {activities.map((act: any) => (
-                <div key={act.id} className="flex gap-3 py-2 border-b border-gray-100 last:border-0">
-                  <div className="text-base shrink-0 pt-0.5">
-                    {ACTIVITY_ICONS[act.activity_type] || '•'}
-                  </div>
-                  <div className="text-xs text-gray-400 w-14 shrink-0 pt-0.5">
-                    {new Date(act.occurred_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-gray-700">{act.summary || act.activity_type}</p>
-                    {act.outcome && (
-                      <p className="text-xs text-gray-500 mt-0.5">→ {act.outcome}</p>
-                    )}
-                    {act.next_step_detected && (
-                      <p className="text-xs text-blue-600 mt-0.5">📌 {act.next_step_detected}</p>
-                    )}
-                    {act.people && (
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        mit {act.people.first_name} {act.people.last_name}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Section>
-
-          {/* Open Jobs */}
-          <Section title="Offene Stellen" count={metrics.open_jobs || 0}>
-            {jobs.length === 0 && <EmptyState text="Keine Jobs gefunden" />}
-            <div className="space-y-1.5">
-              {jobs.map((job: any) => (
-                <div key={job.id} className="flex items-center justify-between py-1.5 border-b border-gray-100 last:border-0">
                   <div>
-                    <p className="text-sm text-gray-900">{job.title}</p>
-                    <p className="text-xs text-gray-400">{job.location || '—'} · {job.role_category}</p>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#111827', margin: 0 }}>
+                      {person.first_name} {person.last_name}
+                      {person.is_decision_maker && <span style={{ marginLeft: 6, fontSize: 11, color: '#d97706' }}>★ DM</span>}
+                    </p>
+                    <p style={{ fontSize: 12, color: '#9ca3af', margin: '1px 0 0' }}>{person.job_title || '—'}</p>
                   </div>
-                  <div className="text-right">
-                    {job.source_url && (
-                      <a href={job.source_url} target="_blank" rel="noopener"
-                        className="text-xs text-primary-500 hover:text-primary-700">↗</a>
-                    )}
-                    <p className="text-xs text-gray-400">{job.days_open}d</p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {person.buyer_role && <span style={{ fontSize: 11, color: '#6b7280', background: '#f3f4f6', borderRadius: 20, padding: '2px 8px' }}>{BUYER_ROLE_LABELS[person.buyer_role] || person.buyer_role}</span>}
+                  {person.linkedin_url && <a href={person.linkedin_url} target="_blank" rel="noopener" style={{ fontSize: 12, color: '#3b82f6' }}>Li ↗</a>}
+                  {person.email && <a href={`mailto:${person.email}`} style={{ fontSize: 13, color: '#9ca3af' }}>✉</a>}
+                </div>
+              </div>
+            ))}
+          </Card>
+
+          <Card title="Aktive Signale" count={signals.length}>
+            {signals.length === 0 ? <EmptyState text="Keine aktiven Signale" /> : signals.map((sig: any) => {
+              const meta = SIGNAL_LABELS[sig.signal_type] || { label: sig.signal_type.replace(/_/g, ' '), icon: '📡', color: '#6b7280' }
+              return (
+                <div key={sig.id} style={{ background: '#f9fafb', borderRadius: 10, padding: '12px 14px', marginBottom: 8, border: '1px solid #f3f4f6' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 16 }}>{meta.icon}</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{meta.label}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 80, height: 5, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', background: meta.color, borderRadius: 4, width: `${sig.strength}%` }} />
+                      </div>
+                      <span style={{ fontSize: 12, color: '#9ca3af', minWidth: 24, textAlign: 'right' }}>{sig.strength}</span>
+                    </div>
                   </div>
+                  {sig.reason && <p style={{ fontSize: 12, color: '#6b7280', margin: '6px 0 0', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{sig.reason}</p>}
+                </div>
+              )
+            })}
+          </Card>
+
+          <Card title="Aktivitäten" count={activities.length}>
+            {activities.length === 0 ? <EmptyState text="Noch keine Aktivitäten" /> : activities.map((act: any) => (
+              <div key={act.id} style={{ display: 'flex', gap: 12, padding: '10px 0', borderBottom: '1px solid #f3f4f6' }}>
+                <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{ACTIVITY_ICONS[act.activity_type] || '•'}</span>
+                <span style={{ fontSize: 12, color: '#9ca3af', width: 40, flexShrink: 0, marginTop: 2 }}>
+                  {new Date(act.occurred_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
+                </span>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 13, color: '#374151', margin: 0 }}>{act.summary || act.activity_type}</p>
+                  {act.outcome && <p style={{ fontSize: 12, color: '#9ca3af', margin: '2px 0 0' }}>→ {act.outcome}</p>}
+                  {act.next_step_detected && <p style={{ fontSize: 12, color: '#3b82f6', margin: '2px 0 0' }}>📌 {act.next_step_detected}</p>}
+                  {act.people && <p style={{ fontSize: 11, color: '#9ca3af', margin: '2px 0 0' }}>mit {act.people.first_name} {act.people.last_name}</p>}
+                </div>
+              </div>
+            ))}
+          </Card>
+
+          <Card title="Offene Stellen" count={jobs.length}>
+            {jobs.length === 0 ? <EmptyState text="Keine Jobs gefunden" /> : jobs.map((job: any) => (
+              <div key={job.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid #f3f4f6' }}>
+                <div>
+                  <p style={{ fontSize: 13, color: '#111827', fontWeight: 500, margin: 0 }}>{job.title}</p>
+                  <p style={{ fontSize: 12, color: '#9ca3af', margin: '2px 0 0' }}>{job.location || '—'} · {job.role_category}</p>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  {job.source_url && <a href={job.source_url} target="_blank" rel="noopener" style={{ fontSize: 12, color: '#0ea5e9' }}>↗</a>}
+                  <p style={{ fontSize: 11, color: '#9ca3af', margin: '2px 0 0' }}>{job.days_open}d</p>
+                </div>
+              </div>
+            ))}
+          </Card>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#374151', margin: '0 0 12px' }}>Job-Metriken</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[
+                { label: 'Gesamt offen', value: metrics.open_jobs ?? '—' },
+                { label: 'Commercial',   value: metrics.commercial_jobs ?? 0 },
+                { label: 'Recruiter',    value: metrics.recruiter_jobs ?? 0 },
+                { label: 'Engineering',  value: metrics.engineering_jobs ?? 0 },
+                { label: 'Leadership',   value: metrics.leadership_jobs ?? 0 },
+                ...(metrics.ats_type ? [{ label: 'ATS', value: metrics.ats_type }] : []),
+              ].map(row => (
+                <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                  <span style={{ color: '#6b7280' }}>{row.label}</span>
+                  <span style={{ fontWeight: 600, color: '#111827' }}>{String(row.value)}</span>
                 </div>
               ))}
             </div>
-          </Section>
-        </div>
-
-        {/* Right column: pending actions + metrics */}
-        <div className="space-y-5">
-          {/* Quick stats */}
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Job-Metriken</h3>
-            <dl className="space-y-2 text-sm">
-              <MetricRow label="Gesamt offen" value={metrics.open_jobs ?? '—'} />
-              <MetricRow label="Commercial" value={metrics.commercial_jobs ?? 0} />
-              <MetricRow label="Recruiter" value={metrics.recruiter_jobs ?? 0} />
-              <MetricRow label="Engineering" value={metrics.engineering_jobs ?? 0} />
-              <MetricRow label="Leadership" value={metrics.leadership_jobs ?? 0} />
-              {metrics.ats_type && <MetricRow label="ATS" value={metrics.ats_type} />}
-            </dl>
           </div>
 
-          {/* Pending actions */}
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Actions</h3>
-            {actions.length === 0 && <p className="text-xs text-gray-400">Keine ausstehenden Actions</p>}
-            <div className="space-y-2">
-              {actions.map((action: any) => (
-                <div key={action.id}
-                  className={`text-xs rounded-lg px-3 py-2 ${action.status === 'done' ? 'bg-green-50 text-green-700 line-through' : 'bg-yellow-50 text-yellow-800'}`}>
+          <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#374151', margin: '0 0 12px' }}>Actions</p>
+            {actions.length === 0
+              ? <p style={{ fontSize: 12, color: '#9ca3af' }}>Keine ausstehenden Actions</p>
+              : actions.map((action: any) => (
+                <div key={action.id} style={{ fontSize: 12, borderRadius: 8, padding: '8px 10px', marginBottom: 6, background: action.status === 'done' ? '#f0fdf4' : '#fffbeb', color: action.status === 'done' ? '#16a34a' : '#92400e', textDecoration: action.status === 'done' ? 'line-through' : 'none' }}>
                   {action.action_type.replace(/_/g, ' ')} · {action.estimated_minutes}m
                 </div>
-              ))}
-            </div>
+              ))
+            }
           </div>
         </div>
       </div>
@@ -295,37 +219,18 @@ export default async function CompanyPage({ params }: { params: { id: string } }
   )
 }
 
-function Section({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+function Card({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-        {title}
-        <span className="text-xs font-normal text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{count}</span>
-      </h3>
+    <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{title}</span>
+        <span style={{ fontSize: 11, color: '#9ca3af', background: '#f3f4f6', borderRadius: 20, padding: '1px 8px', fontWeight: 500 }}>{count}</span>
+      </div>
       {children}
     </div>
   )
 }
 
-function ScorePill({ label, value }: { label: string; value: number }) {
-  const color = value >= 70 ? 'text-green-600' : value >= 40 ? 'text-yellow-600' : 'text-gray-400'
-  return (
-    <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 12, padding: '8px 16px', textAlign: 'center', minWidth: 64 }}>
-      <p className={`text-xl font-bold ${color}`}>{value}</p>
-      <p className="text-xs text-gray-400">{label}</p>
-    </div>
-  )
-}
-
-function MetricRow({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="flex items-center justify-between">
-      <dt className="text-gray-500">{label}</dt>
-      <dd className="font-medium text-gray-900">{value}</dd>
-    </div>
-  )
-}
-
 function EmptyState({ text }: { text: string }) {
-  return <p className="text-sm text-gray-400 py-2">{text}</p>
+  return <p style={{ fontSize: 13, color: '#9ca3af', padding: '8px 0' }}>{text}</p>
 }
