@@ -49,7 +49,7 @@ export default async function DealPage({ params }: { params: { id: string } }) {
   const stage = opp.stage as Stage
   const stageIdx = STAGES.indexOf(stage)
   const prevStage = stageIdx > 0 ? STAGES[stageIdx - 1] : null
-  const nextStage = stageIdx < STAES,Åùngth - 1 ? STAGES[stageIdx + 1] : null
+  const nextStage = stageIdx < STAGES.length - 1 ? STAGES[stageIdx + 1] : null
 
   // Load company's recent activities
   const { data: activities } = await supabase
@@ -94,7 +94,7 @@ export default async function DealPage({ params }: { params: { id: string } }) {
                 href={'/companies/' + company.id}
                 className="inline-flex items-center gap-1.5 mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
               >
-                 ğŸ¢ {company.name}
+                ğŸ¢ {company.name}
               </Link>
             )}
 
