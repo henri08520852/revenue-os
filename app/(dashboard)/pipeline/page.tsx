@@ -32,7 +32,7 @@ export default async function PipelinePage() {
       <div className="px-8 py-7 bg-white border-b border-gray-200">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Pipeline</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Deals</h1>
             <p className="text-gray-400 text-sm mt-1">
               {allOpps.length} Deals gesamt ·{' '}
               <Link href="/guide#deals" className="text-blue-600 hover:text-blue-800">Was bedeuten die Stages?</Link>
@@ -41,7 +41,7 @@ export default async function PipelinePage() {
           <div className="flex gap-6 text-right">
             <div>
               <p className="text-xl font-bold text-gray-900">€{pipelineTotal.toLocaleString('de-DE')}</p>
-              <p className="text-xs text-gray-400">Aktive Pipeline</p>
+              <p className="text-xs text-gray-400">Offenes Volumen</p>
             </div>
             <div>
               <p className="text-xl font-bold text-green-600">€{wonTotal.toLocaleString('de-DE')}</p>

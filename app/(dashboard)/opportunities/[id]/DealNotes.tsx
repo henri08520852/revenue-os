@@ -55,7 +55,7 @@ export default function DealNotes({ oppId, notes, legacyNote }: { oppId: string;
           <div key={n.id} style={{ padding: '10px 12px', background: '#fffbeb', borderRadius: 8, border: '1px solid #fef3c7' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
               <span style={{ fontSize: 11, color: '#92400e' }}>
-                {new Date(n.occurred_at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                {new Date(n.occurred_at).toLocaleString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                 {n.created_by ? ` · ${n.created_by}` : ''}
               </span>
               <button onClick={() => remove(n.id)} title="Löschen" style={{ background: 'none', border: 'none', color: '#d6b25e', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>

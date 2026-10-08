@@ -1,5 +1,7 @@
 'use client'
 
+import { dayKeyBerlin, hhmmBerlin, minutesOfDayBerlin } from '@/lib/tz'
+
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import MeetingDialog, { MeetingData, MeetingPrefill } from '@/components/MeetingDialog'
@@ -34,14 +36,14 @@ const TASK_STYLE: Record<string, { bg: string; fg: string; icon: string }> = {
 }
 
 // Local (browser) day key and helpers — the team works in Europe/Berlin
-const localKey = (d: Date) => d.toLocaleDateString('en-CA')
+const localKey = dayKeyBerlin
 const addDays = (key: string, n: number) => {
   const d = new Date(`${key}T12:00:00Z`)
   d.setUTCDate(d.getUTCDate() + n)
   return d.toISOString().slice(0, 10)
 }
-const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
-const minutesOfDay = (d: Date) => d.getHours() * 60 + d.getMinutes()
+const hhmm = (iso: string) => hhmmBerlin(iso)
+const minutesOfDay = minutesOfDayBerlin
 const itemDay = (it: CalItem) => it.allDay && it.kind === 'event' ? it.start.slice(0, 10) : localKey(new Date(it.start))
 
 // Side-by-side columns for overlapping events within one day
@@ -109,8 +111,10 @@ function EventBlock({ it, style, compact }: { it: CalItem; style: React.CSSPrope
 
 function TimeGrid({ dayKeys, items, todayKey, onSlot }: { dayKeys: string[]; items: CalItem[]; todayKey: string; onSlot: (date: string, time: string) => void }) {
   const scroller = useRef<HTMLDivElement>(null)
-  const [now, setNow] = useState(() => new Date())
+  // null until mounted: the now-line is client-only (server and browser clocks differ)
+  const [now, setNow] = useState<Date | null>(null)
   useEffect(() => {
+    setNow(new Date())
     const t = setInterval(() => setNow(new Date()), 60000)
     // Start scrolled to ~8:00
     if (scroller.current) scroller.current.scrollTop = HOUR_PX * 1
@@ -155,7 +159,7 @@ function TimeGrid({ dayKeys, items, todayKey, onSlot }: { dayKeys: string[]; ite
           {dayKeys.map(d => {
             const dayEvents = layout(timed.filter(it => itemDay(it) === d))
             const isToday = d === todayKey
-            const nowTop = (minutesOfDay(now) - HOUR_START * 60) / 60 * HOUR_PX
+            const nowTop = now ? (minutesOfDay(now) - HOUR_START * 60) / 60 * HOUR_PX : -1
             return (
               <div key={d}
                 onClick={e => {

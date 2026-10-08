@@ -96,7 +96,7 @@ export default async function DealPage({ params }: { params: { id: string } }) {
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
-        <Link href="/pipeline" className="hover:text-gray-600">Pipeline</Link>
+        <Link href="/pipeline" className="hover:text-gray-600">Deals</Link>
         <span>›</span>
         {company && (
           <>

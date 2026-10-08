@@ -21,7 +21,7 @@ function ago(iso: string | null) {
   if (min < 1) return 'gerade eben'
   if (min < 60) return `vor ${min} Min.`
   if (min < 1440) return `vor ${Math.round(min / 60)} Std.`
-  return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
+  return new Date(iso).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit' })
 }
 
 export default function GoogleConnect({ conn, status, configured, needsReconnect }: { conn: Conn; status: string | null; configured: boolean; needsReconnect?: boolean }) {

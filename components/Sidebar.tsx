@@ -21,7 +21,7 @@ const nav = [
   { href: '/companies',  label: 'Companies',  icon: BuildingOffice2Icon },
   { href: '/contacts',   label: 'Contacts',   icon: UserGroupIcon },
   { href: '/leads',      label: 'Leads',      icon: FunnelIcon },
-  { href: '/pipeline',   label: 'Pipeline',   icon: ChartBarIcon },
+  { href: '/pipeline',   label: 'Deals',      icon: ChartBarIcon },
   { href: '/candidates', label: 'Candidates', icon: SparklesIcon },
 ]
 

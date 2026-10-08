@@ -44,7 +44,7 @@ function relative(iso: string | null) {
   if (days <= 0) return 'heute'
   if (days === 1) return 'gestern'
   if (days < 30) return `vor ${days} Tagen`
-  return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })
+  return new Date(iso).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: '2-digit' })
 }
 
 const th = { textAlign: 'left' as const, padding: '10px 16px', fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' as const, letterSpacing: '0.05em' }

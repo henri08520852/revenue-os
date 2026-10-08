@@ -86,6 +86,31 @@ export default function MeetingDialog({ open, onClose, data, prefill }: {
     setEmailDraft('')
   }
 
+  // Short cover letter; Google puts the event description into the invitation email
+  function insertTemplate() {
+    const firstContact = data.people.find(p => p.email && emails.includes(p.email.toLowerCase()) && p.company_id === companyId)
+    const firstName = firstContact?.name.split(' ')[0]
+    const company = data.companies.find(c => c.id === companyId)?.name
+    const me = data.team.find(m => m.user_id === data.meId)?.display_name || ''
+    const when = new Date(`${date}T${time}:00`).toLocaleString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+    setDescription([
+      firstName ? `Hallo ${firstName},` : 'Hallo,',
+      '',
+      `vielen Dank für Ihr Interesse${company ? ` – ich freue mich auf den Austausch mit ${company}` : ''}. Hiermit lade ich Sie zu unserem Termin am ${when} Uhr ein.`,
+      '',
+      'Agenda:',
+      '– Kurzes Kennenlernen',
+      '– Ihre aktuelle Situation und Ziele',
+      '– Wie wir unterstützen können & nächste Schritte',
+      '',
+      withMeet ? 'Den Google-Meet-Link finden Sie in dieser Einladung.' : '',
+      '',
+      'Viele Grüße',
+      me,
+      'Altoris',
+    ].filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n'))
+  }
+
   function submit() {
     setError(null)
     const pendingDraft = emailDraft.split(/[\s,;]+/).map(s => s.trim().toLowerCase()).filter(Boolean)
@@ -225,8 +250,13 @@ export default function MeetingDialog({ open, onClose, data, prefill }: {
               </div>
 
               <div>
-                <label style={label}>Agenda / Nachricht (optional)</label>
-                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="Erscheint in der Einladung" style={{ ...input, resize: 'vertical' }} />
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+                  <label style={label}>Einladungstext an die Teilnehmer</label>
+                  <button type="button" onClick={insertTemplate} style={{ fontSize: 12, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>✨ Vorlage einfügen</button>
+                </div>
+                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={description ? 9 : 4}
+                  placeholder={'Kurzes Anschreiben – erscheint in der Einladungs-E-Mail von Google.\nTipp: „Vorlage einfügen“ füllt Vorname, Datum und Agenda vor.'}
+                  style={{ ...input, resize: 'vertical', lineHeight: 1.5 }} />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13, color: '#374151' }}>

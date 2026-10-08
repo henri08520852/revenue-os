@@ -60,7 +60,7 @@ export default function GuidePage() {
       <h1 style={{ fontSize: 26, fontWeight: 700, color: '#111827', marginBottom: 8 }}>So funktioniert Revenue OS</h1>
       <p style={{ ...lead, fontSize: 15 }}>
         Revenue OS bildet unseren Vertrieb in einer Kette ab: Wir finden <b>Companies</b>, sprechen sie als <b>Lead</b> an,
-        machen daraus bei echtem Interesse einen <b>Deal</b> in der Pipeline – und jeden Morgen zeigt <b>Heute</b>, was zu tun ist.
+        machen daraus bei echtem Interesse einen <b>Deal</b> unter Deals – und jeden Morgen zeigt <b>Heute</b>, was zu tun ist.
       </p>
 
       {/* Flow */}
@@ -82,7 +82,7 @@ export default function GuidePage() {
 
       {/* TOC */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-        {[['#heute', 'Täglicher Ablauf'], ['#leads', 'Leads'], ['#deals', 'Deals & Pipeline'], ['#contacts', 'Kontakte & Rollen'], ['#faellig', 'Follow-ups'], ['#status', 'Company-Status'], ['#google', 'Gmail & Kalender'], ['#regeln', 'Spielregeln']].map(([href, label]) => (
+        {[['#heute', 'Täglicher Ablauf'], ['#leads', 'Leads'], ['#deals', 'Deals'], ['#contacts', 'Kontakte & Rollen'], ['#faellig', 'Follow-ups'], ['#status', 'Company-Status'], ['#google', 'Gmail & Kalender'], ['#regeln', 'Spielregeln']].map(([href, label]) => (
           <a key={href} href={href} style={{ fontSize: 13, padding: '6px 12px', borderRadius: 20, background: '#f3f4f6', color: '#374151', textDecoration: 'none' }}>{label}</a>
         ))}
       </div>
@@ -104,7 +104,7 @@ export default function GuidePage() {
         </p>
       </Section>
 
-      <Section id="deals" title="3 · Deals & Pipeline" intro="Ein Deal ist eine konkrete Verkaufschance mit Wert. Auf der Pipeline per Drag & Drop verschieben, auf der Deal-Seite pflegen: nächster Schritt mit Datum, Wert, Buying Center, Notizen. Jeder Stage-Wechsel wird im Stage-Verlauf protokolliert.">
+      <Section id="deals" title="3 · Deals" intro="Ein Deal ist eine konkrete Verkaufschance mit Wert. Unter „Deals“ per Drag & Drop verschieben, auf der Deal-Seite pflegen: nächster Schritt mit Datum, Wert, Buying Center, Notizen. Jeder Stage-Wechsel wird im Stage-Verlauf protokolliert.">
         {DEAL_STAGES.map(([k, v]) => <div key={k} style={row}><b style={{ color: '#c2410c' }}>{k}</b><span style={{ color: '#4b5563' }}>{v}</span></div>)}
       </Section>
 
@@ -146,7 +146,7 @@ export default function GuidePage() {
           <li>Jeder offene Lead hat ein Follow-up-Datum, jeder offene Deal einen nächsten Schritt mit Datum.</li>
           <li>Gespräche und Calls als Aktivität loggen, kurze Gedanken als Notiz – so weiß jeder, was zuletzt passiert ist.</li>
           <li>Umwandeln, sobald ein Termin mit Bedarf steht – nicht erst beim Angebot.</li>
-          <li>Verlorene Deals mit „Verloren“ schließen statt liegen lassen – die Pipeline bleibt so ehrlich.</li>
+          <li>Verlorene Deals mit „Verloren“ schließen statt liegen lassen – die Deal-Übersicht bleibt so ehrlich.</li>
         </ul>
       </Section>
     </div>

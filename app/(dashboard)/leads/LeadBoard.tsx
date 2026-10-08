@@ -1,5 +1,7 @@
 'use client'
 
+import { dayKeyBerlin } from '@/lib/tz'
+
 import { useEffect, useState, useTransition } from 'react'
 import { useFormState, useFormStatus } from 'react-dom'
 import Link from 'next/link'
@@ -37,9 +39,7 @@ export function personName(p: { full_name: string | null; first_name: string | n
 
 function toDateInput(iso: string | null) {
   if (!iso) return ''
-  const d = new Date(iso)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  return dayKeyBerlin(new Date(iso))
 }
 
 function ConvertSubmit() {
@@ -70,8 +70,7 @@ function LeadCard({ lead, focused, team }: { lead: Lead; focused: boolean; team:
   const [error, setError] = useState<string | null>(null)
   const done = lead.stage === 'converted' || lead.stage === 'disqualified'
   const due = lead.next_follow_up_at ? new Date(lead.next_follow_up_at) : null
-  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0)
-  const overdue = !done && due !== null && due < startOfToday
+  const overdue = !done && due !== null && dayKeyBerlin(due) < dayKeyBerlin(new Date())
   const contact = personName(lead.person)
 
   function run(fn: () => Promise<{ error: string | null }>) {
@@ -127,7 +126,7 @@ function LeadCard({ lead, focused, team }: { lead: Lead; focused: boolean; team:
           ) : <span style={{ color: '#9ca3af' }}>Deal gelöscht</span>}
           {lead.converted_at && (
             <span style={{ color: '#9ca3af', marginLeft: 8 }}>
-              {new Date(lead.converted_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+              {new Date(lead.converted_at).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: '2-digit' })}
             </span>
           )}
         </div>

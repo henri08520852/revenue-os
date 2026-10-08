@@ -85,7 +85,7 @@ function OppCard({ opp }: { opp: Opp }) {
         {opp.next_step_due_at && (
           <p style={{ fontSize: 11, color: isOverdue ? '#ef4444' : '#9ca3af', marginTop: 2, fontWeight: isOverdue ? 600 : 400 }}>
             {isOverdue ? '⚠ ' : ''}
-            {new Date(opp.next_step_due_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
+            {new Date(opp.next_step_due_at).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit' })}
           </p>
         )}
       </Link>
@@ -212,7 +212,7 @@ function ListView({ opps }: { opps: Opp[] }) {
                 </td>
                 <td style={{ padding: '11px 16px', fontSize: 12, color: isOverdue ? '#ef4444' : '#9ca3af', fontWeight: isOverdue ? 600 : 400 }}>
                   {opp.next_step_due_at
-                    ? new Date(opp.next_step_due_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
+                    ? new Date(opp.next_step_due_at).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit' })
                     : '—'}
                 </td>
               </tr>
@@ -221,7 +221,7 @@ function ListView({ opps }: { opps: Opp[] }) {
           {opps.length === 0 && (
             <tr>
               <td colSpan={5} style={{ padding: '40px 16px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
-                Keine Deals in der Pipeline
+                Keine Deals in dieser Stage
               </td>
             </tr>
           )}

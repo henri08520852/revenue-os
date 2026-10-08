@@ -95,7 +95,7 @@ export default function CompaniesPage() {
                 <td style={{ padding: '14px 16px', fontSize: 14, color: '#374151' }}>{c.icp_fit ?? '—'}</td>
                 <td style={{ padding: '14px 16px', fontSize: 14, color: '#374151' }}>{c.signals?.[0]?.count ?? '—'}</td>
                 <td style={{ padding: '14px 16px', fontSize: 14, color: '#374151' }}>{c.open_jobs ?? '—'}</td>
-                <td style={{ padding: '14px 16px', fontSize: 12, color: '#9ca3af' }}>{c.last_signal_at ? new Date(c.last_signal_at).toLocaleDateString('de-DE') : '—'}</td>
+                <td style={{ padding: '14px 16px', fontSize: 12, color: '#9ca3af' }}>{c.last_signal_at ? new Date(c.last_signal_at).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' }) : '—'}</td>
               </tr>
             ))}
           </tbody>
