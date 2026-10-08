@@ -13,3 +13,13 @@ export const OPPORTUNITY_STAGE_LABELS: Record<OpportunityStageKey, string> = {
   won:           'Gewonnen',
   lost:          'Verloren',
 }
+
+// Company lifecycle — set automatically by migration 019 triggers:
+// target → warm (lead exists) → hot (open deal) → customer (deal won). inactive is manual only.
+export const ACCOUNT_STATUSES = [
+  { key: 'target',   label: 'Target',   bg: '#dbeafe', text: '#1d4ed8' },
+  { key: 'warm',     label: 'Warm',     bg: '#fef3c7', text: '#92400e' },
+  { key: 'hot',      label: 'Hot',      bg: '#ffedd5', text: '#c2410c' },
+  { key: 'customer', label: 'Customer', bg: '#ede9fe', text: '#5b21b6' },
+  { key: 'inactive', label: 'Inactive', bg: '#f3f4f6', text: '#6b7280' },
+] as const

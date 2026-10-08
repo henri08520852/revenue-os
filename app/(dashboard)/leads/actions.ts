@@ -38,6 +38,7 @@ export async function createLead(input: {
   if (error) return { error: error.message }
   revalidatePath('/leads')
   revalidatePath('/today')
+  revalidatePath('/companies', 'layout')
   return { error: null }
 }
 
@@ -52,6 +53,7 @@ export async function updateLeadStage(leadId: string, stage: string): Promise<{ 
   if (error) return { error: error.message }
   revalidatePath('/leads')
   revalidatePath('/today')
+  revalidatePath('/companies', 'layout')
   return { error: null }
 }
 
@@ -64,6 +66,7 @@ export async function updateLeadFollowUp(leadId: string, date: string | null): P
   if (error) return { error: error.message }
   revalidatePath('/leads')
   revalidatePath('/today')
+  revalidatePath('/companies', 'layout')
   return { error: null }
 }
 
@@ -128,5 +131,6 @@ export async function convertLeadToOpportunity(leadId: string, _prev: ConvertSta
   revalidatePath('/leads')
   revalidatePath('/pipeline')
   revalidatePath('/today')
+  revalidatePath('/companies', 'layout')
   redirect(`/opportunities/${opp.id}`)
 }

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
-const STATUSES = ['target', 'warm', 'hot', 'active_deal', 'customer', 'inactive']
+const STATUSES = ['target', 'warm', 'hot', 'customer', 'inactive']
 
 const COLORS: Record<string, string> = {
   target:      'bg-gray-100 text-gray-600',
@@ -44,6 +44,9 @@ export default function StatusBadge({ status, companyId }: { status: string; com
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1 min-w-32">
+            <p style={{ fontSize: 10, color: '#9ca3af', padding: '4px 12px 6px', maxWidth: 200, lineHeight: 1.4 }}>
+              Wird automatisch aus Leads &amp; Deals gesetzt — manuell überschreibbar
+            </p>
             {STATUSES.map(s => (
               <button
                 key={s}

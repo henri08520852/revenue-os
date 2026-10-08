@@ -112,5 +112,6 @@ export async function setOpportunityStage(oppId: string, stage: string): Promise
   revalidatePath(`/opportunities/${oppId}`)
   revalidatePath('/pipeline')
   revalidatePath('/today')
+  revalidatePath('/companies', 'layout')
   return { error: null }
 }

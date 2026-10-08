@@ -80,7 +80,6 @@ export default function AddCompanyButton({ projectId }: { projectId?: string }) 
                   <option value="target">Target</option>
                   <option value="warm">Warm</option>
                   <option value="hot">Hot</option>
-                  <option value="active_deal">Active Deal</option>
                 </select>
               </div>
 
