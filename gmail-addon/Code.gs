@@ -17,6 +17,8 @@ function onHomepage() {
 }
 
 function onGmailMessage(e) {
+  // Shows Google's consent prompt if a scope (e.g. external requests) is not granted yet
+  ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
   return buildMessageCard_(e);
 }
 
