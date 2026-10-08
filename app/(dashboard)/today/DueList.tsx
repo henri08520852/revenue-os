@@ -3,7 +3,7 @@ import Link from 'next/link'
 const TZ = 'Europe/Berlin'
 
 export type DueItem = {
-  kind: 'lead' | 'deal'
+  kind: 'lead' | 'deal' | 'company'
   id: string
   href: string
   title: string
@@ -27,7 +27,7 @@ export function dueBuckets(now = new Date()) {
 
 export function groupDue(items: DueItem[], now = new Date()) {
   const { todayKey, weekEndKey } = dueBuckets(now)
-  const sorted = [...items].sort((a, b) => a.dueAt.localeCompare(b.dueAt))
+  const sorted = items.filter(i => i.dueAt).sort((a, b) => a.dueAt.localeCompare(b.dueAt))
   const overdue: DueItem[] = [], today: DueItem[] = [], week: DueItem[] = []
   for (const item of sorted) {
     const key = dayKey(new Date(item.dueAt))
@@ -36,6 +36,12 @@ export function groupDue(items: DueItem[], now = new Date()) {
     else if (key <= weekEndKey) week.push(item)
   }
   return { overdue, today, week }
+}
+
+const KIND_META: Record<DueItem['kind'], { label: string; color: string }> = {
+  lead:    { label: 'LEAD',    color: '#7c3aed' },
+  deal:    { label: 'DEAL',    color: '#16a34a' },
+  company: { label: 'COMPANY', color: '#2563eb' },
 }
 
 const GROUPS = [
@@ -82,8 +88,8 @@ export default function DueList({ items }: { items: DueItem[] }) {
                           <span style={{ fontSize: 13, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {item.title}
                           </span>
-                          <span style={{ fontSize: 10, fontWeight: 600, color: item.kind === 'deal' ? '#16a34a' : '#7c3aed', flexShrink: 0 }}>
-                            {item.kind === 'deal' ? 'DEAL' : 'LEAD'}
+                          <span style={{ fontSize: 10, fontWeight: 600, color: KIND_META[item.kind].color, flexShrink: 0 }}>
+                            {KIND_META[item.kind].label}
                           </span>
                         </div>
                         {item.subtitle && (

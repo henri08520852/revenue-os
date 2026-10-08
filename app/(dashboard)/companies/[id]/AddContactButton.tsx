@@ -5,11 +5,15 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
 interface Props {
-  companyId: string
+  // Fixed company (company page) — or omit and pass `companies` to pick one (contacts page)
+  companyId?: string
+  companies?: { id: string; name: string }[]
   projectId: string
+  variant?: 'secondary' | 'primary'
 }
 
-export default function AddContactButton({ companyId, projectId }: Props) {
+export default function AddContactButton({ companyId, companies, projectId, variant = 'secondary' }: Props) {
+  const [pickedCompany, setPickedCompany] = useState('')
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -33,9 +37,10 @@ export default function AddContactButton({ companyId, projectId }: Props) {
 
     const { error } = await supabase.from('people').insert({
       project_id: projectId,
-      company_id: companyId,
-      first_name: form.firstName,
-      last_name: form.lastName,
+      company_id: companyId ?? (pickedCompany || null),
+      first_name: form.firstName.trim(),
+      last_name: form.lastName.trim(),
+      full_name: `${form.firstName.trim()} ${form.lastName.trim()}`,
       job_title: form.title || null,
       email: form.email || null,
       phone: form.phone || null,
@@ -50,6 +55,8 @@ export default function AddContactButton({ companyId, projectId }: Props) {
       setLoading(false)
     } else {
       setOpen(false)
+      setLoading(false)
+      setPickedCompany('')
       setForm({
         firstName: '', lastName: '', title: '', email: '',
         phone: '', linkedinUrl: '', isDecisionMaker: false, buyerRole: 'champion',
@@ -62,7 +69,9 @@ export default function AddContactButton({ companyId, projectId }: Props) {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm"
+        className={variant === 'primary'
+          ? 'inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm'
+          : 'inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm'}
       >
         <span>+</span> Kontakt
       </button>
@@ -81,6 +90,20 @@ export default function AddContactButton({ companyId, projectId }: Props) {
             </div>
 
             <form onSubmit={submit} className="px-6 py-4 space-y-4">
+              {!companyId && companies && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">Unternehmen</label>
+                  <select
+                    value={pickedCompany}
+                    onChange={e => setPickedCompany(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                  >
+                    <option value="">— ohne Unternehmen —</option>
+                    {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              )}
+
               {/* Name */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -152,7 +175,7 @@ export default function AddContactButton({ companyId, projectId }: Props) {
 
               {/* Buyer role */}
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">Rolle im Deal</label>
+                <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">Rolle im Buying Center</label>
                 <div className="flex flex-wrap gap-2">
                   {[
                     { value: 'economic_buyer', label: '💰 Budget-Entscheider' },

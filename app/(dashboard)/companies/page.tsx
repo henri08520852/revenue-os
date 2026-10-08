@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { ACCOUNT_STATUSES } from '@/lib/stages'
+import AddCompanyButton from './AddCompanyButton'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
 
@@ -11,6 +12,7 @@ export default function CompaniesPage() {
   const [companies, setCompanies] = useState<any[]>([])
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
   const supabase = createClient()
 
   useEffect(() => {
@@ -26,7 +28,7 @@ export default function CompaniesPage() {
       setCompanies(data ?? [])
     }
     load()
-  }, [filter])
+  }, [filter, reloadKey])
 
   const filtered = companies.filter(c =>
     c.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -43,9 +45,7 @@ export default function CompaniesPage() {
           <h1 style={{ fontSize: 24, fontWeight: 700, color: '#111827' }}>Companies</h1>
           <p style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>{filtered.length} Unternehmen im CRM</p>
         </div>
-        <Link href="/companies/new" style={{ background: '#2563eb', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 14, fontWeight: 500, textDecoration: 'none' }}>
-          + Unternehmen
-        </Link>
+        <AddCompanyButton projectId={PROJECT_ID} onCreated={() => setReloadKey(k => k + 1)} />
       </div>
 
       {/* Filters */}

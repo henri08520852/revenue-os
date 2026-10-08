@@ -92,7 +92,7 @@ function DroppableColumn({ stage, opps }: { stage: typeof STAGES[0]; opps: Opp[]
   return (
     <div style={{
       flexShrink: 0,
-      width: 220,
+      width: 200,
       display: 'flex',
       flexDirection: 'column',
     }}>

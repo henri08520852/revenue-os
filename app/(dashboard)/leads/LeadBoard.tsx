@@ -117,15 +117,15 @@ function LeadCard({ lead, focused }: { lead: Lead; focused: boolean }) {
         </div>
       ) : (
         <>
-          <div style={{ display: 'flex', gap: 6, marginTop: 10, alignItems: 'center' }}>
-            <label style={{ fontSize: 11, color: overdue ? '#dc2626' : '#9ca3af', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          <div style={{ marginTop: 10 }}>
+            <label style={{ display: 'block', fontSize: 11, color: overdue ? '#dc2626' : '#9ca3af', fontWeight: 600, marginBottom: 4 }}>
               {overdue ? '⚠️ Follow-up' : '📅 Follow-up'}
             </label>
             <input
               type="date"
               defaultValue={toDateInput(lead.next_follow_up_at)}
               onChange={e => run(() => updateLeadFollowUp(lead.id, e.target.value || null))}
-              style={{ flex: 1, minWidth: 0, padding: '4px 6px', fontSize: 12, border: `1px solid ${overdue ? '#fecaca' : '#e5e7eb'}`, borderRadius: 6, color: '#111827', background: overdue ? '#fef2f2' : 'white' }}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '4px 6px', fontSize: 12, border: `1px solid ${overdue ? '#fecaca' : '#e5e7eb'}`, borderRadius: 6, color: '#111827', background: overdue ? '#fef2f2' : 'white' }}
             />
           </div>
           <select
@@ -151,7 +151,7 @@ export default function LeadBoard({ leads, focusId }: { leads: Lead[]; focusId: 
   }, [focusId])
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${LEAD_STAGES.length}, minmax(220px, 1fr))`, gap: 16, overflowX: 'auto' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${LEAD_STAGES.length}, minmax(180px, 1fr))`, gap: 12, overflowX: 'auto', paddingBottom: 4 }}>
       {LEAD_STAGES.map(stage => {
         const items = leads.filter(l => l.stage === stage.key)
         return (

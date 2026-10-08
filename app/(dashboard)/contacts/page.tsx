@@ -1,76 +1,43 @@
 import { createClient } from '@/lib/supabase/server'
-import Link from 'next/link'
+import AddContactButton from '../companies/[id]/AddContactButton'
+import ContactsTable from './ContactsTable'
 
-const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
+const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID!
 
 export default async function ContactsPage() {
-  const supabase = createClient()
+  const supabase = createClient() as any
 
-  const { data: people } = await supabase
-    .from('people')
-    .select('*, companies(name, domain)')
-    .eq('project_id', PROJECT_ID)
-    .order('updated_at', { ascending: false })
-    .limit(100)
+  const [{ data: people }, { data: companies }] = await Promise.all([
+    supabase
+      .from('people')
+      .select('id, company_id, first_name, last_name, full_name, job_title, email, phone, linkedin_url, buyer_role, is_decision_maker, last_interaction_at, created_at, companies(id, name, account_status)')
+      .eq('project_id', PROJECT_ID)
+      .order('updated_at', { ascending: false })
+      .limit(500),
+    supabase
+      .from('companies')
+      .select('id, name')
+      .eq('project_id', PROJECT_ID)
+      .order('name', { ascending: true }),
+  ])
+
+  const all = people || []
+  const decisionMakers = all.filter((p: any) => p.is_decision_maker).length
+  const champions = all.filter((p: any) => p.buyer_role === 'champion').length
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Contacts</h1>
-        <p className="text-sm text-gray-400">{people?.length || 0} Kontakte</p>
+    <div style={{ padding: '32px 40px', maxWidth: 1200 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: '#111827' }}>Contacts</h1>
+          <p style={{ fontSize: 13, color: '#9ca3af', marginTop: 4 }}>
+            {all.length} Kontakte · {champions} Champions · {decisionMakers} Entscheider
+          </p>
+        </div>
+        <AddContactButton projectId={PROJECT_ID} companies={companies || []} variant="primary" />
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100 bg-gray-50">
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Name</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Unternehmen</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Rolle</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Kanal</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {(people || []).map(person => (
-              <tr key={person.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3">
-                  <p className="font-medium text-gray-900">
-                    {person.first_name} {person.last_name}
-                  </p>
-                  {person.email && <p className="text-xs text-gray-400">{person.email}</p>}
-                </td>
-                <td className="px-4 py-3">
-                  {person.companies ? (
-                    <Link href={`/companies/${person.company_id}`} className="text-gray-600 hover:text-primary-600">
-                      {(person.companies as any).name}
-                    </Link>
-                  ) : <span className="text-gray-300">—</span>}
-                </td>
-                <td className="px-4 py-3 text-gray-600">{person.title || '—'}</td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-2">
-                    {person.linkedin_url && (
-                      <a href={person.linkedin_url} target="_blank" rel="noopener"
-                        className="text-xs text-blue-500 hover:text-blue-700">LinkedIn</a>
-                    )}
-                    {person.email && (
-                      <a href={`mailto:${person.email}`}
-                        className="text-xs text-gray-400 hover:text-gray-600">Email</a>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {!people?.length && (
-              <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-gray-400 text-sm">
-                  Noch keine Kontakte. Füge sie beim Erfassen von Aktivitäten hinzu.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <ContactsTable people={all} />
     </div>
   )
 }

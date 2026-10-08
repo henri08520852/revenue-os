@@ -54,7 +54,24 @@ export default async function TodayPage() {
     .order('next_step_due_at', { ascending: true })
     .limit(100)
 
+  // Company-level follow-ups (set via the Follow-up button on the company page)
+  const { data: dueCompanies } = await (supabase as any)
+    .from('companies')
+    .select('id, name, current_metrics')
+    .eq('project_id', PROJECT_ID)
+    .not('current_metrics->>next_follow_up_at', 'is', null)
+    .lte('current_metrics->>next_follow_up_at', dueUntil)
+    .limit(100)
+
   const dueItems: DueItem[] = [
+    ...(dueCompanies || []).map((c: any) => ({
+      kind: 'company' as const,
+      id: c.id,
+      href: `/companies/${c.id}`,
+      title: c.name,
+      subtitle: c.current_metrics?.follow_up_note || 'Follow-up',
+      dueAt: c.current_metrics?.next_follow_up_at,
+    })),
     ...(dueLeads || []).map((l: any) => {
       const person = l.person && (l.person.full_name || [l.person.first_name, l.person.last_name].filter(Boolean).join(' '))
       return {

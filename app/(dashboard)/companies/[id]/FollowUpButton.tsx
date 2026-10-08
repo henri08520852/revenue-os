@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useTransition } from 'react'
+import { clearCompanyFollowUp, setCompanyFollowUp } from './actions'
 
 interface Props {
   companyId: string
@@ -9,7 +9,7 @@ interface Props {
   currentFollowUp?: string | null  // ISO date string
 }
 
-export default function FollowUpButton({ companyId, projectId, currentFollowUp }: Props) {
+export default function FollowUpButton({ companyId, currentFollowUp }: Props) {
   const [open, setOpen] = useState(false)
   const [date, setDate] = useState(
     currentFollowUp
@@ -17,41 +17,23 @@ export default function FollowUpButton({ companyId, projectId, currentFollowUp }
       : nextWorkday()
   )
   const [note, setNote] = useState('')
-  const [loading, setLoading] = useState(false)
-  const router = useRouter()
+  const [error, setError] = useState<string | null>(null)
+  const [loading, startTransition] = useTransition()
 
   const isOverdue = currentFollowUp && new Date(currentFollowUp) < new Date()
   const isDueToday = currentFollowUp && isSameDay(new Date(currentFollowUp), new Date())
 
-  async function save() {
-    setLoading(true)
-    try {
-      await fetch(`/api/companies/${companyId}/follow-up`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date, note, projectId }),
-      })
-      setOpen(false)
-      router.refresh()
-    } finally {
-      setLoading(false)
-    }
+  function run(fn: () => Promise<{ error: string | null }>) {
+    setError(null)
+    startTransition(async () => {
+      const res = await fn()
+      if (res.error) setError(res.error)
+      else { setOpen(false); setNote('') }
+    })
   }
 
-  async function clear() {
-    setLoading(true)
-    try {
-      await fetch(`/api/companies/${companyId}/follow-up`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId }),
-      })
-      setOpen(false)
-      router.refresh()
-    } finally {
-      setLoading(false)
-    }
-  }
+  const save = () => run(() => setCompanyFollowUp(companyId, date, note))
+  const clear = () => run(() => clearCompanyFollowUp(companyId))
 
   const label = currentFollowUp
     ? isOverdue
@@ -67,21 +49,21 @@ export default function FollowUpButton({ companyId, projectId, currentFollowUp }
       ? 'bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100'
       : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
 
-  if (!open) {
-    return (
+  return (
+    <div className="relative">
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => setOpen(o => !o)}
         className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border rounded-lg transition-all shadow-sm ${btnStyle}`}
       >
         {label}
       </button>
-    )
-  }
 
-  return (
-    <div className="flex items-start gap-2 p-3 bg-white border border-blue-200 rounded-xl shadow-sm">
-      <div className="flex-1 space-y-2">
-        <label className="text-xs font-medium text-gray-500">Follow-up Datum</label>
+      {open && (
+      <>
+      <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+      <div className="absolute left-0 top-full mt-2 z-20 w-72 p-3 bg-white border border-gray-200 rounded-xl shadow-lg">
+      <div className="space-y-2">
+        <label className="block text-xs font-medium text-gray-500">Follow-up am</label>
         <input
           type="date"
           value={date}
@@ -96,30 +78,29 @@ export default function FollowUpButton({ companyId, projectId, currentFollowUp }
           className="block w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
-      <div className="flex flex-col gap-1 pt-5">
-        <button
-          onClick={save}
-          disabled={loading}
-          className="px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40"
-        >
-          Setzen
-        </button>
-        {currentFollowUp && (
-          <button
-            onClick={clear}
-            disabled={loading}
-            className="px-3 py-1.5 text-sm text-red-500 hover:text-red-700"
-          >
-            Löschen
+      {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
+      <div className="flex items-center justify-between mt-3">
+        {currentFollowUp ? (
+          <button onClick={clear} disabled={loading} className="text-sm text-red-500 hover:text-red-700 disabled:opacity-40">
+            Entfernen
           </button>
-        )}
-        <button
-          onClick={() => setOpen(false)}
-          className="px-3 py-1.5 text-sm text-gray-400 hover:text-gray-600"
-        >
-          Abbruch
-        </button>
+        ) : <span />}
+        <div className="flex gap-2">
+          <button onClick={() => setOpen(false)} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">
+            Abbrechen
+          </button>
+          <button
+            onClick={save}
+            disabled={loading || !date}
+            className="px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40"
+          >
+            {loading ? 'Speichern…' : 'Setzen'}
+          </button>
+        </div>
       </div>
+      </div>
+      </>
+      )}
     </div>
   )
 }

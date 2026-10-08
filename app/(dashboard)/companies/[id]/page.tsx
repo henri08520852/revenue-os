@@ -5,7 +5,6 @@ import StatusBadge from './StatusBadge'
 import LogActivityButton from './LogActivityButton'
 import AddContactButton from './AddContactButton'
 import AddDealButton from './AddDealButton'
-import EnrichButton from './EnrichButton'
 import QuickNoteButton from './QuickNoteButton'
 import FollowUpButton from './FollowUpButton'
 
@@ -93,7 +92,6 @@ export default async function CompanyPage({ params }: { params: { id: string } }
             <LogActivityButton companyId={company.id} projectId={projectId} />
             <AddContactButton companyId={company.id} projectId={projectId} />
             <AddDealButton companyId={company.id} companyName={company.name} projectId={projectId} />
-            <EnrichButton companyId={company.id} companyName={company.name} />
             <QuickNoteButton companyId={company.id} projectId={projectId} />
             <FollowUpButton companyId={company.id} projectId={projectId} currentFollowUp={(metrics.next_follow_up_at as string) || null} />
           </div>

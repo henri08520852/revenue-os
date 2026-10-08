@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
-export default function AddCompanyButton({ projectId }: { projectId?: string }) {
+export default function AddCompanyButton({ projectId, onCreated }: { projectId?: string; onCreated?: () => void }) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({ name: '', domain: '', status: 'target' })
@@ -32,6 +32,8 @@ export default function AddCompanyButton({ projectId }: { projectId?: string }) 
     } else {
       setOpen(false)
       setForm({ name: '', domain: '', status: 'target' })
+      setLoading(false)
+      onCreated?.()
       router.refresh()
     }
   }
@@ -40,7 +42,7 @@ export default function AddCompanyButton({ projectId }: { projectId?: string }) 
     <>
       <button
         onClick={() => setOpen(true)}
-        className="bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
+        className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
       >
         + Unternehmen
       </button>
@@ -56,7 +58,7 @@ export default function AddCompanyButton({ projectId }: { projectId?: string }) 
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Acme GmbH"
                 />
               </div>
@@ -66,7 +68,7 @@ export default function AddCompanyButton({ projectId }: { projectId?: string }) 
                   value={form.domain}
                   onChange={e => setForm(f => ({ ...f, domain: e.target.value }))}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="acme.de"
                 />
               </div>
@@ -75,7 +77,7 @@ export default function AddCompanyButton({ projectId }: { projectId?: string }) 
                 <select
                   value={form.status}
                   onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="target">Target</option>
                   <option value="warm">Warm</option>
@@ -91,7 +93,7 @@ export default function AddCompanyButton({ projectId }: { projectId?: string }) 
                   Abbrechen
                 </button>
                 <button type="submit" disabled={loading}
-                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                   {loading ? 'Speichern…' : 'Speichern'}
                 </button>
               </div>
