@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { getMeetingData } from '@/lib/meetingData'
+import { loadTasks } from '@/lib/tasks'
 import CalendarView, { CalItem, CalView } from './CalendarView'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
@@ -47,17 +48,9 @@ export default async function CalendarPage({ searchParams }: { searchParams: { v
     .order('start_at', { ascending: true })
   if (memberFilter) evQuery = evQuery.eq('user_id', memberFilter)
 
-  const [{ data: events }, { data: leads }, { data: deals }, { data: reminders }] = await Promise.all([
+  const [{ data: events }, openTasks] = await Promise.all([
     evQuery,
-    supabase.from('leads').select('id, name, owner_id, next_follow_up_at, company:companies(id, name)')
-      .eq('project_id', PROJECT_ID).not('stage', 'in', '(converted,disqualified)')
-      .gte('next_follow_up_at', from).lt('next_follow_up_at', to),
-    supabase.from('opportunities').select('id, name, owner_id, next_step, next_step_due_at, company:companies(id, name)')
-      .eq('project_id', PROJECT_ID).not('stage', 'in', '(won,lost)')
-      .gte('next_step_due_at', from).lt('next_step_due_at', to),
-    supabase.from('companies').select('id, name, current_metrics')
-      .eq('project_id', PROJECT_ID).not('current_metrics->>next_follow_up_at', 'is', null)
-      .gte('current_metrics->>next_follow_up_at', from).lt('current_metrics->>next_follow_up_at', to),
+    loadTasks({ dueFrom: from, dueBefore: to, ownerId: memberFilter }),
   ])
 
   // The same meeting in several team calendars is shown once, with all owners
@@ -79,21 +72,18 @@ export default async function CalendarPage({ searchParams }: { searchParams: { v
     })
   }
 
-  const ownerOk = (id: string | null) => !memberFilter || id === memberFilter
-  const tasks: CalItem[] = [
-    ...(leads || []).filter((l: any) => ownerOk(l.owner_id)).map((l: any): CalItem => ({
-      id: 'l' + l.id, kind: 'lead', title: l.company?.name || l.name || 'Lead', sub: 'Follow-up', start: l.next_follow_up_at, end: null, allDay: true,
-      owners: [nameOf.get(l.owner_id) ?? ''].filter(Boolean), colors: [], company: l.company, meet: null, href: `/leads?focus=${l.id}`, external: false,
-    })),
-    ...(deals || []).filter((o: any) => ownerOk(o.owner_id)).map((o: any): CalItem => ({
-      id: 'o' + o.id, kind: 'deal', title: o.name || o.company?.name || 'Deal', sub: o.next_step || 'Nächster Schritt', start: o.next_step_due_at, end: null, allDay: true,
-      owners: [nameOf.get(o.owner_id) ?? ''].filter(Boolean), colors: [], company: o.company, meet: null, href: `/opportunities/${o.id}`, external: false,
-    })),
-    ...(reminders || []).filter((c: any) => ownerOk(c.current_metrics?.follow_up_owner_id ?? null)).map((c: any): CalItem => ({
-      id: 'c' + c.id, kind: 'company', title: c.name, sub: c.current_metrics?.follow_up_note || 'Erinnerung', start: c.current_metrics.next_follow_up_at, end: null, allDay: true,
-      owners: [nameOf.get(c.current_metrics?.follow_up_owner_id) ?? ''].filter(Boolean), colors: [], company: { id: c.id, name: c.name }, meet: null, href: `/companies/${c.id}`, external: false,
-    })),
-  ]
+  // Open tasks: colored by what they belong to (deal > lead > other)
+  const hm = (iso: string) => new Date(iso).toLocaleTimeString('de-DE', { timeZone: TZ, hour: '2-digit', minute: '2-digit' })
+  const tasks: CalItem[] = openTasks.filter(t => t.due_at).map((t): CalItem => ({
+    id: 't' + t.id,
+    kind: t.deal ? 'deal' : t.lead ? 'lead' : 'company',
+    title: t.title,
+    sub: [t.has_time ? hm(t.due_at!) : null, t.deal?.name ?? t.company?.name ?? t.person?.name ?? null].filter(Boolean).join(' · ') || null,
+    start: t.due_at!, end: null, allDay: true,
+    owners: [nameOf.get(t.owner_id ?? '') ?? ''].filter(Boolean), colors: [], company: t.company, meet: null,
+    href: t.deal ? `/opportunities/${t.deal.id}` : t.lead ? `/leads?focus=${t.lead.id}` : t.person ? `/contacts/${t.person.id}` : t.company ? `/companies/${t.company.id}` : '/tasks',
+    external: false,
+  }))
 
   return (
     <CalendarView

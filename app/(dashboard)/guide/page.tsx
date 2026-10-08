@@ -26,9 +26,9 @@ const DEAL_STAGES = [
 ]
 
 const DUE = [
-  ['Lead',    'Follow-up-Datum',  'Auf der Lead-Karte (/leads)',            'LEAD'],
-  ['Deal',    'Nächster Schritt + Fällig am', 'Deal-Seite → „Deal bearbeiten“', 'DEAL'],
-  ['Company', 'Erinnerung',        'Company-Seite → „⏰ Erinnerung“',        'ERINNERUNG'],
+  ['Lead',    'Follow-up am Lead',  'Lead-Karte (Datum) oder Lead → „☑️ Aufgabe“',   '● Lead'],
+  ['Deal',    'Nächster Schritt',   'Deal-Seite → „☑️ Aufgabe“ (oder Meeting planen)', '◆ Deal'],
+  ['Company / Kontakt', 'Erinnerung / To-do', 'Company- oder Kontaktseite → „☑️ Aufgabe“', 'Link zur Seite'],
 ]
 
 const ROLES = [
@@ -82,14 +82,14 @@ export default function GuidePage() {
 
       {/* TOC */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-        {[['#heute', 'Täglicher Ablauf'], ['#leads', 'Leads'], ['#deals', 'Deals'], ['#contacts', 'Kontakte & Rollen'], ['#faellig', 'Follow-ups'], ['#status', 'Company-Status'], ['#google', 'Gmail & Kalender'], ['#regeln', 'Spielregeln']].map(([href, label]) => (
+        {[['#heute', 'Täglicher Ablauf'], ['#leads', 'Leads'], ['#deals', 'Deals'], ['#contacts', 'Kontakte & Rollen'], ['#faellig', 'Aufgaben'], ['#status', 'Company-Status'], ['#google', 'Gmail & Kalender'], ['#regeln', 'Spielregeln']].map(([href, label]) => (
           <a key={href} href={href} style={{ fontSize: 13, padding: '6px 12px', borderRadius: 20, background: '#f3f4f6', color: '#374151', textDecoration: 'none' }}>{label}</a>
         ))}
       </div>
 
       <Section id="heute" title="1 · Täglicher Ablauf" intro="Starte jeden Tag auf „Heute“. Dort steht alles, was Aufmerksamkeit braucht:">
         <ol style={{ fontSize: 14, color: '#374151', lineHeight: 1.8, paddingLeft: 20, listStyle: 'decimal' }}>
-          <li><b>Fällig</b> – Follow-ups von Leads, nächste Schritte von Deals und Company-Erinnerungen, sortiert nach Überfällig → Heute → Diese Woche. Klick öffnet direkt den Lead/Deal.</li>
+          <li><b>Fällige Aufgaben</b> – alle offenen Aufgaben (Follow-ups, Anrufe, nächste Schritte), sortiert nach Überfällig → Heute → Diese Woche. Häkchen = erledigt, Klick auf den Titel = bearbeiten. Alle Aufgaben stehen unter „Aufgaben“ in der Navigation.</li>
           <li><b>Prioritäts-Queue</b> – automatisch vorgeschlagene Aktionen auf Basis von Signalen (z. B. Funding, viele offene Stellen).</li>
           <li><b>Neue Signale</b> – was sich bei unseren Companies gerade tut.</li>
         </ol>
@@ -112,9 +112,9 @@ export default function GuidePage() {
         {ROLES.map(([k, v]) => <div key={k} style={row}><b style={{ color: '#111827' }}>{k}</b><span style={{ color: '#4b5563' }}>{v}</span></div>)}
       </Section>
 
-      <Section id="faellig" title="5 · Follow-ups – wo setze ich was?" intro="Es gibt drei Arten von Terminen. Alle landen automatisch auf „Heute → Fällig“.">
+      <Section id="faellig" title="5 · Aufgaben – ein Objekt für alle Follow-ups" intro="Jede Aufgabe hat Titel, Typ (To-do, Anruf, E-Mail, Follow-up, Meeting), Fälligkeit, Verantwortliche:n und hängt an Company, Kontakt, Lead und/oder Deal. Sie erscheint auf der jeweiligen Seite unter „Anstehend“, auf „Heute“, im Kalender und unter „Aufgaben“.">
         <div style={{ ...row, borderTop: 'none', gridTemplateColumns: '110px 1fr 1fr 110px', fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          <span>Wo</span><span>Feld</span><span>Setzen in</span><span>Label in Fällig</span>
+          <span>Wo</span><span>Wofür</span><span>Anlegen über</span><span>Im Kalender</span>
         </div>
         {DUE.map(([a, b, c, d]) => (
           <div key={a} style={{ ...row, gridTemplateColumns: '110px 1fr 1fr 110px' }}>
@@ -122,7 +122,7 @@ export default function GuidePage() {
             <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280' }}>{d}</span>
           </div>
         ))}
-        <p style={{ ...lead, marginTop: 14, marginBottom: 0 }}>Faustregel: Gibt es einen Deal, nutze den <b>nächsten Schritt</b> im Deal. Gibt es nur einen Lead, das <b>Follow-up</b> am Lead. Die <b>Erinnerung</b> an der Company ist für alles davor (z. B. „in 3 Monaten nochmal schauen“).</p>
+        <p style={{ ...lead, marginTop: 14, marginBottom: 0 }}>Automatisch: Die <b>früheste offene Aufgabe eines Deals</b> ist sein nächster Schritt (Pipeline-Karte), die eines Leads sein Follow-up-Datum. Beim Umwandeln eines Leads wandern seine offenen Aufgaben mit in den Deal. Ein Meeting, das du aus einem Deal planst, wird auf Wunsch direkt als Aufgabe angelegt.</p>
       </Section>
 
       <Section id="status" title="6 · Company-Status (automatisch)" intro="Den Status musst du nicht pflegen – er folgt Leads und Deals:">
@@ -135,7 +135,7 @@ export default function GuidePage() {
         <ul style={{ fontSize: 14, color: '#374151', lineHeight: 1.8, paddingLeft: 20, listStyle: 'disc' }}>
           <li><b>E-Mails</b> mit Kontakten (exakte Adresse) oder mit der Domain einer Company werden automatisch als Aktivität geloggt – inklusive Zuordnung zum offenen Deal. Private Adressen (gmail.com, web.de …) und Newsletter werden ignoriert.</li>
           <li><b>Vergangene Meetings</b> mit solchen Teilnehmer:innen werden ebenfalls als Aktivität geloggt; „Letzter Kontakt“ aktualisiert sich von selbst.</li>
-          <li><b>Team-Kalender</b> (Tag / Woche / Monat) zeigt die Termine aller verbundenen Kolleg:innen plus Follow-ups, Deal-Schritte und Erinnerungen. Gemeinsame Termine erscheinen nur einmal. „⏰ Follow-up“ setzt direkt eine Deadline für Lead, Deal oder Company.</li>
+          <li><b>Team-Kalender</b> (Tag / Woche / Monat) zeigt die Termine aller verbundenen Kolleg:innen plus alle offenen Aufgaben. Gemeinsame Termine erscheinen nur einmal. „+ Aufgabe“ legt direkt eine Aufgabe an.</li>
           <li><b>Meetings planen</b>: „+ Meeting“ im Kalender (oder Klick auf eine freie Uhrzeit), „📅 Meeting“ auf Company- und Deal-Seite. Teilnehmer aus den Kontakten wählen, Google-Meet-Link wird automatisch erstellt, Google verschickt die Einladung. Mit Deal verknüpft, wird das Meeting zum nächsten Schritt.</li>
           <li>Der Sync läuft beim Öffnen der App (höchstens alle 10 Minuten) und einmal täglich automatisch.</li>
         </ul>
@@ -143,7 +143,7 @@ export default function GuidePage() {
 
       <Section id="regeln" title="8 · Spielregeln für das Team">
         <ul style={{ fontSize: 14, color: '#374151', lineHeight: 1.8, paddingLeft: 20, listStyle: 'disc' }}>
-          <li>Jeder offene Lead hat ein Follow-up-Datum, jeder offene Deal einen nächsten Schritt mit Datum.</li>
+          <li>Jeder offene Lead und jeder offene Deal hat mindestens eine offene Aufgabe mit Datum.</li>
           <li>Gespräche und Calls als Aktivität loggen, kurze Gedanken als Notiz – so weiß jeder, was zuletzt passiert ist.</li>
           <li>Umwandeln, sobald ein Termin mit Bedarf steht – nicht erst beim Angebot.</li>
           <li>Verlorene Deals mit „Verloren“ schließen statt liegen lassen – die Deal-Übersicht bleibt so ehrlich.</li>

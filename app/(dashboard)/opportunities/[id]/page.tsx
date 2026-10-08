@@ -11,6 +11,8 @@ import { loadTimeline, loadUpcoming } from '@/lib/records'
 import { RecordLayout, Card, Empty, UpcomingList, AssocRow } from '@/components/record/Layout'
 import Timeline from '@/components/record/Timeline'
 import QuickActions from '@/components/record/QuickActions'
+import TaskList from '@/components/TaskList'
+import { loadTasks } from '@/lib/tasks'
 
 type Stage = typeof OPPORTUNITY_STAGES[number]
 const STAGE_LABELS = OPPORTUNITY_STAGE_LABELS
@@ -43,7 +45,7 @@ export default async function DealPage({ params }: { params: { id: string } }) {
   const prevStage = activeIdx > 0 ? ACTIVE_OPPORTUNITY_STAGES[activeIdx - 1] : null
   const nextStage = activeIdx >= 0 && activeIdx < ACTIVE_OPPORTUNITY_STAGES.length - 1 ? ACTIVE_OPPORTUNITY_STAGES[activeIdx + 1] : null
 
-  const [{ team }, meetingData, timeline, upcoming, { data: contacts }, { data: companyPeople }, { data: leads }] = await Promise.all([
+  const [{ team }, meetingData, timeline, upcoming, { data: contacts }, { data: companyPeople }, { data: leads }, tasks] = await Promise.all([
     getTeamContext(),
     getMeetingData(),
     loadTimeline({ opportunityId: opp.id, dealCompanyId: company?.id ?? null }),
@@ -56,10 +58,10 @@ export default async function DealPage({ params }: { params: { id: string } }) {
       ? supabase.from('people').select('id, full_name, first_name, last_name, job_title, email').eq('company_id', company.id).order('last_name', { ascending: true })
       : Promise.resolve({ data: [] }),
     supabase.from('leads').select('id, name, stage, converted_at').eq('converted_to_opportunity_id', opp.id),
+    loadTasks({ opportunityId: params.id }),
   ])
 
   const personLabel = (p: any) => p.full_name || [p.first_name, p.last_name].filter(Boolean).join(' ') || p.email || 'Unbenannt'
-  const isOverdue = opp.next_step_due_at ? new Date(opp.next_step_due_at).getTime() < Date.now() : false
   const status = ACCOUNT_STATUSES.find(s => s.key === company?.account_status)
   const sc = STAGE_COLORS[stage] ?? STAGE_COLORS.discovery
 
@@ -75,17 +77,13 @@ export default async function DealPage({ params }: { params: { id: string } }) {
           {company && <Link href={`/companies/${company.id}`} style={{ display: 'inline-block', marginTop: 4, fontSize: 13, color: '#2563eb', textDecoration: 'none', fontWeight: 500 }}>{company.name}</Link>}
           {opp.value_eur ? <p style={{ fontSize: 26, fontWeight: 700, color: '#111827', marginTop: 10 }}>{Number(opp.value_eur).toLocaleString('de-DE')} €</p> : null}
           <div style={{ marginTop: 8 }}><DealOwner oppId={opp.id} ownerId={opp.owner_id ?? null} team={team} /></div>
-          {opp.next_step && (
-            <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 10, background: isOverdue ? '#fef2f2' : '#eff6ff', border: `1px solid ${isOverdue ? '#fecaca' : '#bfdbfe'}` }}>
-              <p style={{ fontSize: 13, fontWeight: 600, color: isOverdue ? '#b91c1c' : '#1d4ed8' }}>{isOverdue ? '⚠️' : '📌'} {opp.next_step}</p>
-              {opp.next_step_due_at && <p style={{ fontSize: 12, color: isOverdue ? '#dc2626' : '#3b82f6', marginTop: 2 }}>{fmtDate(opp.next_step_due_at, { weekday: 'long', day: '2-digit', month: 'long' })}</p>}
-            </div>
-          )}
           <div style={{ marginTop: 14 }}>
             <QuickActions
               target={{ companyId: company?.id ?? null, personId: null, opportunityId: opp.id }}
               contacts={(companyPeople || []).map((p: any) => ({ id: p.id, label: personLabel(p) }))}
               meeting={meetingData}
+              taskData={meetingData}
+              taskLink={{ opportunityId: opp.id, companyId: company?.id ?? null }}
               meetingPrefill={{
                 companyId: company?.id ?? null,
                 opportunityId: opp.id,
@@ -98,8 +96,6 @@ export default async function DealPage({ params }: { params: { id: string } }) {
         <Card title="Deal bearbeiten">
           <DealEditor
             oppId={opp.id}
-            initialNextStep={opp.next_step || null}
-            initialNextStepDue={opp.next_step_due_at || null}
             initialValue={opp.value_eur || null}
             currentStage={stage}
             prevStage={prevStage}
@@ -114,7 +110,10 @@ export default async function DealPage({ params }: { params: { id: string } }) {
         )}
       </>}
       center={<>
-        <Card title="Anstehend" count={upcoming.length}><UpcomingList items={upcoming} /></Card>
+        <Card title="Anstehend" count={tasks.length + upcoming.length}>
+          <TaskList tasks={tasks} data={meetingData} link={{ opportunityId: opp.id, companyId: company?.id ?? null }} hideLinks={['deal', 'company']} />
+          {upcoming.length > 0 && <div style={{ marginTop: 12 }}><p style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Termine</p><UpcomingList items={upcoming} /></div>}
+        </Card>
         <Card title="Aktivitäten" count={timeline.length}>
           <Timeline items={timeline} context={{ companyId: company?.id ?? null, opportunityId: opp.id }} hideDeal />
         </Card>

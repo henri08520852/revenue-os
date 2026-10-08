@@ -95,10 +95,13 @@ export async function createMeeting(input: MeetingInput): Promise<Result> {
     updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id,google_event_id' })
 
+  // The meeting becomes an open task on the deal → it is the deal's next step (trigger, migration 022)
   if (input.opportunityId && input.setAsNextStep) {
-    await svc.from('opportunities')
-      .update({ next_step: `Meeting: ${title}`, next_step_due_at: start.toISOString() })
-      .eq('id', input.opportunityId)
+    await svc.from('tasks').insert({
+      project_id: conn.project_id, title: `Meeting: ${title}`, task_type: 'meeting',
+      due_at: start.toISOString(), has_time: true, owner_id: user.id, created_by: user.id,
+      opportunity_id: input.opportunityId, company_id: input.companyId, person_id: input.personId,
+    })
   }
 
   revalidatePath('/calendar')
@@ -106,56 +109,4 @@ export async function createMeeting(input: MeetingInput): Promise<Result> {
   if (input.opportunityId) revalidatePath(`/opportunities/${input.opportunityId}`)
   if (input.companyId) revalidatePath(`/companies/${input.companyId}`)
   return { error: null, meetLink }
-}
-
-export type FollowUpInput = {
-  kind: 'lead' | 'deal' | 'company'
-  id: string
-  date: string        // YYYY-MM-DD
-  time: string | null // HH:MM, optional
-  note: string | null
-  tzOffsetMin: number // browser offset, so "09:00" means 09:00 local
-}
-
-function toIso(date: string, time: string | null, tzOffsetMin: number) {
-  const [h, m] = (time || '09:00').split(':').map(Number)
-  const [Y, M, D] = date.split('-').map(Number)
-  // Build the UTC instant for local date/time given the browser's offset
-  return new Date(Date.UTC(Y, M - 1, D, h, m) + tzOffsetMin * 60000).toISOString()
-}
-
-// Sets a follow-up / deadline on a lead, a deal (next step) or a company (reminder)
-export async function setFollowUp(input: FollowUpInput): Promise<Result> {
-  if (!input.id) return { error: 'Bitte auswählen, wofür das Follow-up gilt' }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) return { error: 'Bitte ein Datum wählen' }
-  const at = toIso(input.date, input.time, input.tzOffsetMin)
-  const supabase = createClient() as any
-  const { data: { user } } = await supabase.auth.getUser()
-
-  let error: any = null
-  if (input.kind === 'lead') {
-    const patch: any = { next_follow_up_at: at }
-    if (input.note) {
-      const { data: lead } = await supabase.from('leads').select('notes').eq('id', input.id).single()
-      patch.notes = [lead?.notes, `Follow-up ${input.date}: ${input.note}`].filter(Boolean).join('\n')
-    }
-    ;({ error } = await supabase.from('leads').update(patch).eq('id', input.id))
-  } else if (input.kind === 'deal') {
-    const patch: any = { next_step_due_at: at }
-    if (input.note) patch.next_step = input.note
-    ;({ error } = await supabase.from('opportunities').update(patch).eq('id', input.id))
-  } else {
-    const { data: company, error: cErr } = await supabase.from('companies').select('current_metrics').eq('id', input.id).single()
-    if (cErr) return { error: cErr.message }
-    ;({ error } = await supabase.from('companies').update({
-      current_metrics: { ...(company?.current_metrics || {}), next_follow_up_at: at, follow_up_note: input.note || null, follow_up_owner_id: user?.id ?? null },
-    }).eq('id', input.id))
-  }
-  if (error) return { error: error.message }
-
-  revalidatePath('/calendar')
-  revalidatePath('/today')
-  revalidatePath('/leads')
-  revalidatePath('/pipeline')
-  return { error: null }
 }

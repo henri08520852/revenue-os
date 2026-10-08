@@ -13,10 +13,12 @@ import {
   FunnelIcon,
   QuestionMarkCircleIcon,
   CalendarIcon,
+  CheckCircleIcon,
 } from '@heroicons/react/24/outline'
 
 const nav = [
   { href: '/today',      label: 'Heute',      icon: CalendarDaysIcon },
+  { href: '/tasks',      label: 'Aufgaben',   icon: CheckCircleIcon },
   { href: '/calendar',   label: 'Kalender',   icon: CalendarIcon },
   { href: '/companies',  label: 'Companies',  icon: BuildingOffice2Icon },
   { href: '/contacts',   label: 'Contacts',   icon: UserGroupIcon },

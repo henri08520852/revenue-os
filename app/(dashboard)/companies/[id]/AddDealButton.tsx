@@ -40,16 +40,24 @@ export default function AddDealButton({ companyId, companyName, projectId, team 
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.from('opportunities').insert({
+    const { data: deal, error: dealErr } = await (supabase as any).from('opportunities').insert({
       project_id: projectId,
       company_id: companyId,
       name: form.name,
       stage: form.stage,
       value_eur: form.value ? parseFloat(form.value) : null,
-      next_step: form.nextStep || null,
-      next_step_due_at: form.nextStepDate ? new Date(form.nextStepDate).toISOString() : null,
       owner_id: form.ownerId || null,
-    })
+    }).select('id').single()
+
+    // The next step is a task on the deal (the deal's next_step is derived from it, migration 022)
+    let error = dealErr
+    if (!error && deal && form.nextStep.trim()) {
+      ;({ error } = await (supabase as any).from('tasks').insert({
+        project_id: projectId, title: form.nextStep.trim(), task_type: 'todo',
+        due_at: form.nextStepDate ? `${form.nextStepDate}T10:00:00.000Z` : null, has_time: false,
+        owner_id: form.ownerId || null, company_id: companyId, opportunity_id: deal.id,
+      }))
+    }
 
     if (error) {
       setError(error.message)

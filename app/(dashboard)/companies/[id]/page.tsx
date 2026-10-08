@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation'
 import StatusBadge from './StatusBadge'
 import AddContactButton from './AddContactButton'
 import AddDealButton from './AddDealButton'
-import FollowUpButton from './FollowUpButton'
 import AddLeadButton from '../../leads/AddLeadButton'
 import { OPPORTUNITY_STAGE_LABELS } from '@/lib/stages'
 import { getTeamContext } from '@/lib/team'
@@ -13,6 +12,8 @@ import { RecordLayout, Card, Empty, UpcomingList, AssocRow } from '@/components/
 import Timeline from '@/components/record/Timeline'
 import QuickActions from '@/components/record/QuickActions'
 import Properties from '@/components/record/Properties'
+import TaskList from '@/components/TaskList'
+import { loadTasks } from '@/lib/tasks'
 
 const SIGNAL_LABELS: Record<string, { label: string; icon: string; color: string }> = {
   news_funding:    { label: 'Funding',            icon: '💰', color: '#10b981' },
@@ -45,7 +46,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
   if (!company) notFound()
 
   const projectId = (company.project_id || process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID) as string
-  const [{ data: signals }, { data: jobs }, { data: actions }, { data: peopleData }, { data: leadsData }, { data: dealsData }, timeline, upcoming, meeting, { me, team }] = await Promise.all([
+  const [{ data: signals }, { data: jobs }, { data: actions }, { data: peopleData }, { data: leadsData }, { data: dealsData }, timeline, upcoming, meeting, { me, team }, tasks] = await Promise.all([
     supabase.from('signals').select('*').eq('company_id', params.id).eq('status', 'active').order('strength', { ascending: false }),
     supabase.from('jobs').select('*').eq('company_id', params.id).eq('status', 'active').order('first_seen_at', { ascending: false }).limit(30),
     supabase.from('actions').select('*').eq('company_id', params.id).in('status', ['pending', 'done']).order('generated_at', { ascending: false }).limit(10),
@@ -56,6 +57,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
     loadUpcoming({ companyId: params.id }),
     getMeetingData(),
     getTeamContext(),
+    loadTasks({ companyId: params.id }),
   ])
 
   const people = peopleData || []
@@ -94,11 +96,9 @@ export default async function CompanyPage({ params }: { params: { id: string } }
               deals={openDeals.map((d: any) => ({ id: d.id, label: d.name || 'Deal' }))}
               meeting={meeting}
               meetingPrefill={{ companyId: company.id, opportunityId: openDeals[0]?.id ?? null }}
+              taskData={meeting}
+              taskLink={{ companyId: company.id }}
             />
-          </div>
-          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <FollowUpButton companyId={company.id} projectId={projectId} currentFollowUp={(metrics.next_follow_up_at as string) || null} />
-            {metrics.next_follow_up_at && metrics.follow_up_note && <span style={{ fontSize: 12, color: '#6b7280' }}>{metrics.follow_up_note}</span>}
           </div>
         </Card>
         <Card>
@@ -115,7 +115,10 @@ export default async function CompanyPage({ params }: { params: { id: string } }
         </Card>
       </>}
       center={<>
-        <Card title="Anstehend" count={upcoming.length}><UpcomingList items={upcoming} /></Card>
+        <Card title="Anstehend" count={tasks.length + upcoming.length}>
+          <TaskList tasks={tasks} data={meeting} link={{ companyId: company.id }} hideLinks={['company']} />
+          {upcoming.length > 0 && <div style={{ marginTop: 12 }}><p style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Termine</p><UpcomingList items={upcoming} /></div>}
+        </Card>
         <Card title="Aktivitäten" count={timeline.length}>
           <Timeline items={timeline} context={{ companyId: company.id }} />
         </Card>

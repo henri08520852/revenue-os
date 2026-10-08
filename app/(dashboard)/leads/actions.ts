@@ -8,10 +8,25 @@ const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
 // Stages a lead can be moved to by hand — 'converted' is only set by convertLeadToOpportunity
 const MOVABLE_STAGES = ['outreach', 'contacted', 'qualified', 'disqualified']
 
+// Date-only follow-ups are stored at 10:00 UTC → same calendar day in Berlin all year
 function toIsoOrNull(date: string | null | undefined) {
   if (!date) return null
-  // <input type="date"> yields YYYY-MM-DD; store as local 09:00 so it lands on the right day
-  return new Date(`${date}T09:00:00`).toISOString()
+  return `${date}T10:00:00.000Z`
+}
+
+// The lead's follow-up date is its earliest open task (leads.next_follow_up_at is derived
+// by trigger, migration 022). Setting a date updates that task or creates a follow-up task.
+async function setFollowUpTask(supabase: any, lead: { id: string; project_id: string; company_id: string | null; person_id: string | null; owner_id: string | null; name: string | null }, dueIso: string | null) {
+  const { data: open } = await supabase.from('tasks').select('id').eq('lead_id', lead.id).eq('status', 'open')
+    .order('due_at', { ascending: true, nullsFirst: false }).limit(1)
+  if (open?.length) return supabase.from('tasks').update({ due_at: dueIso, has_time: false }).eq('id', open[0].id)
+  if (!dueIso) return { error: null }
+  const { data: { user } } = await supabase.auth.getUser()
+  return supabase.from('tasks').insert({
+    project_id: lead.project_id, title: `Follow-up${lead.name ? ' – ' + lead.name : ''}`, task_type: 'follow_up',
+    due_at: dueIso, has_time: false, owner_id: lead.owner_id ?? user?.id ?? null, created_by: user?.id ?? null,
+    company_id: lead.company_id, person_id: lead.person_id, lead_id: lead.id,
+  })
 }
 
 export async function createLead(input: {
@@ -27,7 +42,7 @@ export async function createLead(input: {
 
   const supabase = createClient() as any
   const { data: { user } } = await supabase.auth.getUser()
-  const { error } = await supabase.from('leads').insert({
+  const { data: created, error } = await supabase.from('leads').insert({
     project_id: PROJECT_ID,
     owner_id: input.ownerId || user?.id || null,
     company_id: input.companyId,
@@ -36,9 +51,12 @@ export async function createLead(input: {
     stage: 'outreach',
     source: 'manual',
     notes: input.notes || null,
-    next_follow_up_at: toIsoOrNull(input.nextFollowUp),
-  })
+  }).select('id, project_id, company_id, person_id, owner_id, name').single()
   if (error) return { error: error.message }
+  if (input.nextFollowUp) {
+    const { error: tErr } = await setFollowUpTask(supabase, created, toIsoOrNull(input.nextFollowUp))
+    if (tErr) return { error: tErr.message }
+  }
   revalidatePath('/leads')
   revalidatePath('/today')
   revalidatePath('/companies', 'layout')
@@ -71,10 +89,9 @@ export async function updateLeadOwner(leadId: string, ownerId: string | null): P
 
 export async function updateLeadFollowUp(leadId: string, date: string | null): Promise<{ error: string | null }> {
   const supabase = createClient() as any
-  const { error } = await supabase
-    .from('leads')
-    .update({ next_follow_up_at: toIsoOrNull(date) })
-    .eq('id', leadId)
+  const { data: lead, error: lErr } = await supabase.from('leads').select('id, project_id, company_id, person_id, owner_id, name').eq('id', leadId).single()
+  if (lErr || !lead) return { error: lErr?.message || 'Lead nicht gefunden' }
+  const { error } = await setFollowUpTask(supabase, lead, toIsoOrNull(date))
   if (error) return { error: error.message }
   revalidatePath('/leads')
   revalidatePath('/today')
@@ -140,6 +157,9 @@ export async function convertLeadToOpportunity(leadId: string, _prev: ConvertSta
     await supabase.from('opportunities').delete().eq('id', opp.id)
     return { error: updErr?.message || 'Lead wurde bereits umgewandelt' }
   }
+
+  // Open lead tasks continue on the deal (they stay linked to the lead for history)
+  await supabase.from('tasks').update({ opportunity_id: opp.id }).eq('lead_id', leadId).eq('status', 'open')
 
   revalidatePath('/leads')
   revalidatePath('/pipeline')

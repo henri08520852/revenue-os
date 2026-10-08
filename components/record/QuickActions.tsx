@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { logActivity, LogInput } from '@/app/(dashboard)/records/actions'
 import MeetingDialog, { MeetingData, MeetingPrefill } from '@/components/MeetingDialog'
+import TaskDialog, { TaskLink, TaskPickData } from '@/components/TaskDialog'
 
 type Opt = { id: string; label: string }
 
@@ -17,19 +18,22 @@ const label = { display: 'block', fontSize: 11, fontWeight: 600, color: '#9ca3af
 const input = { width: '100%', padding: '9px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, color: '#111827', background: 'white', outline: 'none', boxSizing: 'border-box' as const }
 
 // HubSpot-style action row: log note / call / email / LinkedIn, or plan a meeting
-export default function QuickActions({ target, contacts = [], deals = [], meeting, meetingPrefill }: {
+export default function QuickActions({ target, contacts = [], deals = [], meeting, meetingPrefill, taskData, taskLink }: {
   target: { companyId: string | null; personId: string | null; opportunityId: string | null }
   contacts?: Opt[]            // pick a contact when logging on a company / deal
   deals?: Opt[]               // pick a deal when logging on a company / contact
   meeting?: MeetingData
   meetingPrefill?: MeetingPrefill
+  taskData?: TaskPickData
+  taskLink?: TaskLink
 }) {
   const [type, setType] = useState<LogInput['type'] | null>(null)
   const [meetingOpen, setMeetingOpen] = useState(false)
+  const [taskOpen, setTaskOpen] = useState(false)
 
   return (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
         {ACTIONS.map(a => (
           <button key={a.type} onClick={() => setType(a.type)} title={`${a.label} loggen`}
             style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '8px 0', border: '1px solid #e5e7eb', borderRadius: 10, background: '#fff', cursor: 'pointer', fontSize: 11, color: '#374151' }}>
@@ -40,9 +44,14 @@ export default function QuickActions({ target, contacts = [], deals = [], meetin
           style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '8px 0', border: '1px solid #bfdbfe', borderRadius: 10, background: '#eff6ff', cursor: 'pointer', fontSize: 11, color: '#1d4ed8' }}>
           <span style={{ fontSize: 16 }}>📅</span>Meeting
         </button>
+        <button onClick={() => setTaskOpen(true)} disabled={!taskData} title="Aufgabe anlegen"
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '8px 0', border: '1px solid #bbf7d0', borderRadius: 10, background: '#f0fdf4', cursor: 'pointer', fontSize: 11, color: '#15803d' }}>
+          <span style={{ fontSize: 16 }}>☑️</span>Aufgabe
+        </button>
       </div>
       {type && <LogDialog type={type} onType={setType} onClose={() => setType(null)} target={target} contacts={contacts} deals={deals} />}
       {meeting && <MeetingDialog open={meetingOpen} onClose={() => setMeetingOpen(false)} data={meeting} prefill={meetingPrefill} />}
+      {taskData && <TaskDialog open={taskOpen} onClose={() => setTaskOpen(false)} data={taskData} link={taskLink} />}
     </>
   )
 }

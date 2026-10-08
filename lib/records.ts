@@ -106,53 +106,27 @@ export async function loadTimeline(target: { companyId?: string; personId?: stri
   return items.filter(i => i.at).sort((a, b) => b.at.localeCompare(a.at))
 }
 
-// Upcoming meetings + due follow-ups / next steps for a record
+// Upcoming meetings for a record (tasks come from lib/tasks)
 export async function loadUpcoming(target: { companyId?: string | null; personId?: string; personEmail?: string | null; opportunityId?: string }): Promise<UpcomingItem[]> {
   const supabase = createClient() as any
   const nowIso = new Date(Date.now() - 60 * 60000).toISOString()
-  const out: UpcomingItem[] = []
-
   const evBase = () => supabase.from('calendar_events').select('id, title, start_at, meet_link, html_link').gte('start_at', nowIso).order('start_at').limit(10)
-  let ev: any = null
+
+  let events: any[] = []
   if (target.personId) {
     // Matched to the contact, or the contact is on the guest list
-    ev = Promise.all([
+    const [a, b] = await Promise.all([
       evBase().eq('person_id', target.personId),
       target.personEmail ? evBase().contains('attendees', [{ email: target.personEmail.toLowerCase() }]) : Promise.resolve({ data: [] }),
-    ]).then(([a, b]: any[]) => {
-      const seen = new Set<string>()
-      return { data: [...(a.data || []), ...(b.data || [])].filter((e: any) => !seen.has(e.id) && !!seen.add(e.id)) }
-    })
-  } else if (target.companyId) ev = evBase().eq('company_id', target.companyId)
-
-  let leads = supabase.from('leads').select('id, name, next_follow_up_at, company:companies(name)').not('next_follow_up_at', 'is', null).not('stage', 'in', '(converted,disqualified)')
-  if (target.personId) leads = leads.eq('person_id', target.personId)
-  else if (target.companyId && !target.opportunityId) leads = leads.eq('company_id', target.companyId)
-  else leads = null
-
-  let deals = supabase.from('opportunities').select('id, name, next_step, next_step_due_at').not('next_step_due_at', 'is', null).not('stage', 'in', '(won,lost)')
-  if (target.opportunityId) deals = deals.eq('id', target.opportunityId)
-  else if (target.companyId) deals = deals.eq('company_id', target.companyId)
-  else if (target.personId) {
-    const { data: links } = await supabase.from('opportunity_contacts').select('opportunity_id').eq('person_id', target.personId)
-    const ids = (links || []).map((l: any) => l.opportunity_id)
-    deals = ids.length ? deals.in('id', ids) : null
+    ])
+    const seen = new Set<string>()
+    events = [...(a.data || []), ...(b.data || [])].filter((e: any) => !seen.has(e.id) && !!seen.add(e.id))
+  } else if (target.companyId) {
+    events = (await evBase().eq('company_id', target.companyId)).data || []
   }
 
-  const [evRes, leadRes, dealRes, compRes] = await Promise.all([
-    ev ?? Promise.resolve({ data: [] }),
-    leads ?? Promise.resolve({ data: [] }),
-    deals ?? Promise.resolve({ data: [] }),
-    target.companyId && !target.personId && !target.opportunityId
-      ? supabase.from('companies').select('id, current_metrics').eq('id', target.companyId).single()
-      : Promise.resolve({ data: null }),
-  ])
-
-  for (const e of evRes.data || []) out.push({ id: 'e' + e.id, kind: 'meeting', at: e.start_at, title: e.title, sub: null, href: e.html_link, external: true, meet: e.meet_link })
-  for (const l of leadRes.data || []) out.push({ id: 'l' + l.id, kind: 'lead', at: l.next_follow_up_at, title: 'Lead-Follow-up', sub: [l.company?.name, l.name].filter(Boolean).join(' · ') || null, href: `/leads?focus=${l.id}`, external: false, meet: null })
-  for (const d of dealRes.data || []) out.push({ id: 'd' + d.id, kind: 'deal', at: d.next_step_due_at, title: d.next_step || 'Nächster Schritt', sub: d.name, href: `/opportunities/${d.id}`, external: false, meet: null })
-  const cm = compRes.data?.current_metrics
-  if (cm?.next_follow_up_at) out.push({ id: 'c' + target.companyId, kind: 'company', at: cm.next_follow_up_at, title: 'Erinnerung', sub: cm.follow_up_note ?? null, href: null, external: false, meet: null })
-
-  return out.filter(u => u.at).sort((a, b) => a.at.localeCompare(b.at))
+  return events
+    .map((e: any): UpcomingItem => ({ id: 'e' + e.id, kind: 'meeting', at: e.start_at, title: e.title, sub: null, href: e.html_link, external: true, meet: e.meet_link }))
+    .filter(u => u.at)
+    .sort((a, b) => a.at.localeCompare(b.at))
 }

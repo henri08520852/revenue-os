@@ -8,6 +8,8 @@ import { RecordLayout, Card, Empty, UpcomingList, AssocRow } from '@/components/
 import Timeline from '@/components/record/Timeline'
 import QuickActions from '@/components/record/QuickActions'
 import Properties from '@/components/record/Properties'
+import TaskList from '@/components/TaskList'
+import { loadTasks } from '@/lib/tasks'
 
 const BUYER_ROLES = [
   { value: 'champion', label: '⭐ Champion' },
@@ -31,7 +33,8 @@ export default async function ContactPage({ params }: { params: { id: string } }
   const name = person.full_name || [person.first_name, person.last_name].filter(Boolean).join(' ') || person.email || 'Unbenannt'
   const initials = name.split(' ').map((s: string) => s[0]).slice(0, 2).join('').toUpperCase()
 
-  const [timeline, upcoming, meeting, { data: dealLinks }, { data: leads }, { data: companies }] = await Promise.all([
+  const [tasks, timeline, upcoming, meeting, { data: dealLinks }, { data: leads }, { data: companies }] = await Promise.all([
+    loadTasks({ personId: person.id }),
     loadTimeline({ personId: person.id }),
     loadUpcoming({ personId: person.id, personEmail: person.email }),
     getMeetingData(),
@@ -67,6 +70,8 @@ export default async function ContactPage({ params }: { params: { id: string } }
               target={{ companyId: person.company_id, personId: person.id, opportunityId: null }}
               deals={deals.map((l: any) => ({ id: l.deal.id, label: l.deal.name || 'Deal' }))}
               meeting={meeting}
+              taskData={meeting}
+              taskLink={{ personId: person.id, companyId: person.company_id }}
               meetingPrefill={{ companyId: person.company_id, opportunityId: openDeals[0]?.deal.id ?? null, attendeeEmails: person.email ? [String(person.email).toLowerCase()] : [], title: person.company ? `${person.company.name} × Altoris` : `${name} × Altoris` }}
             />
           </div>
@@ -90,7 +95,10 @@ export default async function ContactPage({ params }: { params: { id: string } }
         </Card>
       </>}
       center={<>
-        <Card title="Anstehend" count={upcoming.length}><UpcomingList items={upcoming} /></Card>
+        <Card title="Anstehend" count={tasks.length + upcoming.length}>
+          <TaskList tasks={tasks} data={meeting} link={{ personId: person.id, companyId: person.company_id }} hideLinks={['person']} />
+          {upcoming.length > 0 && <div style={{ marginTop: 12 }}><p style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Termine</p><UpcomingList items={upcoming} /></div>}
+        </Card>
         <Card title="Aktivitäten" count={timeline.length}>
           <Timeline items={timeline} context={{ companyId: person.company_id, personId: person.id }} hidePerson />
         </Card>

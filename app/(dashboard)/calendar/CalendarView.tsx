@@ -5,7 +5,7 @@ import { dayKeyBerlin, hhmmBerlin, minutesOfDayBerlin } from '@/lib/tz'
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import MeetingDialog, { MeetingData, MeetingPrefill } from '@/components/MeetingDialog'
-import FollowUpDialog from './FollowUpDialog'
+import TaskDialog from '@/components/TaskDialog'
 
 export type CalView = 'day' | 'week' | 'month'
 
@@ -32,7 +32,7 @@ const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 const TASK_STYLE: Record<string, { bg: string; fg: string; icon: string }> = {
   lead:    { bg: '#f5f3ff', fg: '#6d28d9', icon: '●' },
   deal:    { bg: '#f0fdf4', fg: '#15803d', icon: '◆' },
-  company: { bg: '#eff6ff', fg: '#1d4ed8', icon: '⏰' },
+  company: { bg: '#eff6ff', fg: '#1d4ed8', icon: '☑' },
 }
 
 // Local (browser) day key and helpers — the team works in Europe/Berlin
@@ -239,7 +239,7 @@ export default function CalendarView({ view, anchor, rangeStart, days, todayKey,
 }) {
   const [meetingOpen, setMeetingOpen] = useState(false)
   const [prefill, setPrefill] = useState<MeetingPrefill | undefined>()
-  const [followUpOpen, setFollowUpOpen] = useState(false)
+  const [taskOpen, setTaskOpen] = useState(false)
 
   const dayKeys = Array.from({ length: days }, (_, i) => addDays(rangeStart, i))
   const linkFor = (v: CalView, date: string, m = member) => `/calendar?view=${v}&date=${date}${m ? `&member=${m}` : ''}`
@@ -272,7 +272,7 @@ export default function CalendarView({ view, anchor, rangeStart, days, todayKey,
           <Link href={linkFor(view, prev)} style={btn}>←</Link>
           <Link href={linkFor(view, todayKey)} style={btn}>Heute</Link>
           <Link href={linkFor(view, next)} style={btn}>→</Link>
-          <button onClick={() => setFollowUpOpen(true)} style={btn}>⏰ Follow-up</button>
+          <button onClick={() => setTaskOpen(true)} style={btn}>+ Aufgabe</button>
           <button onClick={() => { setPrefill({ date: view === 'day' ? anchor : undefined }); setMeetingOpen(true) }}
             style={{ ...btn, background: '#2563eb', color: '#fff', border: 'none', fontWeight: 600 }}>+ Meeting</button>
         </div>
@@ -286,9 +286,9 @@ export default function CalendarView({ view, anchor, rangeStart, days, todayKey,
           </Link>
         ))}
         <span style={{ display: 'inline-flex', gap: 10, marginLeft: 8, fontSize: 11, color: '#6b7280' }}>
-          <span style={{ color: TASK_STYLE.lead.fg }}>● Lead-Follow-up</span>
-          <span style={{ color: TASK_STYLE.deal.fg }}>◆ Deal-Schritt</span>
-          <span style={{ color: TASK_STYLE.company.fg }}>⏰ Erinnerung</span>
+          <span style={{ color: TASK_STYLE.lead.fg }}>● Lead-Aufgabe</span>
+          <span style={{ color: TASK_STYLE.deal.fg }}>◆ Deal-Aufgabe</span>
+          <span style={{ color: TASK_STYLE.company.fg }}>☑ Aufgabe</span>
         </span>
         {!hasEvents && <span style={{ fontSize: 12, color: '#9ca3af', marginLeft: 8 }}>Keine Termine – <Link href="/settings" style={{ color: '#2563eb', textDecoration: 'none' }}>Google-Kalender verbinden</Link></span>}
       </div>
@@ -298,8 +298,7 @@ export default function CalendarView({ view, anchor, rangeStart, days, todayKey,
         : <TimeGrid dayKeys={dayKeys} items={items} todayKey={todayKey} onSlot={(date, time) => { setPrefill({ date, time }); setMeetingOpen(true) }} />}
 
       <MeetingDialog open={meetingOpen} onClose={() => setMeetingOpen(false)} data={meeting} prefill={prefill} />
-      <FollowUpDialog open={followUpOpen} onClose={() => setFollowUpOpen(false)} date={view === 'day' ? anchor : todayKey}
-        leads={meeting.leads} deals={meeting.deals.map(d => ({ id: d.id, label: d.name }))} companies={meeting.companies.map(c => ({ id: c.id, label: c.name }))} />
+      <TaskDialog open={taskOpen} onClose={() => setTaskOpen(false)} data={meeting} defaultDate={view === 'day' ? anchor : todayKey} />
     </div>
   )
 }
