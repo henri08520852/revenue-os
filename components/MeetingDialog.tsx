@@ -62,7 +62,8 @@ export default function MeetingDialog({ open, onClose, data, prefill }: {
     setTime(prefill?.time ?? nextHalfHour())
     setDuration(30)
     setCompanyId(prefill?.companyId ?? '')
-    setOpportunityId(prefill?.opportunityId ?? '')
+    // A company with an open deal → preselect it (the meeting usually belongs to that deal)
+    setOpportunityId(prefill?.opportunityId ?? (prefill?.companyId ? data.deals.find(d => d.company_id === prefill.companyId)?.id ?? '' : ''))
     setEmails(prefill?.attendeeEmails ?? [])
     setEmailDraft('')
     setDescription('')
@@ -192,7 +193,7 @@ export default function MeetingDialog({ open, onClose, data, prefill }: {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <label style={label}>Company</label>
-                  <select value={companyId} onChange={e => { setCompanyId(e.target.value); setOpportunityId('') }} style={input}>
+                  <select value={companyId} onChange={e => { const id = e.target.value; setCompanyId(id); setOpportunityId(id ? data.deals.find(d => d.company_id === id)?.id ?? '' : '') }} style={input}>
                     <option value="">— keine —</option>
                     {data.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>

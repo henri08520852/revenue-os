@@ -98,6 +98,7 @@ export default async function DealPage({ params }: { params: { id: string } }) {
           <DealEditor
             oppId={opp.id}
             initialValue={opp.value_eur || null}
+            initialName={opp.name || null}
             currentStage={stage}
             prevStage={prevStage}
             nextStage={nextStage}

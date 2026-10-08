@@ -89,7 +89,12 @@ export async function createDealRecord(input: CompanyRef & {
   const { data: { user } } = await supabase.auth.getUser()
   const { error: cErr, companyId } = await resolveCompany(supabase, input, true)
   if (cErr || !companyId) return { error: cErr || 'Company fehlt' }
-  const name = input.name.trim() || input.newCompany?.name?.trim() || 'Neuer Deal'
+  let companyName = input.newCompany?.name?.trim() || null
+  if (!companyName) {
+    const { data: c } = await supabase.from('companies').select('name').eq('id', companyId).single()
+    companyName = c?.name ?? null
+  }
+  const name = input.name.trim() || (companyName ? `${companyName} — HireFlow` : 'Neuer Deal')
   const { data: deal, error } = await supabase.from('opportunities').insert({
     project_id: PROJECT_ID, company_id: companyId, name, stage: input.stage,
     value_eur: input.valueEur, owner_id: input.ownerId || user?.id || null, champion_person_id: input.championId || null,
