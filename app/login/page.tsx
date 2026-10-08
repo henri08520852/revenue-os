@@ -1,8 +1,8 @@
 'use client'
 
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 const ERRORS: Record<string, string> = {
   domain: 'Bitte mit deinem @altoris.one-Google-Konto anmelden.',
@@ -16,15 +16,29 @@ function LoginForm() {
   const params = useSearchParams()
   const [error, setError] = useState<string | null>(ERRORS[params.get('error') ?? ''] ?? null)
   const supabase = createClient()
+  const router = useRouter()
+  const started = useRef(false)
 
-  async function handleGoogle() {
+  // Already signed in → straight to the app. Coming from the Content Studio (?sso=google)
+  // → start Google sign-in right away (existing Google session = no extra click).
+  useEffect(() => {
+    if (started.current) return
+    started.current = true
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) router.replace('/today')
+      else if (params.get('sso') === 'google') handleGoogle(true)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function handleGoogle(auto = false) {
     setLoading(true)
     setError(null)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
-        queryParams: { hd: 'altoris.one', prompt: 'select_account' },
+        queryParams: auto ? { hd: 'altoris.one' } : { hd: 'altoris.one', prompt: 'select_account' },
       },
     })
     if (error) {
@@ -42,7 +56,7 @@ function LoginForm() {
         </div>
 
         <button
-          onClick={handleGoogle}
+          onClick={() => handleGoogle()}
           disabled={loading}
           className="w-full flex items-center justify-center gap-3 border border-gray-300 bg-white py-2.5 px-4 rounded-lg text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50 transition-colors shadow-sm"
         >

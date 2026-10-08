@@ -8,7 +8,8 @@ const CONTENT_STUDIO_URL = process.env.NEXT_PUBLIC_CONTENT_STUDIO_URL || 'https:
 
 const APPS = [
   { key: 'revenue', name: 'Revenue OS', sub: 'Vertrieb & Pipeline', href: null as string | null, color: '#2563eb', Icon: BoltIcon },
-  { key: 'content', name: 'Content Studio', sub: 'Marketing & PR', href: CONTENT_STUDIO_URL, color: '#0e7490', Icon: PencilSquareIcon },
+  // ?sso=google: the studio signs in via Google automatically if not signed in yet
+  { key: 'content', name: 'Content Studio', sub: 'Marketing & PR', href: `${CONTENT_STUDIO_URL}/?sso=google`, color: '#0e7490', Icon: PencilSquareIcon },
 ]
 
 export default function AppSwitcher() {
