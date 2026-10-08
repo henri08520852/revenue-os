@@ -4,7 +4,9 @@
 export type Json = string | number | boolean | null | { [key: string]: Json } | Json[]
 
 export type AccountStatus = 'target' | 'warm' | 'hot' | 'active_deal' | 'customer' | 'inactive'
-export type OpportunityStage = 'discovery' | 'qualified' | 'proposal' | 'pilot' | 'negotiation' | 'won' | 'lost'
+export type LeadStage = 'outreach' | 'contacted' | 'qualified' | 'converted' | 'disqualified'
+export type OpportunityContactRole = 'champion' | 'decision_maker' | 'economic_buyer' | 'stakeholder' | 'primary' | 'blocker'
+export type OpportunityStage = 'discovery' | 'erstgespraech' | 'evaluation' | 'proposal' | 'negotiation' | 'won' | 'lost'
 export type ActivityType = 'email' | 'call' | 'meeting' | 'linkedin_comment' | 'linkedin_message' | 'linkedin_connection' | 'whatsapp' | 'intro' | 'note' | 'proposal' | 'event_meeting' | 'manual_research' | 'voice_note'
 export type ActionType = 'ask_intro' | 'call' | 'send_email' | 'send_whatsapp' | 'linkedin_comment' | 'linkedin_connect' | 'linkedin_message' | 'attend_event' | 'research_buyer' | 'research_company' | 'prepare_meeting' | 'follow_up' | 'send_proposal' | 'review_pilot' | 'ask_referral' | 'wait'
 export type ActionStatus = 'pending' | 'completed' | 'dismissed' | 'snoozed'
@@ -111,6 +113,7 @@ export interface Database {
           pilot_status: string | null
           pilot_success_metric: string | null
           lost_reason: string | null
+          value_eur: number | null
           won_at: string | null
           lost_at: string | null
           notes: string | null
@@ -119,6 +122,50 @@ export interface Database {
         }
         Insert: Omit<Database['public']['Tables']['opportunities']['Row'], 'id' | 'created_at' | 'updated_at'> & { id?: string }
         Update: Partial<Database['public']['Tables']['opportunities']['Insert']>
+      }
+      leads: {
+        Row: {
+          id: string
+          project_id: string
+          company_id: string | null
+          person_id: string | null
+          name: string | null
+          stage: LeadStage
+          source: string | null
+          owner_name: string | null
+          notes: string | null
+          next_follow_up_at: string | null
+          converted_to_opportunity_id: string | null
+          converted_at: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: Partial<Omit<Database['public']['Tables']['leads']['Row'], 'id' | 'project_id' | 'created_at' | 'updated_at'>> & { id?: string; project_id: string }
+        Update: Partial<Database['public']['Tables']['leads']['Insert']>
+      }
+      opportunity_contacts: {
+        Row: {
+          id: string
+          opportunity_id: string
+          person_id: string
+          role: OpportunityContactRole | null
+          created_at: string | null
+        }
+        Insert: { id?: string; opportunity_id: string; person_id: string; role?: OpportunityContactRole }
+        Update: Partial<Database['public']['Tables']['opportunity_contacts']['Insert']>
+      }
+      opportunity_stage_history: {
+        Row: {
+          id: string
+          opportunity_id: string
+          project_id: string
+          from_stage: OpportunityStage | null
+          to_stage: OpportunityStage
+          changed_at: string
+          changed_by: string | null
+        }
+        Insert: Omit<Database['public']['Tables']['opportunity_stage_history']['Row'], 'id' | 'changed_at' | 'changed_by'> & { id?: string; changed_at?: string; changed_by?: string | null }
+        Update: Partial<Database['public']['Tables']['opportunity_stage_history']['Insert']>
       }
       activities: {
         Row: {

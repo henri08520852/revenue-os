@@ -3,8 +3,10 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { OPPORTUNITY_STAGES } from '@/lib/stages'
+import { setOpportunityStage } from './actions'
 
-const STAGES = ['discovery', 'erstgespraech', 'evaluation', 'proposal', 'negotiation', 'won', 'lost'] as const
+const STAGES = OPPORTUNITY_STAGES
 type Stage = typeof STAGES[number]
 
 interface Props {
@@ -29,6 +31,9 @@ export default function DealEditor({
   const [value, setValue] = useState(initialValue?.toString() || '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [stageError, setStageError] = useState<string | null>(null)
+  const [moving, setMoving] = useState(false)
+  const isClosed = currentStage === 'won' || currentStage === 'lost'
   const router = useRouter()
   const supabase = createClient()
 
@@ -46,26 +51,49 @@ export default function DealEditor({
   }
 
   async function moveStage(stage: Stage) {
-    await supabase.from('opportunities').update({ stage }).eq('id', oppId)
-    router.refresh()
+    setMoving(true)
+    setStageError(null)
+    const res = await setOpportunityStage(oppId, stage)
+    setMoving(false)
+    if (res.error) setStageError(res.error)
+    else router.refresh()
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
-        {prevStage && (
+      <div className="flex gap-2" style={{ opacity: moving ? 0.5 : 1 }}>
+        {isClosed && (
+          <button onClick={() => moveStage('negotiation')} disabled={moving}
+            className="flex-1 px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">
+            ↺ Wieder öffnen
+          </button>
+        )}
+        {!isClosed && prevStage && (
           <button onClick={() => moveStage(prevStage)}
             className="flex-1 px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">
             ← {stageLabels[prevStage]}
           </button>
         )}
-        {nextStage && (
+        {!isClosed && nextStage && (
           <button onClick={() => moveStage(nextStage)}
             className="flex-1 px-3 py-1.5 text-xs bg-gray-900 text-white rounded-lg hover:bg-gray-700">
             {stageLabels[nextStage]} →
           </button>
         )}
       </div>
+      {!isClosed && (
+        <div className="flex gap-2" style={{ marginTop: 8 }}>
+          <button onClick={() => moveStage('won')} disabled={moving}
+            style={{ flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#15803d', borderRadius: 8, cursor: 'pointer' }}>
+            ✓ Gewonnen
+          </button>
+          <button onClick={() => moveStage('lost')} disabled={moving}
+            style={{ flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600, border: '1px solid #e5e7eb', background: 'white', color: '#6b7280', borderRadius: 8, cursor: 'pointer' }}>
+            ✕ Verloren
+          </button>
+        </div>
+      )}
+      {stageError && <p style={{ fontSize: 11, color: '#dc2626', marginTop: 6 }}>{stageError}</p>}
 
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">Naechster Schritt</label>

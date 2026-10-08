@@ -10,12 +10,14 @@ import {
   Cog6ToothIcon,
   BoltIcon,
   SparklesIcon,
+  FunnelIcon,
 } from '@heroicons/react/24/outline'
 
 const nav = [
   { href: '/today',      label: 'Heute',      icon: CalendarDaysIcon },
   { href: '/companies',  label: 'Companies',  icon: BuildingOffice2Icon },
   { href: '/contacts',   label: 'Contacts',   icon: UserGroupIcon },
+  { href: '/leads',      label: 'Leads',      icon: FunnelIcon },
   { href: '/pipeline',   label: 'Pipeline',   icon: ChartBarIcon },
   { href: '/candidates', label: 'Candidates', icon: SparklesIcon },
 ]

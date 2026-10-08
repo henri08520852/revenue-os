@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
+import { ACCOUNT_STATUSES } from '@/lib/stages'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
 
@@ -20,7 +21,7 @@ export default function CompaniesPage() {
         .eq('project_id', PROJECT_ID)
         .order('created_at', { ascending: false })
 
-      if (filter !== 'all') query = query.eq('status', filter)
+      if (filter !== 'all') query = query.eq('account_status', filter)
       const { data } = await query
       setCompanies(data ?? [])
     }
@@ -32,20 +33,7 @@ export default function CompaniesPage() {
     c.domain?.toLowerCase().includes(search.toLowerCase())
   )
 
-  const statusColor: Record<string, string> = {
-    target: '#dbeafe',
-    warm: '#d1fae5',
-    active_deal: '#fef3c7',
-    customer: '#ede9fe',
-    inactive: '#f3f4f6',
-  }
-  const statusText: Record<string, string> = {
-    target: '#1d4ed8',
-    warm: '#065f46',
-    active_deal: '#92400e',
-    customer: '#5b21b6',
-    inactive: '#6b7280',
-  }
+  const statusMeta = (s: string | null) => ACCOUNT_STATUSES.find(x => x.key === (s === 'active_deal' ? 'hot' : s))
 
   return (
     <div style={{ padding: '32px 40px' }}>
@@ -62,13 +50,13 @@ export default function CompaniesPage() {
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {['all','target','warm','active_deal','customer','inactive'].map(f => (
+        {['all', ...ACCOUNT_STATUSES.map(s => s.key)].map(f => (
           <button key={f} onClick={() => setFilter(f)} style={{
             padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 500, border: 'none', cursor: 'pointer',
             background: filter === f ? '#2563eb' : '#f3f4f6',
             color: filter === f ? '#fff' : '#374151',
           }}>
-            {f === 'all' ? 'Alle' : f === 'active_deal' ? '🏆 Active Deal' : f === 'warm' ? '🔥 Warm' : f === 'target' ? 'Target' : f === 'customer' ? '⭐ Customer' : 'Inactive'}
+            {f === 'all' ? 'Alle' : statusMeta(f)?.label}
           </button>
         ))}
       </div>
@@ -99,8 +87,8 @@ export default function CompaniesPage() {
                   <p style={{ fontSize: 12, color: '#9ca3af' }}>{c.domain}</p>
                 </td>
                 <td style={{ padding: '14px 16px' }}>
-                  <span style={{ background: statusColor[c.status] ?? '#f3f4f6', color: statusText[c.status] ?? '#6b7280', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500 }}>
-                    {c.status ?? '—'}
+                  <span style={{ background: statusMeta(c.account_status)?.bg ?? '#f3f4f6', color: statusMeta(c.account_status)?.text ?? '#6b7280', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500 }}>
+                    {statusMeta(c.account_status)?.label ?? c.account_status ?? '—'}
                   </span>
                 </td>
                 <td style={{ padding: '14px 16px', fontSize: 14, color: '#374151' }}>{c.icp_score ?? '—'}</td>
