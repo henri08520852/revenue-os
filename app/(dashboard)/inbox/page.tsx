@@ -58,7 +58,7 @@ export default async function InboxPage({ searchParams }: { searchParams: { stat
     <div style={{ padding: '28px 32px' }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 18 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: '#111827' }}>Posteingang</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: '#111827' }}>Nicht zugeordnete E-Mails</h1>
           <p style={{ fontSize: 13, color: '#6b7280', marginTop: 4, maxWidth: 720 }}>
             Geschäftliche E-Mails, die noch keinem Kontakt zugeordnet sind. E-Mails von bekannten Kontakten oder Company-Domains landen automatisch im CRM.
             Tipp: In Gmail das Label <b>„Revenue OS“</b> vergeben, um jede beliebige Mail hierher zu holen.

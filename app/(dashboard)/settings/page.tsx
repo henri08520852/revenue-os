@@ -35,6 +35,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: { g
       <section style={card}>
         <h2 style={h2}>Gmail & Kalender</h2>
         <GoogleConnect conn={conn} status={searchParams.google ?? null} configured={googleConfigured()} needsReconnect={!!conn && !canWriteCalendar((conn as any).scopes)} />
+        <p style={{ fontSize: 12, color: '#6b7280', marginTop: 12 }}>
+          E-Mails ohne passenden Kontakt werden gesammelt und automatisch zugeordnet, sobald der Kontakt angelegt ist.{' '}
+          <a href="/inbox" style={{ color: '#2563eb', textDecoration: 'none' }}>Nicht zugeordnete E-Mails ansehen →</a>
+        </p>
       </section>
 
       <section style={card}>

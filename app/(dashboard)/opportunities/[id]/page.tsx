@@ -10,6 +10,7 @@ import { getMeetingData } from '@/lib/meetingData'
 import { loadTimeline, loadUpcoming } from '@/lib/records'
 import { RecordLayout, Card, Empty, UpcomingList, AssocRow } from '@/components/record/Layout'
 import Timeline from '@/components/record/Timeline'
+import AiAssistant from '@/components/record/AiAssistant'
 import QuickActions from '@/components/record/QuickActions'
 import TaskList from '@/components/TaskList'
 import { loadTasks } from '@/lib/tasks'
@@ -110,6 +111,7 @@ export default async function DealPage({ params }: { params: { id: string } }) {
         )}
       </>}
       center={<>
+        <AiAssistant target={{ kind: 'deal', id: opp.id }} title={opp.name || company?.name || 'diesem Deal'} />
         <Card title="Anstehend" count={tasks.length + upcoming.length}>
           <TaskList tasks={tasks} data={meetingData} link={{ opportunityId: opp.id, companyId: company?.id ?? null }} hideLinks={['deal', 'company']} />
           {upcoming.length > 0 && <div style={{ marginTop: 12 }}><p style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Termine</p><UpcomingList items={upcoming} /></div>}

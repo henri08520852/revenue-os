@@ -1,0 +1,88 @@
+// AI assistant for a contact / company / deal: answers questions and writes briefings
+// from the CRM context (lib/ai/context.ts). Streams plain text back to the browser.
+import Anthropic from '@anthropic-ai/sdk'
+import { createClient } from '@/lib/supabase/server'
+import { getTeamContext } from '@/lib/team'
+import { AiTarget, buildContext } from '@/lib/ai/context'
+
+export const dynamic = 'force-dynamic'
+export const maxDuration = 120
+
+const MODEL = 'claude-opus-5-5'
+
+const SYSTEM = `Du bist der Vertriebs-Assistent im CRM „Revenue OS“ des Teams von Altoris (Produkt: HireFlow, Recruiting-Software).
+Du bekommst den vollständigen CRM-Kontext eines Kontakts, einer Company oder eines Deals: Stammdaten, Aufgaben und den Verlauf mit E-Mails, Notizen, Anrufen, Meetings und Deal-Änderungen.
+
+So arbeitest du:
+- Antworte auf Deutsch, knapp und konkret, wie ein erfahrener Kollege im Vertrieb.
+- Stütze dich nur auf den CRM-Kontext. Steht etwas nicht darin, sag das offen, statt zu raten.
+- Nenne bei Fakten kurz die Quelle (Datum und Art, z. B. „E-Mail von Anna, 06.10.“).
+- „Wir“ ist das Altoris-Team; Absender mit @altoris.one sind Kolleg:innen.
+- Formatiere mit kurzen Absätzen, Stichpunkten und ggf. Überschriften (##). Keine Tabellen.`
+
+const BRIEFING_PROMPT = `Erstelle ein Briefing zur Vorbereitung auf das nächste Gespräch. Genau zwei Abschnitte, keine weiteren:
+
+## Zusammenfassung
+3–6 Sätze: Wo stehen wir, wie ist der bisherige Verlauf, und die wichtigsten Fakten (Bedarf und Anforderungen, Budget, Timing, Entscheider) – soweit bekannt.
+
+## Offene Punkte & Fragen
+Stichpunkte: unbeantwortete Fragen des Kunden, offene Zusagen (unsere und seine), Unklarheiten, die wir klären sollten, und was im nächsten Gespräch angesprochen werden muss. Jeder Punkt konkret, mit Person bzw. Datum, wo möglich.`
+
+type ChatMessage = { role: 'user' | 'assistant'; content: string }
+
+export async function POST(req: Request) {
+  const { me, denied } = await getTeamContext()
+  const { data: { user } } = await (createClient() as any).auth.getUser()
+  if (!user || denied || !me) return new Response('Nicht angemeldet', { status: 401 })
+  if (!process.env.ANTHROPIC_API_KEY) return new Response('KI ist noch nicht eingerichtet: ANTHROPIC_API_KEY fehlt in Vercel.', { status: 503 })
+
+  const body = await req.json().catch(() => null) as { target?: AiTarget; messages?: ChatMessage[]; briefing?: boolean } | null
+  const target = body?.target
+  if (!target || !['contact', 'company', 'deal'].includes(target.kind) || !target.id) return new Response('Ungültige Anfrage', { status: 400 })
+
+  const history = (body?.messages || [])
+    .filter(m => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
+    .slice(-20)
+  const messages: Anthropic.Beta.BetaMessageParam[] = body?.briefing
+    ? [{ role: 'user', content: BRIEFING_PROMPT }]
+    : history.map(m => ({ role: m.role, content: m.content }))
+  if (!messages.length || messages[0].role !== 'user') return new Response('Keine Frage übermittelt', { status: 400 })
+
+  const context = await buildContext(target)
+  if (!context) return new Response('Datensatz nicht gefunden', { status: 404 })
+
+  const client = new Anthropic()
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const run = client.beta.messages.stream({
+          model: MODEL,
+          max_tokens: 16000,
+          betas: ['server-side-fallback-2026-07-01'],
+          fallbacks: 'default',
+          output_config: { effort: 'medium' },
+          system: [
+            { type: 'text', text: SYSTEM },
+            // The record context is identical for follow-up questions → cached (~10x cheaper)
+            { type: 'text', text: `CRM-Kontext zu „${context.title}“:\n\n${context.text}`, cache_control: { type: 'ephemeral' } },
+          ],
+          messages,
+        })
+        run.on('text', delta => controller.enqueue(encoder.encode(delta)))
+        const final = await run.finalMessage()
+        if (final.stop_reason === 'refusal') controller.enqueue(encoder.encode('\n\n_(Die KI hat diese Anfrage abgelehnt.)_'))
+        else if (final.stop_reason === 'max_tokens') controller.enqueue(encoder.encode('\n\n_(Antwort gekürzt.)_'))
+      } catch (err) {
+        const msg = err instanceof Anthropic.AuthenticationError ? 'API-Key ungültig – bitte ANTHROPIC_API_KEY in Vercel prüfen.'
+          : err instanceof Anthropic.RateLimitError ? 'Gerade zu viele Anfragen – bitte gleich nochmal versuchen.'
+          : err instanceof Anthropic.APIError ? `KI-Fehler (${err.status}): ${err.message}`
+          : 'KI nicht erreichbar.'
+        controller.enqueue(encoder.encode(`\n\n⚠️ ${msg}`))
+      } finally {
+        controller.close()
+      }
+    },
+  })
+  return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } })
+}

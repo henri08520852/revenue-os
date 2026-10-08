@@ -6,6 +6,7 @@ import { getMeetingData } from '@/lib/meetingData'
 import { ACCOUNT_STATUSES, OPPORTUNITY_STAGE_LABELS } from '@/lib/stages'
 import { RecordLayout, Card, Empty, UpcomingList, AssocRow } from '@/components/record/Layout'
 import Timeline from '@/components/record/Timeline'
+import AiAssistant from '@/components/record/AiAssistant'
 import QuickActions from '@/components/record/QuickActions'
 import Properties from '@/components/record/Properties'
 import TaskList from '@/components/TaskList'
@@ -96,6 +97,7 @@ export default async function ContactPage({ params }: { params: { id: string } }
         </Card>
       </>}
       center={<>
+        <AiAssistant target={{ kind: 'contact', id: person.id }} title={name} />
         <Card title="Anstehend" count={tasks.length + upcoming.length}>
           <TaskList tasks={tasks} data={meeting} link={{ personId: person.id, companyId: person.company_id }} hideLinks={['person']} />
           {upcoming.length > 0 && <div style={{ marginTop: 12 }}><p style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Termine</p><UpcomingList items={upcoming} /></div>}
