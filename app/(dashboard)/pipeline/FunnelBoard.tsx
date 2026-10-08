@@ -92,7 +92,6 @@ function DealMini({ deal }: { deal: FunnelDeal }) {
       {deal.value_eur ? <p style={{ fontSize: 12, color: '#6b7280', marginTop: 1 }}>{euro(deal.value_eur)}</p> : null}
       {deal.next_step && <p style={{ fontSize: 11, color: '#6b7280', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>→ {deal.next_step}</p>}
       {deal.next_step_due_at && <p style={{ fontSize: 11, marginTop: 2, color: overdue ? '#dc2626' : '#9ca3af', fontWeight: overdue ? 600 : 400 }}>{overdue ? '⚠ ' : ''}{fmtDay(deal.next_step_due_at)}</p>}
-      <div style={{ marginTop: 4 }}><QualiBadge q={deal.qualification} /></div>
     </div>
   )
 }

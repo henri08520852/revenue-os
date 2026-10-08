@@ -21,6 +21,9 @@ const DEAL_STAGES = [
   { key: 'discovery', label: 'Discovery' }, { key: 'erstgespraech', label: 'Erstgespräch' }, { key: 'evaluation', label: 'Evaluation' },
   { key: 'proposal', label: 'Proposal' }, { key: 'negotiation', label: 'Verhandlung' },
 ]
+const LEAD_STAGES = [
+  { key: 'outreach', label: 'Outreach' }, { key: 'contacted', label: 'Kontaktiert' }, { key: 'qualified', label: 'Qualifiziert' },
+]
 const DEAL_ROLES = [
   { key: 'champion', label: '⭐ Champion' }, { key: 'decision_maker', label: '🎯 Decision Maker' },
   { key: 'economic_buyer', label: '💰 Economic Buyer' }, { key: 'stakeholder', label: '👥 Stakeholder' }, { key: 'blocker', label: '🚧 Blocker' },
@@ -76,7 +79,7 @@ function Form({ kind, data, preset, onDone, onCancel }: { kind: Exclude<CreateKi
   const [f, setF] = useState({
     first: '', last: '', jobTitle: '', email: '', phone: '', linkedin: '', buyerRole: '', dealRole: preset.dealRole ?? 'stakeholder',
     name: '', domain: '', stage: 'discovery', value: '', ownerId: data.meId ?? '', personId: preset.personId ?? '',
-    nextStep: '', nextStepDate: '', followUp: '', notes: '',
+    nextStep: '', nextStepDate: '', followUp: '', notes: '', leadStage: 'outreach',
   })
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF(s => ({ ...s, [k]: e.target.value }))
   const [error, setError] = useState<string | null>(null)
@@ -94,7 +97,7 @@ function Form({ kind, data, preset, onDone, onCancel }: { kind: Exclude<CreateKi
         kind === 'company' ? await createCompanyRecord({ name: f.name, domain: f.domain || null })
         : kind === 'contact' ? await createContactRecord({ ...ref, firstName: f.first, lastName: f.last, jobTitle: f.jobTitle, email: f.email, phone: f.phone, linkedinUrl: f.linkedin, buyerRole: f.buyerRole || null, dealId: preset.dealId ?? null, dealRole: f.dealRole })
         : kind === 'deal' ? await createDealRecord({ ...ref, name: f.name, stage: f.stage, valueEur: f.value ? Number(f.value) : null, ownerId: f.ownerId || null, championId: f.personId || null, nextStep: f.nextStep || null, nextStepDate: f.nextStepDate || null })
-        : await createLeadRecord({ ...ref, personId: f.personId || null, name: f.name || null, ownerId: f.ownerId || null, followUpDate: f.followUp || null, notes: f.notes || null })
+        : await createLeadRecord({ ...ref, stage: f.leadStage, personId: f.personId || null, name: f.name || null, ownerId: f.ownerId || null, followUpDate: f.followUp || null, notes: f.notes || null })
       if (res.error) setError(res.error)
       else onDone(res.href)
     })
@@ -170,6 +173,14 @@ function Form({ kind, data, preset, onDone, onCancel }: { kind: Exclude<CreateKi
             ? <Field title="Ansprechpartner"><div style={{ ...input, background: '#f9fafb', color: '#374151' }}>{data.people.find(p => p.id === preset.personId)?.name ?? '—'}</div></Field>
             : personPicker('Ansprechpartner')}
           <Field title="Bezeichnung"><input value={f.name} onChange={set('name')} placeholder="z. B. Recruiting Q1" style={input} /></Field>
+          <Field title="Phase">
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {LEAD_STAGES.map(st => (
+                <button key={st.key} type="button" onClick={() => setF(x => ({ ...x, leadStage: st.key }))}
+                  style={{ padding: '5px 10px', borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: 'pointer', border: '1px solid', borderColor: f.leadStage === st.key ? '#7c3aed' : '#e5e7eb', background: f.leadStage === st.key ? '#7c3aed' : '#fff', color: f.leadStage === st.key ? '#fff' : '#6b7280' }}>{st.label}</button>
+              ))}
+            </div>
+          </Field>
           <div style={grid2}>
             <Field title="Follow-up am"><input type="date" value={f.followUp} onChange={set('followUp')} style={input} /></Field>
             {owner || <div />}
@@ -201,7 +212,7 @@ export function CreateDialog({ kind, open, onClose, preset = {}, navigate = fals
   if (kind === 'task') return data ? <TaskDialog open onClose={onClose} data={data as TaskPickData} link={preset.companyId || preset.personId || preset.dealId ? { companyId: preset.companyId, personId: preset.personId, opportunityId: preset.dealId } : undefined} /> : null
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16, textAlign: 'left' }}>
       <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
         <div style={{ padding: '16px 22px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>{KINDS.find(k => k.kind === kind)?.icon} {TITLES[kind]}</h2>

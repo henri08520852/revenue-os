@@ -116,7 +116,7 @@ export async function createDealRecord(input: CompanyRef & {
 }
 
 export async function createLeadRecord(input: CompanyRef & {
-  personId: string | null; name: string | null; ownerId: string | null; followUpDate: string | null; notes: string | null
+  stage?: string; personId: string | null; name: string | null; ownerId: string | null; followUpDate: string | null; notes: string | null
 }): Promise<Result> {
   const supabase = createClient() as any
   const { data: { user } } = await supabase.auth.getUser()
@@ -125,7 +125,7 @@ export async function createLeadRecord(input: CompanyRef & {
   const ownerId = input.ownerId || user?.id || null
   const { data: lead, error } = await supabase.from('leads').insert({
     project_id: PROJECT_ID, owner_id: ownerId, company_id: companyId, person_id: input.personId || null,
-    name: input.name?.trim() || null, stage: 'outreach', source: 'manual', notes: input.notes?.trim() || null,
+    name: input.name?.trim() || null, stage: ['outreach', 'contacted', 'qualified'].includes(input.stage ?? '') ? input.stage : 'outreach', source: 'manual', notes: input.notes?.trim() || null,
   }).select('id').single()
   if (error) return { error: error.message }
   if (input.followUpDate) {

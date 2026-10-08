@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { QUALI_CRITERIA, Qualification, QualiKey, QualiStatus, qualiScore } from '@/lib/dealMeta'
 import { saveQualification } from '@/app/(dashboard)/records/qualification'
+import { convertLeadAtStage } from '@/app/(dashboard)/leads/actions'
 
 const STATES: { key: QualiStatus; icon: string; title: string; on: { bg: string; fg: string; border: string } }[] = [
   { key: 'yes', icon: '✓', title: 'Bestätigt', on: { bg: '#dcfce7', fg: '#15803d', border: '#86efac' } },
@@ -12,7 +13,11 @@ const STATES: { key: QualiStatus; icon: string; title: string; on: { bg: string;
 ]
 
 // Slim qualification checklist (5 criteria) for a lead or a deal
-export default function QualificationCard({ kind, id, initial }: { kind: 'lead' | 'deal'; id: string; initial: Qualification | null }) {
+export default function QualificationCard(props: { kind: 'lead' | 'deal'; id: string; initial: Qualification | null; readOnly?: boolean }) {
+  return props.readOnly ? <QualificationSummary q={props.initial || {}} /> : <QualificationEditor {...props} />
+}
+
+function QualificationEditor({ kind, id, initial }: { kind: 'lead' | 'deal'; id: string; initial: Qualification | null }) {
   const router = useRouter()
   const [q, setQ] = useState<Qualification>(initial || {})
   const [dirty, setDirty] = useState(false)
@@ -107,12 +112,45 @@ export default function QualificationCard({ kind, id, initial }: { kind: 'lead' 
       </div>
 
       {error && <p style={{ fontSize: 11, color: '#dc2626', marginTop: 8 }}>{error}</p>}
+      {kind === 'lead' && !dirty && score === QUALI_CRITERIA.length && (
+        <div style={{ marginTop: 10, padding: '9px 11px', borderRadius: 8, background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: '#15803d' }}>Alle Kriterien erfüllt – bereit für einen Deal.</p>
+          <button onClick={() => startTransition(async () => {
+              const res = await convertLeadAtStage(id, 'discovery')
+              if (res.error) setError(res.error)
+              else if (res.oppId) router.push(`/opportunities/${res.oppId}`)
+            })} disabled={pending}
+            style={{ width: '100%', marginTop: 6, padding: '7px 0', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 7, background: '#16a34a', color: '#fff', cursor: 'pointer' }}>
+            {pending ? 'Wird umgewandelt…' : '💼 In Deal umwandeln'}
+          </button>
+        </div>
+      )}
       {dirty && (
         <button onClick={save} disabled={pending}
           style={{ width: '100%', marginTop: 10, padding: '7px 0', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 8, background: pending ? '#9ca3af' : '#111827', color: '#fff', cursor: 'pointer' }}>
           {pending ? 'Speichern…' : 'Qualifizierung speichern'}
         </button>
       )}
+    </div>
+  )
+}
+
+// Read-only view on the deal: what was clarified while it was a lead
+function QualificationSummary({ q }: { q: Qualification }) {
+  const rows = QUALI_CRITERIA.filter(c => q[c.key])
+  if (!rows.length) return <p style={{ fontSize: 12, color: '#9ca3af' }}>Beim Lead nicht erfasst.</p>
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {rows.map(c => {
+        const v = q[c.key]!
+        const st = STATES.find(s => s.key === v.status)!
+        return (
+          <div key={c.key} style={{ display: 'flex', gap: 8, fontSize: 12 }}>
+            <span style={{ width: 18, height: 18, flexShrink: 0, borderRadius: 5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, background: st.on.bg, color: st.on.fg }}>{st.icon}</span>
+            <span><b style={{ color: '#374151' }}>{c.label}</b>{v.note ? <span style={{ color: '#6b7280' }}> – {v.note}</span> : null}</span>
+          </div>
+        )
+      })}
     </div>
   )
 }

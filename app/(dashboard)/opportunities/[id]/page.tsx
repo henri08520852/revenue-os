@@ -115,9 +115,11 @@ export default async function DealPage({ params }: { params: { id: string } }) {
             stageLabels={STAGE_LABELS}
           />
         </Card>
-        <Card title="Qualifizierung">
-          <QualificationCard kind="deal" id={opp.id} initial={opp.qualification ?? null} />
-        </Card>
+        {opp.qualification && Object.keys(opp.qualification).length > 0 && (
+          <Card title="Qualifizierung (aus Lead)">
+            <QualificationCard kind="deal" id={opp.id} initial={opp.qualification} readOnly />
+          </Card>
+        )}
         {opp.notes && (
           <Card title="Ursprüngliche Notiz">
             <p style={{ fontSize: 13, color: '#374151', whiteSpace: 'pre-wrap' }}>{opp.notes}</p>
