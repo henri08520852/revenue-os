@@ -35,7 +35,9 @@ export async function POST(req: Request) {
   const { me, denied } = await getTeamContext()
   const { data: { user } } = await (createClient() as any).auth.getUser()
   if (!user || denied || !me) return new Response('Nicht angemeldet', { status: 401 })
-  if (!process.env.ANTHROPIC_API_KEY) return new Response('KI ist noch nicht eingerichtet: ANTHROPIC_API_KEY fehlt in Vercel.', { status: 503 })
+  // Own key for the assistant so its spend shows up separately in the Anthropic Console
+  const apiKey = process.env.ANTHROPIC_BRIEFING_API_KEY || process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return new Response('KI ist noch nicht eingerichtet: ANTHROPIC_BRIEFING_API_KEY fehlt in Vercel.', { status: 503 })
 
   const body = await req.json().catch(() => null) as { target?: AiTarget; messages?: ChatMessage[]; briefing?: boolean } | null
   const target = body?.target
@@ -52,7 +54,7 @@ export async function POST(req: Request) {
   const context = await buildContext(target)
   if (!context) return new Response('Datensatz nicht gefunden', { status: 404 })
 
-  const client = new Anthropic()
+  const client = new Anthropic({ apiKey })
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
     async start(controller) {
@@ -73,7 +75,7 @@ export async function POST(req: Request) {
         if (final.stop_reason === 'refusal') controller.enqueue(encoder.encode('\n\n_(Die KI hat diese Anfrage abgelehnt.)_'))
         else if (final.stop_reason === 'max_tokens') controller.enqueue(encoder.encode('\n\n_(Antwort gekürzt.)_'))
       } catch (err) {
-        const msg = err instanceof Anthropic.AuthenticationError ? 'API-Key ungültig – bitte ANTHROPIC_API_KEY in Vercel prüfen.'
+        const msg = err instanceof Anthropic.AuthenticationError ? 'API-Key ungültig – bitte ANTHROPIC_BRIEFING_API_KEY in Vercel prüfen.'
           : err instanceof Anthropic.RateLimitError ? 'Gerade zu viele Anfragen – bitte gleich nochmal versuchen.'
           : err instanceof Anthropic.APIError ? `KI-Fehler (${err.status}): ${err.message}`
           : 'KI nicht erreichbar.'
