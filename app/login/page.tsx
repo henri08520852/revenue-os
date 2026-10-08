@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 
 const ERRORS: Record<string, string> = {
   domain: 'Bitte mit deinem @altoris.one-Google-Konto anmelden.',
@@ -10,14 +10,11 @@ const ERRORS: Record<string, string> = {
   no_access: 'Dieser Login hat keinen Zugriff auf Revenue OS. Bitte mit @altoris.one anmelden.',
 }
 
+// Google (Workspace altoris.one) is the only sign-in method
 function LoginForm() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
   const params = useSearchParams()
   const [error, setError] = useState<string | null>(ERRORS[params.get('error') ?? ''] ?? null)
-  const router = useRouter()
   const supabase = createClient()
 
   async function handleGoogle() {
@@ -33,20 +30,6 @@ function LoginForm() {
     if (error) {
       setError(error.message)
       setLoading(false)
-    }
-  }
-
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      setError(error.message)
-      setLoading(false)
-    } else {
-      router.push('/today')
     }
   }
 
@@ -76,31 +59,7 @@ function LoginForm() {
           <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg mt-4">{error}</p>
         )}
 
-        <div className="mt-6 text-center">
-          <button type="button" onClick={() => setShowPassword(s => !s)} className="text-xs text-gray-400 hover:text-gray-600">
-            {showPassword ? 'Passwort-Login ausblenden' : 'Mit Passwort anmelden'}
-          </button>
-        </div>
-
-        {showPassword && (
-          <form onSubmit={handleLogin} className="space-y-4 mt-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">E-Mail</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="name@altoris.one" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Passwort</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <button type="submit" disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
-              {loading ? 'Anmelden…' : 'Anmelden'}
-            </button>
-          </form>
-        )}
+        <p className="text-xs text-gray-400 text-center mt-6">Nur für @altoris.one-Konten</p>
       </div>
     </div>
   )
