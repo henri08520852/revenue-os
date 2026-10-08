@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { isAllowedEmail } from '@/lib/google/oauth'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
 
@@ -17,7 +18,8 @@ export function initials(name: string | null | undefined) {
 
 // Current user + team for the default project. Adds the user to project_members on
 // first visit (migration 020), so owner pickers and the settings page know them.
-export async function getTeamContext(): Promise<{ me: TeamMember | null; team: TeamMember[] }> {
+// denied: signed in, but neither a team member nor from the allowed Workspace domain
+export async function getTeamContext(): Promise<{ me: TeamMember | null; team: TeamMember[]; denied?: boolean; email?: string | null }> {
   const supabase = createClient() as any
   const { data: { user } } = await supabase.auth.getUser()
   if (!user || !PROJECT_ID) return { me: null, team: [] }
@@ -41,6 +43,7 @@ export async function getTeamContext(): Promise<{ me: TeamMember | null; team: T
   }))
 
   let me = team.find(m => m.user_id === user.id) || null
+  if (!me && !isAllowedEmail(user.email)) return { me: null, team, denied: true, email: user.email ?? null }
   if (!me) {
     me = { user_id: user.id, display_name: defaultDisplayName(user.email), email: user.email ?? null }
     await supabase.from('project_members').upsert(

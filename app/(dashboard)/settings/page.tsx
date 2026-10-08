@@ -1,11 +1,27 @@
 import { getTeamContext, initials } from '@/lib/team'
 import ProfileForm from './ProfileForm'
+import GoogleConnect from './GoogleConnect'
+import { createServiceClient } from '@/lib/supabase/server'
+import { googleConfigured } from '@/lib/google/oauth'
 
 const card = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: 24, marginBottom: 20 }
 const h2 = { fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 16 }
 
-export default async function SettingsPage() {
+async function loadConnection(userId: string | undefined) {
+  if (!userId) return null
+  try {
+    // google_connections is service-role only (tokens) — select just the display fields
+    const { data } = await createServiceClient()
+      .from('google_connections').select('google_email, gmail_last_synced_at, last_error').eq('user_id', userId).maybeSingle()
+    return data ?? null
+  } catch {
+    return null
+  }
+}
+
+export default async function SettingsPage({ searchParams }: { searchParams: { google?: string } }) {
   const { me, team } = await getTeamContext()
+  const conn = await loadConnection(me?.user_id)
 
   return (
     <div style={{ padding: '32px 40px', maxWidth: 820 }}>
@@ -14,6 +30,11 @@ export default async function SettingsPage() {
       <section style={card}>
         <h2 style={h2}>Mein Profil</h2>
         {me ? <ProfileForm initialName={me.display_name} email={me.email} /> : <p style={{ fontSize: 13, color: '#9ca3af' }}>Nicht angemeldet</p>}
+      </section>
+
+      <section style={card}>
+        <h2 style={h2}>Gmail & Kalender</h2>
+        <GoogleConnect conn={conn} status={searchParams.google ?? null} configured={googleConfigured()} />
       </section>
 
       <section style={card}>
@@ -34,8 +55,8 @@ export default async function SettingsPage() {
           ))}
         </div>
         <div style={{ marginTop: 16, padding: '12px 14px', background: '#f9fafb', borderRadius: 10, fontSize: 13, color: '#4b5563', lineHeight: 1.6 }}>
-          <b>Neues Teammitglied hinzufügen (z. B. Simon):</b> Supabase → Authentication → Users → „Add user“ → E-Mail + Passwort
-          („Auto Confirm User“ anhaken). Sobald sich die Person einmal hier anmeldet, erscheint sie automatisch im Team und als Owner-Auswahl.
+          <b>Neues Teammitglied:</b> Jede Person mit einer @altoris.one-Adresse meldet sich einfach mit „Mit Google anmelden“ an
+          und erscheint danach automatisch im Team und in der Owner-Auswahl.
         </div>
       </section>
     </div>

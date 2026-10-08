@@ -82,7 +82,7 @@ export default function GuidePage() {
 
       {/* TOC */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-        {[['#heute', 'Täglicher Ablauf'], ['#leads', 'Leads'], ['#deals', 'Deals & Pipeline'], ['#contacts', 'Kontakte & Rollen'], ['#faellig', 'Follow-ups'], ['#status', 'Company-Status'], ['#regeln', 'Spielregeln']].map(([href, label]) => (
+        {[['#heute', 'Täglicher Ablauf'], ['#leads', 'Leads'], ['#deals', 'Deals & Pipeline'], ['#contacts', 'Kontakte & Rollen'], ['#faellig', 'Follow-ups'], ['#status', 'Company-Status'], ['#google', 'Gmail & Kalender'], ['#regeln', 'Spielregeln']].map(([href, label]) => (
           <a key={href} href={href} style={{ fontSize: 13, padding: '6px 12px', borderRadius: 20, background: '#f3f4f6', color: '#374151', textDecoration: 'none' }}>{label}</a>
         ))}
       </div>
@@ -131,7 +131,16 @@ export default function GuidePage() {
         ))}
       </Section>
 
-      <Section id="regeln" title="7 · Spielregeln für das Team">
+      <Section id="google" title="7 · Gmail & Kalender" intro="Unter Einstellungen verbindet jede:r einmal das eigene @altoris.one-Google-Konto (nur Lesezugriff).">
+        <ul style={{ fontSize: 14, color: '#374151', lineHeight: 1.8, paddingLeft: 20, listStyle: 'disc' }}>
+          <li><b>E-Mails</b> mit Kontakten (exakte Adresse) oder mit der Domain einer Company werden automatisch als Aktivität geloggt – inklusive Zuordnung zum offenen Deal. Private Adressen (gmail.com, web.de …) und Newsletter werden ignoriert.</li>
+          <li><b>Vergangene Meetings</b> mit solchen Teilnehmer:innen werden ebenfalls als Aktivität geloggt; „Letzter Kontakt“ aktualisiert sich von selbst.</li>
+          <li><b>Team-Kalender</b> zeigt die Termine aller verbundenen Kolleg:innen plus fällige Follow-ups und nächste Schritte. Gemeinsame Termine erscheinen nur einmal.</li>
+          <li>Der Sync läuft beim Öffnen der App (höchstens alle 10 Minuten) und einmal täglich automatisch.</li>
+        </ul>
+      </Section>
+
+      <Section id="regeln" title="8 · Spielregeln für das Team">
         <ul style={{ fontSize: 14, color: '#374151', lineHeight: 1.8, paddingLeft: 20, listStyle: 'disc' }}>
           <li>Jeder offene Lead hat ein Follow-up-Datum, jeder offene Deal einen nächsten Schritt mit Datum.</li>
           <li>Gespräche und Calls als Aktivität loggen, kurze Gedanken als Notiz – so weiß jeder, was zuletzt passiert ist.</li>

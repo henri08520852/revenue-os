@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import TriggerQueueButton from './TriggerQueueButton'
 import ActionCard from './ActionCard'
@@ -103,6 +104,27 @@ export default async function TodayPage({ searchParams }: { searchParams: { mine
   ]
   const dueItems = mineOnly ? allDue.filter(i => i.ownerId === me!.user_id) : allDue
 
+  // Today's meetings from the synced team calendars (Berlin day)
+  const berlinToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' })
+  let meetingsQuery = (supabase as any)
+    .from('calendar_events')
+    .select('id, user_id, title, start_at, end_at, all_day, meet_link, company:companies(id, name)')
+    .eq('project_id', PROJECT_ID)
+    .gte('start_at', new Date(Date.now() - 86400000).toISOString())
+    .lte('start_at', new Date(Date.now() + 86400000).toISOString())
+    .order('start_at', { ascending: true })
+  if (mineOnly) meetingsQuery = meetingsQuery.eq('user_id', me!.user_id)
+  const { data: rawMeetings } = await meetingsQuery
+  const seenMeetings = new Set<string>()
+  const meetings = (rawMeetings || []).filter((m: any) => {
+    const day = m.all_day ? m.start_at.slice(0, 10) : new Date(m.start_at).toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' })
+    const k = `${m.title}|${m.start_at}`
+    if (day !== berlinToday || seenMeetings.has(k)) return false
+    seenMeetings.add(k)
+    return true
+  })
+  const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' })
+
   const today = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
@@ -152,6 +174,32 @@ export default async function TodayPage({ searchParams }: { searchParams: { mine
           )}
         </div>
 
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>Termine heute</h2>
+            <Link href="/calendar" style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none' }}>Kalender →</Link>
+          </div>
+          {!meetings.length ? (
+            <p style={{ fontSize: 13, color: '#9ca3af' }}>Keine Termine heute</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {meetings.map((m: any) => (
+                <div key={m.id} style={{ display: 'flex', gap: 10, fontSize: 13 }}>
+                  <span style={{ color: '#6b7280', width: 42, flexShrink: 0 }}>{m.all_day ? 'ganzt.' : hhmm(m.start_at)}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontWeight: 500, color: '#111827' }}>{m.title}</p>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+                      {m.company && <Link href={`/companies/${m.company.id}`} style={{ fontSize: 11, color: '#1d4ed8', textDecoration: 'none' }}>{m.company.name}</Link>}
+                      {m.meet_link && <a href={m.meet_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: '#2563eb', textDecoration: 'none' }}>Meet ↗</a>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24 }}>
           <h2 style={{ fontSize: 16, fontWeight: 600, color: '#111827', marginBottom: 20 }}>Neue Signale</h2>
           {!signals?.length ? (
@@ -169,6 +217,7 @@ export default async function TodayPage({ searchParams }: { searchParams: { mine
               ))}
             </div>
           )}
+        </div>
         </div>
       </div>
     </div>
