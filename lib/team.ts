@@ -46,11 +46,20 @@ export async function getTeamContext(): Promise<{ me: TeamMember | null; team: T
   if (!me && !isAllowedEmail(user.email)) return { me: null, team, denied: true, email: user.email ?? null }
   if (!me) {
     me = { user_id: user.id, display_name: defaultDisplayName(user.email), email: user.email ?? null }
-    await supabase.from('project_members').upsert(
-      { project_id: PROJECT_ID, user_id: user.id, display_name: me.display_name, email: me.email },
-      { onConflict: 'project_id,user_id', ignoreDuplicates: true },
-    )
-    team = [...team, me]
+    // join_project (migration 024) admits verified company-domain logins under RLS;
+    // before that migration the plain upsert is used
+    const { error: joinErr } = await supabase.rpc('join_project', { p_project_id: PROJECT_ID, p_display_name: me.display_name })
+    if (joinErr) {
+      await supabase.from('project_members').upsert(
+        { project_id: PROJECT_ID, user_id: user.id, display_name: me.display_name, email: me.email },
+        { onConflict: 'project_id,user_id', ignoreDuplicates: true },
+      )
+    }
+    // Members can only read the team once they are in it → reload
+    const { data: fresh } = await supabase.from('project_members').select('user_id, display_name, email')
+      .eq('project_id', PROJECT_ID).order('created_at', { ascending: true })
+    if (fresh?.length) team = fresh.map((r: any) => ({ user_id: r.user_id, display_name: r.display_name || defaultDisplayName(r.email), email: r.email }))
+    if (!team.some(m => m.user_id === user.id)) team = [...team, me]
   }
   return { me, team }
 }
