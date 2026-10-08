@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import TriggerQueueButton from './TriggerQueueButton'
 import ActionCard from './ActionCard'
+import DueList, { DueItem } from './DueList'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
 
@@ -30,6 +31,51 @@ export default async function TodayPage() {
     .order('created_at', { ascending: false })
     .limit(10)
 
+  // Due list: everything up to the end of this week (incl. overdue); DueList buckets by Berlin day
+  const dueUntil = new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString()
+
+  const { data: dueLeads } = await (supabase as any)
+    .from('leads')
+    .select('id, name, next_follow_up_at, company:companies(name), person:people(full_name, first_name, last_name)')
+    .eq('project_id', PROJECT_ID)
+    .not('next_follow_up_at', 'is', null)
+    .not('stage', 'in', '(converted,disqualified)')
+    .lte('next_follow_up_at', dueUntil)
+    .order('next_follow_up_at', { ascending: true })
+    .limit(100)
+
+  const { data: dueDeals } = await (supabase as any)
+    .from('opportunities')
+    .select('id, name, next_step, next_step_due_at, company:companies(name)')
+    .eq('project_id', PROJECT_ID)
+    .not('next_step_due_at', 'is', null)
+    .not('stage', 'in', '(won,lost)')
+    .lte('next_step_due_at', dueUntil)
+    .order('next_step_due_at', { ascending: true })
+    .limit(100)
+
+  const dueItems: DueItem[] = [
+    ...(dueLeads || []).map((l: any) => {
+      const person = l.person && (l.person.full_name || [l.person.first_name, l.person.last_name].filter(Boolean).join(' '))
+      return {
+        kind: 'lead' as const,
+        id: l.id,
+        href: `/leads?focus=${l.id}`,
+        title: l.company?.name || l.name || 'Lead',
+        subtitle: [person, l.name].filter(Boolean).join(' · ') || 'Follow-up',
+        dueAt: l.next_follow_up_at,
+      }
+    }),
+    ...(dueDeals || []).map((o: any) => ({
+      kind: 'deal' as const,
+      id: o.id,
+      href: `/opportunities/${o.id}`,
+      title: o.name || o.company?.name || 'Deal',
+      subtitle: o.next_step || o.company?.name || null,
+      dueAt: o.next_step_due_at,
+    })),
+  ]
+
   const today = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
@@ -55,6 +101,8 @@ export default async function TodayPage() {
           </div>
         ))}
       </div>
+
+      <DueList items={dueItems} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24 }}>
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24 }}>
