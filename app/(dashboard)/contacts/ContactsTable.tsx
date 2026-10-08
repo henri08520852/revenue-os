@@ -110,7 +110,7 @@ export default function ContactsTable({ people }: { people: Person[] }) {
                         {initials(p)}
                       </div>
                       <div style={{ minWidth: 0 }}>
-                        <p style={{ fontWeight: 600, color: '#111827' }}>{displayName(p)}</p>
+                        <Link href={`/contacts/${p.id}`} style={{ fontWeight: 600, color: '#111827', textDecoration: 'none' }}>{displayName(p)}</Link>
                         {p.email && <p style={{ fontSize: 12, color: '#9ca3af' }}>{p.email}</p>}
                       </div>
                     </div>

@@ -288,17 +288,3 @@ export default function MeetingDialog({ open, onClose, data, prefill }: {
     </div>
   )
 }
-
-// Button + dialog in one, for deal and company pages
-export function MeetingButton({ data, prefill, label: text = '📅 Meeting' }: { data: MeetingData; prefill?: MeetingPrefill; label?: string }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <>
-      <button onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-all shadow-sm">
-        {text}
-      </button>
-      <MeetingDialog open={open} onClose={() => setOpen(false)} data={data} prefill={prefill} />
-    </>
-  )
-}

@@ -71,7 +71,7 @@ export default function DealContacts({ oppId, companyId, contacts, companyPeople
               <div key={c.id} style={{ padding: '8px 10px', background: '#f9fafb', borderRadius: 8, borderLeft: `3px solid ${r?.color ?? '#d1d5db'}` }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                   <div style={{ minWidth: 0 }}>
-                    <p style={{ fontSize: 13, fontWeight: 500, color: '#111827' }}>{name(c.person)}</p>
+                    {c.person ? <Link href={`/contacts/${c.person.id}`} style={{ fontSize: 13, fontWeight: 600, color: '#111827', textDecoration: 'none' }}>{name(c.person)}</Link> : <p style={{ fontSize: 13, color: '#9ca3af' }}>Unbekannt</p>}
                     {c.person?.job_title && <p style={{ fontSize: 11, color: '#6b7280' }}>{c.person.job_title}</p>}
                     {c.person?.email && (
                       <a href={`mailto:${c.person.email}`} style={{ fontSize: 11, color: '#2563eb', textDecoration: 'none' }}>{c.person.email}</a>

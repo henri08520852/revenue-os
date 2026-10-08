@@ -1,17 +1,18 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
-import Link from 'next/link'
 import StatusBadge from './StatusBadge'
-import LogActivityButton from './LogActivityButton'
 import AddContactButton from './AddContactButton'
 import AddDealButton from './AddDealButton'
-import QuickNoteButton from './QuickNoteButton'
 import FollowUpButton from './FollowUpButton'
 import AddLeadButton from '../../leads/AddLeadButton'
 import { OPPORTUNITY_STAGE_LABELS } from '@/lib/stages'
 import { getTeamContext } from '@/lib/team'
 import { getMeetingData } from '@/lib/meetingData'
-import { MeetingButton } from '@/components/MeetingDialog'
+import { loadTimeline, loadUpcoming } from '@/lib/records'
+import { RecordLayout, Card, Empty, UpcomingList, AssocRow } from '@/components/record/Layout'
+import Timeline from '@/components/record/Timeline'
+import QuickActions from '@/components/record/QuickActions'
+import Properties from '@/components/record/Properties'
 
 const SIGNAL_LABELS: Record<string, { label: string; icon: string; color: string }> = {
   news_funding:    { label: 'Funding',            icon: '💰', color: '#10b981' },
@@ -25,8 +26,9 @@ const SIGNAL_LABELS: Record<string, { label: string; icon: string; color: string
   funding_round:   { label: 'Finanzierungsrunde',  icon: '💵', color: '#10b981' },
 }
 
-const ACTIVITY_ICONS: Record<string, string> = {
-  call: '📞', email: '✉️', linkedin: '💼', meeting: '🤝', note: '📝',
+const BUYER_ROLE_LABELS: Record<string, string> = {
+  economic_buyer: '💰 Budget', champion: '⭐ Champion',
+  influencer: '💡 Influencer', user: '👤 Nutzer', blocker: '🚧 Blocker',
 }
 
 const LEAD_STAGE_LABELS: Record<string, string> = {
@@ -34,277 +36,177 @@ const LEAD_STAGE_LABELS: Record<string, string> = {
   converted: 'Umgewandelt', disqualified: 'Disqualifiziert',
 }
 
-const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })
-
-const BUYER_ROLE_LABELS: Record<string, string> = {
-  economic_buyer: '💰 Budget', champion: '⭐ Champion',
-  influencer: '💡 Influencer', user: '👤 Nutzer', blocker: '🚧 Blocker',
-}
+const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: '2-digit' })
 
 export default async function CompanyPage({ params }: { params: { id: string } }) {
-  const supabase = createClient()
+  const supabase = createClient() as any
 
-  const [companyRes, signalsRes, jobsRes, actionsRes, activitiesRes, peopleRes] = await Promise.all([
-    supabase.from('companies').select('*').eq('id', params.id).single(),
+  const { data: company } = await supabase.from('companies').select('*').eq('id', params.id).single()
+  if (!company) notFound()
+
+  const projectId = (company.project_id || process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID) as string
+  const [{ data: signals }, { data: jobs }, { data: actions }, { data: peopleData }, { data: leadsData }, { data: dealsData }, timeline, upcoming, meeting, { me, team }] = await Promise.all([
     supabase.from('signals').select('*').eq('company_id', params.id).eq('status', 'active').order('strength', { ascending: false }),
     supabase.from('jobs').select('*').eq('company_id', params.id).eq('status', 'active').order('first_seen_at', { ascending: false }).limit(30),
     supabase.from('actions').select('*').eq('company_id', params.id).in('status', ['pending', 'done']).order('generated_at', { ascending: false }).limit(10),
-    supabase.from('activities').select('*, people(first_name, last_name)').eq('company_id', params.id).order('occurred_at', { ascending: false }).limit(20),
     supabase.from('people').select('*').eq('company_id', params.id).order('created_at', { ascending: false }),
+    supabase.from('leads').select('id, name, stage, next_follow_up_at').eq('company_id', params.id).order('created_at', { ascending: false }),
+    supabase.from('opportunities').select('id, name, stage, value_eur, next_step, next_step_due_at').eq('company_id', params.id).order('created_at', { ascending: false }),
+    loadTimeline({ companyId: params.id }),
+    loadUpcoming({ companyId: params.id }),
+    getMeetingData(),
+    getTeamContext(),
   ])
 
-  const db = supabase as any
-  const { me, team } = await getTeamContext()
-  const meetingData = await getMeetingData()
-  const [{ data: leadsData }, { data: dealsData }] = await Promise.all([
-    db.from('leads').select('id, name, stage, next_follow_up_at, converted_to_opportunity_id').eq('company_id', params.id).order('created_at', { ascending: false }),
-    db.from('opportunities').select('id, name, stage, value_eur, next_step, next_step_due_at').eq('company_id', params.id).order('created_at', { ascending: false }),
-  ])
-  // Converted leads are represented by their deal
-  const leads = (leadsData || []).filter((l: any) => l.stage !== 'converted')
+  const people = peopleData || []
+  const leads = (leadsData || []).filter((l: any) => l.stage !== 'converted')  // converted leads live on as deals
   const deals = dealsData || []
-
-  if (companyRes.error || !companyRes.data) notFound()
-
-  const company = companyRes.data
-  const projectId = ((company as any).project_id || process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID) as string
-  const signals = signalsRes.data || []
-  const jobs = jobsRes.data || []
-  const actions = actionsRes.data || []
-  const activities = activitiesRes.data || []
-  const people = peopleRes.data || []
-  const metrics = (company.current_metrics as any) || {}
-  const linkedinSearchUrl = `https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(company.name)}`
+  const openDeals = deals.filter((d: any) => !['won', 'lost'].includes(d.stage))
+  const metrics = company.current_metrics || {}
   const scoreColor = (v: number) => v >= 70 ? '#16a34a' : v >= 40 ? '#d97706' : '#9ca3af'
+  const personLabel = (p: any) => p.full_name || [p.first_name, p.last_name].filter(Boolean).join(' ') || p.email || 'Unbenannt'
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 1100, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#9ca3af', marginBottom: 20 }}>
-        <Link href="/companies" style={{ color: '#9ca3af', textDecoration: 'none' }}>Companies</Link>
-        <span>›</span>
-        <span style={{ color: '#374151' }}>{company.name}</span>
-      </div>
-
-      <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 16, padding: '24px 28px', marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <h1 style={{ fontSize: 24, fontWeight: 700, color: '#111827', margin: 0 }}>{company.name}</h1>
-              <StatusBadge status={company.account_status} companyId={company.id} />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8, flexWrap: 'wrap' }}>
-              <a href={`https://${company.domain}`} target="_blank" rel="noopener" style={{ fontSize: 13, color: '#9ca3af', textDecoration: 'none' }}>{company.domain} ↗</a>
-              <a href={linkedinSearchUrl} target="_blank" rel="noopener" style={{ fontSize: 13, color: '#3b82f6', textDecoration: 'none', fontWeight: 500 }}>LinkedIn ↗</a>
-            </div>
+    <RecordLayout
+      breadcrumb={[{ label: 'Companies', href: '/companies' }, { label: company.name }]}
+      left={<>
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: '#111827' }}>{company.name}</h1>
+            <StatusBadge status={company.account_status} companyId={company.id} />
           </div>
-          <div style={{ display: 'flex', gap: 12, flexShrink: 0 }}>
-            {[
-              { label: 'Account', value: company.account_score || 0 },
-              { label: 'ICP',     value: company.icp_score || 0 },
-              { label: 'Signale', value: company.signal_score || 0 },
-            ].map(s => (
-              <div key={s.label} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 12, padding: '10px 16px', textAlign: 'center', minWidth: 72 }}>
-                <p style={{ fontSize: 22, fontWeight: 700, color: scoreColor(s.value), margin: 0 }}>{s.value}</p>
-                <p style={{ fontSize: 11, color: '#9ca3af', margin: '2px 0 0' }}>{s.label}</p>
+          <div style={{ display: 'flex', gap: 12, marginTop: 6, flexWrap: 'wrap', fontSize: 12 }}>
+            {company.domain && <a href={`https://${company.domain}`} target="_blank" rel="noopener noreferrer" style={{ color: '#6b7280', textDecoration: 'none' }}>{company.domain} ↗</a>}
+            <a href={company.linkedin_url || `https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(company.name)}`} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 500 }}>LinkedIn ↗</a>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 14 }}>
+            {[{ label: 'Account', value: company.account_score || 0 }, { label: 'ICP', value: company.icp_score || 0 }, { label: 'Signale', value: company.signal_score || 0 }].map(s => (
+              <div key={s.label} style={{ background: '#f9fafb', border: '1px solid #f3f4f6', borderRadius: 10, padding: '8px 0', textAlign: 'center' }}>
+                <p style={{ fontSize: 18, fontWeight: 700, color: scoreColor(s.value) }}>{s.value}</p>
+                <p style={{ fontSize: 10, color: '#9ca3af' }}>{s.label}</p>
               </div>
             ))}
           </div>
-        </div>
-        {projectId && (<>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
-            <AddLeadButton
-              companies={[{ id: company.id, name: company.name }]}
-              people={people.map((p: any) => ({ id: p.id, company_id: p.company_id, full_name: p.full_name, first_name: p.first_name, last_name: p.last_name, job_title: p.job_title }))}
-              fixedCompanyId={company.id}
-              variant="secondary"
-              team={team}
-              currentUserId={me?.user_id ?? null}
+          <div style={{ marginTop: 14 }}>
+            <QuickActions
+              target={{ companyId: company.id, personId: null, opportunityId: null }}
+              contacts={people.map((p: any) => ({ id: p.id, label: personLabel(p) }))}
+              deals={openDeals.map((d: any) => ({ id: d.id, label: d.name || 'Deal' }))}
+              meeting={meeting}
+              meetingPrefill={{ companyId: company.id, opportunityId: openDeals[0]?.id ?? null }}
             />
-            <AddDealButton companyId={company.id} companyName={company.name} projectId={projectId} team={team} currentUserId={me?.user_id ?? null} />
-            <MeetingButton data={meetingData} prefill={{ companyId: company.id, opportunityId: deals.find((d: any) => !['won', 'lost'].includes(d.stage))?.id ?? null }} />
-            <span style={{ width: 1, height: 24, background: '#e5e7eb', margin: '0 4px' }} />
-            <AddContactButton companyId={company.id} projectId={projectId} />
-            <LogActivityButton companyId={company.id} projectId={projectId} />
-            <QuickNoteButton companyId={company.id} projectId={projectId} />
+          </div>
+          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <FollowUpButton companyId={company.id} projectId={projectId} currentFollowUp={(metrics.next_follow_up_at as string) || null} />
+            {metrics.next_follow_up_at && metrics.follow_up_note && <span style={{ fontSize: 12, color: '#6b7280' }}>{metrics.follow_up_note}</span>}
           </div>
-          {metrics.next_follow_up_at && metrics.follow_up_note && (
-            <p style={{ fontSize: 12, color: '#6b7280', marginTop: 10 }}>⏰ Erinnerung: {metrics.follow_up_note}</p>
-          )}
-        </>)}
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <Card title="Kontakte" count={people.length}>
-            {people.length === 0 ? <EmptyState text="Noch keine Kontakte" /> : people.map((person: any) => (
-              <div key={person.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f3f4f6' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, color: '#6b7280', flexShrink: 0 }}>
-                    {person.first_name?.[0]}{person.last_name?.[0]}
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: '#111827', margin: 0 }}>
-                      {person.first_name} {person.last_name}
-                      {person.is_decision_maker && <span style={{ marginLeft: 6, fontSize: 11, color: '#d97706' }}>★ DM</span>}
-                    </p>
-                    <p style={{ fontSize: 12, color: '#9ca3af', margin: '1px 0 0' }}>{person.job_title || '—'}</p>
-                  </div>
+        </Card>
+        <Card>
+          <Properties kind="company" id={company.id} fields={[
+            { key: 'name', label: 'Name', value: company.name },
+            { key: 'domain', label: 'Domain (für E-Mail-Zuordnung)', value: company.domain, link: company.domain ? `https://${company.domain}` : null },
+            { key: 'website_url', label: 'Website', value: company.website_url, type: 'url', link: company.website_url },
+            { key: 'linkedin_url', label: 'LinkedIn', value: company.linkedin_url, type: 'url', link: company.linkedin_url },
+            { key: 'industry', label: 'Branche', value: company.industry },
+            { key: 'city', label: 'Stadt', value: company.city },
+            { key: 'employee_range', label: 'Mitarbeiter', value: company.employee_range },
+            { key: 'notes', label: 'Notizen', value: company.notes, type: 'textarea' },
+          ]} />
+        </Card>
+      </>}
+      center={<>
+        <Card title="Anstehend" count={upcoming.length}><UpcomingList items={upcoming} /></Card>
+        <Card title="Aktivitäten" count={timeline.length}>
+          <Timeline items={timeline} context={{ companyId: company.id }} />
+        </Card>
+        <Card title="Aktive Signale" count={(signals || []).length}>
+          {!(signals || []).length ? <Empty text="Keine aktiven Signale" /> : (signals || []).map((sig: any) => {
+            const meta = SIGNAL_LABELS[sig.signal_type] || { label: String(sig.signal_type).replace(/_/g, ' '), icon: '📡', color: '#6b7280' }
+            return (
+              <div key={sig.id} style={{ background: '#f9fafb', borderRadius: 10, padding: '10px 12px', marginBottom: 8, border: '1px solid #f3f4f6' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{meta.icon} {meta.label}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 70, height: 5, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden', display: 'inline-block' }}>
+                      <span style={{ display: 'block', height: '100%', background: meta.color, width: `${sig.strength}%` }} />
+                    </span>
+                    <span style={{ fontSize: 12, color: '#9ca3af' }}>{sig.strength}</span>
+                  </span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {person.buyer_role && <span style={{ fontSize: 11, color: '#6b7280', background: '#f3f4f6', borderRadius: 20, padding: '2px 8px' }}>{BUYER_ROLE_LABELS[person.buyer_role] || person.buyer_role}</span>}
-                  {person.linkedin_url && <a href={person.linkedin_url} target="_blank" rel="noopener" style={{ fontSize: 12, color: '#3b82f6' }}>Li ↗</a>}
-                  {person.email && <a href={`mailto:${person.email}`} style={{ fontSize: 13, color: '#9ca3af' }}>✉</a>}
-                </div>
+                {(sig.reason || sig.content) && <p style={{ fontSize: 12, color: '#6b7280', marginTop: 4, lineHeight: 1.5 }}>{sig.reason || sig.content}</p>}
               </div>
-            ))}
-          </Card>
-
-          <Card title="Aktive Signale" count={signals.length}>
-            {signals.length === 0 ? <EmptyState text="Keine aktiven Signale" /> : signals.map((sig: any) => {
-              const meta = SIGNAL_LABELS[sig.signal_type] || { label: sig.signal_type.replace(/_/g, ' '), icon: '📡', color: '#6b7280' }
-              return (
-                <div key={sig.id} style={{ background: '#f9fafb', borderRadius: 10, padding: '12px 14px', marginBottom: 8, border: '1px solid #f3f4f6' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 16 }}>{meta.icon}</span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{meta.label}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 80, height: 5, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', background: meta.color, borderRadius: 4, width: `${sig.strength}%` }} />
-                      </div>
-                      <span style={{ fontSize: 12, color: '#9ca3af', minWidth: 24, textAlign: 'right' }}>{sig.strength}</span>
-                    </div>
-                  </div>
-                  {sig.reason && <p style={{ fontSize: 12, color: '#6b7280', margin: '6px 0 0', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{sig.reason}</p>}
-                </div>
-              )
-            })}
-          </Card>
-
-          <Card title="Aktivitäten" count={activities.length}>
-            {activities.length === 0 ? <EmptyState text="Noch keine Aktivitäten" /> : activities.map((act: any) => (
-              <div key={act.id} style={{ display: 'flex', gap: 12, padding: '10px 0', borderBottom: '1px solid #f3f4f6' }}>
-                <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{ACTIVITY_ICONS[act.activity_type] || '•'}</span>
-                <span style={{ fontSize: 12, color: '#9ca3af', width: 40, flexShrink: 0, marginTop: 2 }}>
-                  {new Date(act.occurred_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
-                </span>
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: 13, color: '#374151', margin: 0 }}>{act.summary || act.activity_type}</p>
-                  {act.outcome && <p style={{ fontSize: 12, color: '#9ca3af', margin: '2px 0 0' }}>→ {act.outcome}</p>}
-                  {act.next_step_detected && <p style={{ fontSize: 12, color: '#3b82f6', margin: '2px 0 0' }}>📌 {act.next_step_detected}</p>}
-                  {act.people && <p style={{ fontSize: 11, color: '#9ca3af', margin: '2px 0 0' }}>mit {act.people.first_name} {act.people.last_name}</p>}
-                </div>
-              </div>
-            ))}
-          </Card>
-
-          <Card title="Offene Stellen" count={jobs.length}>
-            {jobs.length === 0 ? <EmptyState text="Keine Jobs gefunden" /> : jobs.map((job: any) => (
-              <div key={job.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid #f3f4f6' }}>
+            )
+          })}
+        </Card>
+        {(jobs || []).length > 0 && (
+          <Card title="Offene Stellen" count={(jobs || []).length}>
+            {(jobs || []).map((job: any) => (
+              <div key={job.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f3f4f6' }}>
                 <div>
-                  <p style={{ fontSize: 13, color: '#111827', fontWeight: 500, margin: 0 }}>{job.title}</p>
-                  <p style={{ fontSize: 12, color: '#9ca3af', margin: '2px 0 0' }}>{job.location || '—'} · {job.role_category}</p>
+                  <p style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>{job.title}</p>
+                  <p style={{ fontSize: 12, color: '#9ca3af' }}>{job.location || '—'} · {job.role_category}</p>
                 </div>
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  {job.source_url && <a href={job.source_url} target="_blank" rel="noopener" style={{ fontSize: 12, color: '#0ea5e9' }}>↗</a>}
-                  <p style={{ fontSize: 11, color: '#9ca3af', margin: '2px 0 0' }}>{job.days_open}d</p>
+                <div style={{ textAlign: 'right' }}>
+                  {job.source_url && <a href={job.source_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: '#0ea5e9' }}>↗</a>}
+                  <p style={{ fontSize: 11, color: '#9ca3af' }}>{job.days_open}d</p>
                 </div>
               </div>
             ))}
           </Card>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: '#374151', margin: '0 0 12px' }}>Vertrieb</p>
-            {leads.length === 0 && deals.length === 0 ? (
-              <p style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.5 }}>
-                Noch kein Lead oder Deal. Starte mit <b style={{ color: '#1d4ed8' }}>+ Lead</b>, sobald du die Company ansprichst.
-              </p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {deals.map((d: any) => {
-                  const closed = d.stage === 'won' || d.stage === 'lost'
-                  return (
-                    <Link key={d.id} href={`/opportunities/${d.id}`} style={{ display: 'block', padding: '10px 12px', borderRadius: 10, textDecoration: 'none', background: d.stage === 'won' ? '#f0fdf4' : closed ? '#f9fafb' : '#eff6ff', border: '1px solid ' + (d.stage === 'won' ? '#bbf7d0' : closed ? '#f3f4f6' : '#bfdbfe') }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: '#16a34a' }}>DEAL</span>
-                        <span style={{ fontSize: 11, color: '#6b7280' }}>{(OPPORTUNITY_STAGE_LABELS as Record<string, string>)[d.stage] || d.stage}</span>
-                      </div>
-                      <p style={{ fontSize: 13, fontWeight: 600, color: '#111827', margin: '2px 0 0' }}>{d.name || 'Deal'}</p>
-                      {d.value_eur ? <p style={{ fontSize: 12, color: '#374151', margin: '2px 0 0' }}>{Number(d.value_eur).toLocaleString('de-DE')} €</p> : null}
-                      {!closed && d.next_step && (
-                        <p style={{ fontSize: 11, color: '#1d4ed8', margin: '4px 0 0' }}>→ {d.next_step}{d.next_step_due_at ? ` · ${fmtDate(d.next_step_due_at)}` : ''}</p>
-                      )}
-                    </Link>
-                  )
-                })}
-                {leads.map((l: any) => (
-                  <Link key={l.id} href={`/leads?focus=${l.id}`} style={{ display: 'block', padding: '10px 12px', borderRadius: 10, textDecoration: 'none', background: l.stage === 'disqualified' ? '#f9fafb' : '#f5f3ff', border: '1px solid ' + (l.stage === 'disqualified' ? '#f3f4f6' : '#ddd6fe') }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: '#7c3aed' }}>LEAD</span>
-                      <span style={{ fontSize: 11, color: '#6b7280' }}>{LEAD_STAGE_LABELS[l.stage] || l.stage}</span>
-                    </div>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: '#111827', margin: '2px 0 0' }}>{l.name || company.name}</p>
-                    {l.next_follow_up_at && l.stage !== 'disqualified' && (
-                      <p style={{ fontSize: 11, color: '#6d28d9', margin: '4px 0 0' }}>Follow-up · {fmtDate(l.next_follow_up_at)}</p>
-                    )}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: '#374151', margin: '0 0 12px' }}>Job-Metriken</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[
-                { label: 'Gesamt offen', value: metrics.open_jobs ?? '—' },
-                { label: 'Commercial',   value: metrics.commercial_jobs ?? 0 },
-                { label: 'Recruiter',    value: metrics.recruiter_jobs ?? 0 },
-                { label: 'Engineering',  value: metrics.engineering_jobs ?? 0 },
-                { label: 'Leadership',   value: metrics.leadership_jobs ?? 0 },
-                ...(metrics.ats_type ? [{ label: 'ATS', value: metrics.ats_type }] : []),
-              ].map(row => (
-                <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                  <span style={{ color: '#6b7280' }}>{row.label}</span>
-                  <span style={{ fontWeight: 600, color: '#111827' }}>{String(row.value)}</span>
-                </div>
-              ))}
+        )}
+      </>}
+      right={<>
+        <Card title="Kontakte" count={people.length} action={<AddContactButton companyId={company.id} projectId={projectId} />}>
+          {!people.length ? <Empty text="Noch keine Kontakte" /> : people.map((p: any) => (
+            <AssocRow key={p.id} href={`/contacts/${p.id}`} title={`${personLabel(p)}${p.is_decision_maker ? ' ★' : ''}`} sub={[p.job_title, p.email].filter(Boolean).join(' · ') || null}
+              badge={p.buyer_role ? BUYER_ROLE_LABELS[p.buyer_role] ?? p.buyer_role : null} />
+          ))}
+        </Card>
+        <Card title="Deals" count={deals.length} action={<AddDealButton companyId={company.id} companyName={company.name} projectId={projectId} team={team} currentUserId={me?.user_id ?? null} />}>
+          {!deals.length ? <Empty text="Noch kein Deal" /> : deals.map((d: any) => (
+            <AssocRow key={d.id} href={`/opportunities/${d.id}`} title={d.name || 'Deal'}
+              sub={[d.value_eur ? `${Number(d.value_eur).toLocaleString('de-DE')} €` : null, !['won', 'lost'].includes(d.stage) && d.next_step ? `→ ${d.next_step}${d.next_step_due_at ? ` · ${fmtDate(d.next_step_due_at)}` : ''}` : null].filter(Boolean).join(' · ') || null}
+              badge={(OPPORTUNITY_STAGE_LABELS as Record<string, string>)[d.stage] ?? d.stage}
+              badgeColor={d.stage === 'won' ? { bg: '#dcfce7', fg: '#166534' } : d.stage === 'lost' ? { bg: '#f3f4f6', fg: '#6b7280' } : { bg: '#dbeafe', fg: '#1d4ed8' }} />
+          ))}
+        </Card>
+        <Card title="Leads" count={leads.length} action={
+          <AddLeadButton
+            companies={[{ id: company.id, name: company.name }]}
+            people={people.map((p: any) => ({ id: p.id, company_id: p.company_id, full_name: p.full_name, first_name: p.first_name, last_name: p.last_name, job_title: p.job_title }))}
+            fixedCompanyId={company.id} variant="secondary" team={team} currentUserId={me?.user_id ?? null} />
+        }>
+          {!leads.length ? <Empty text="Kein offener Lead" /> : leads.map((l: any) => (
+            <AssocRow key={l.id} href={`/leads?focus=${l.id}`} title={l.name || company.name}
+              sub={l.next_follow_up_at && l.stage !== 'disqualified' ? `Follow-up ${fmtDate(l.next_follow_up_at)}` : null}
+              badge={LEAD_STAGE_LABELS[l.stage] ?? l.stage} badgeColor={{ bg: '#ede9fe', fg: '#6d28d9' }} />
+          ))}
+        </Card>
+        <Card title="Job-Metriken">
+          {[
+            { label: 'Gesamt offen', value: metrics.open_jobs ?? '—' },
+            { label: 'Commercial', value: metrics.commercial_jobs ?? 0 },
+            { label: 'Recruiter', value: metrics.recruiter_jobs ?? 0 },
+            { label: 'Engineering', value: metrics.engineering_jobs ?? 0 },
+            { label: 'Leadership', value: metrics.leadership_jobs ?? 0 },
+            ...(metrics.ats_type ? [{ label: 'ATS', value: metrics.ats_type }] : []),
+          ].map(row => (
+            <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '3px 0' }}>
+              <span style={{ color: '#6b7280' }}>{row.label}</span>
+              <span style={{ fontWeight: 600, color: '#111827' }}>{String(row.value)}</span>
             </div>
-          </div>
-
-          <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: '#374151', margin: '0 0 12px' }}>Actions</p>
-            {actions.length === 0
-              ? <p style={{ fontSize: 12, color: '#9ca3af' }}>Keine ausstehenden Actions</p>
-              : actions.map((action: any) => (
-                <div key={action.id} style={{ fontSize: 12, borderRadius: 8, padding: '8px 10px', marginBottom: 6, background: action.status === 'done' ? '#f0fdf4' : '#fffbeb', color: action.status === 'done' ? '#16a34a' : '#92400e', textDecoration: action.status === 'done' ? 'line-through' : 'none' }}>
-                  {action.action_type.replace(/_/g, ' ')} · {action.estimated_minutes}m
-                </div>
-              ))
-            }
-          </div>
-        </div>
-      </div>
-    </div>
+          ))}
+        </Card>
+        {(actions || []).length > 0 && (
+          <Card title="Empfohlene Actions">
+            {(actions || []).map((a: any) => (
+              <div key={a.id} style={{ fontSize: 12, borderRadius: 8, padding: '7px 10px', marginBottom: 6, background: a.status === 'done' ? '#f0fdf4' : '#fffbeb', color: a.status === 'done' ? '#16a34a' : '#92400e', textDecoration: a.status === 'done' ? 'line-through' : 'none' }}>
+                {a.title || String(a.action_type).replace(/_/g, ' ')} · {a.estimated_minutes}m
+              </div>
+            ))}
+          </Card>
+        )}
+      </>}
+    />
   )
-}
-
-function Card({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
-  return (
-    <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{title}</span>
-        <span style={{ fontSize: 11, color: '#9ca3af', background: '#f3f4f6', borderRadius: 20, padding: '1px 8px', fontWeight: 500 }}>{count}</span>
-      </div>
-      {children}
-    </div>
-  )
-}
-
-function EmptyState({ text }: { text: string }) {
-  return <p style={{ fontSize: 13, color: '#9ca3af', padding: '8px 0' }}>{text}</p>
 }

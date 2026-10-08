@@ -61,50 +61,6 @@ export async function removeOpportunityContact(oppId: string, contactId: string)
   return { error: null }
 }
 
-export async function addOpportunityNote(oppId: string, text: string): Promise<Result> {
-  const summary = text.trim()
-  if (!summary) return { error: 'Notiz ist leer' }
-  const supabase = createClient() as any
-
-  const { data: opp, error: oppErr } = await supabase
-    .from('opportunities')
-    .select('project_id, company_id')
-    .eq('id', oppId)
-    .single()
-  if (oppErr || !opp) return { error: oppErr?.message || 'Deal nicht gefunden' }
-
-  const { data: { user } } = await supabase.auth.getUser()
-
-  const { error } = await supabase.from('activities').insert({
-    project_id: opp.project_id,
-    company_id: opp.company_id,
-    opportunity_id: oppId,
-    activity_type: 'note',
-    direction: 'internal',
-    channel: 'note',
-    summary,
-    occurred_at: new Date().toISOString(),
-    source: 'manual',
-    created_by: user?.email ?? null,
-  })
-  if (error) return { error: error.message }
-  revalidatePath(`/opportunities/${oppId}`)
-  return { error: null }
-}
-
-export async function deleteOpportunityNote(oppId: string, noteId: string): Promise<Result> {
-  const supabase = createClient() as any
-  const { error } = await supabase
-    .from('activities')
-    .delete()
-    .eq('id', noteId)
-    .eq('opportunity_id', oppId)
-    .eq('activity_type', 'note')
-  if (error) return { error: error.message }
-  revalidatePath(`/opportunities/${oppId}`)
-  return { error: null }
-}
-
 export async function setOpportunityStage(oppId: string, stage: string): Promise<Result> {
   const supabase = createClient() as any
   const { error } = await supabase.from('opportunities').update({ stage }).eq('id', oppId)

@@ -108,7 +108,7 @@ export default function GuidePage() {
         {DEAL_STAGES.map(([k, v]) => <div key={k} style={row}><b style={{ color: '#c2410c' }}>{k}</b><span style={{ color: '#4b5563' }}>{v}</span></div>)}
       </Section>
 
-      <Section id="contacts" title="4 · Kontakte & Buying Center" intro="Kontakte sind Personen bei einer Company. Anlegen unter Contacts oder auf der Company-Seite (+ Kontakt). Auf der Deal-Seite verknüpfst du sie mit ihrer Rolle in diesem Deal – fehlen wichtige Rollen, zeigt die Seite einen Hinweis.">
+      <Section id="contacts" title="4 · Kontakte, Companies & Deals – alles an einem Ort" intro="Company, Kontakt und Deal haben jeweils eine eigene Seite im gleichen Aufbau: links Steckbrief, Schnellaktionen (Notiz, Anruf, E-Mail, LinkedIn, Meeting) und bearbeitbare Felder, in der Mitte „Anstehend“ und die Timeline mit allen E-Mails, Meetings, Notizen, Anrufen und Deal-Änderungen, rechts die Verknüpfungen. Eine Notiz am Kontakt erscheint automatisch auch bei Company und Deal. Auf der Deal-Seite verknüpfst du Kontakte mit ihrer Rolle (Buying Center):">
         {ROLES.map(([k, v]) => <div key={k} style={row}><b style={{ color: '#111827' }}>{k}</b><span style={{ color: '#4b5563' }}>{v}</span></div>)}
       </Section>
 
