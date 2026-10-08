@@ -1,6 +1,6 @@
 // Maps email addresses to CRM records (people by exact email, companies by domain).
 
-const FREE_MAIL = new Set([
+export const FREE_MAIL = new Set([
   'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'hotmail.de', 'live.com', 'live.de',
   'msn.com', 'yahoo.com', 'yahoo.de', 'icloud.com', 'me.com', 'mac.com', 'aol.com', 'gmx.de', 'gmx.net',
   'gmx.at', 'gmx.ch', 'web.de', 't-online.de', 'freenet.de', 'proton.me', 'protonmail.com', 'posteo.de',

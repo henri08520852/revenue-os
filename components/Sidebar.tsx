@@ -13,11 +13,13 @@ import {
   QuestionMarkCircleIcon,
   CalendarIcon,
   CheckCircleIcon,
+  InboxIcon,
 } from '@heroicons/react/24/outline'
 
 const nav = [
   { href: '/today',      label: 'Heute',      icon: CalendarDaysIcon },
   { href: '/tasks',      label: 'Aufgaben',   icon: CheckCircleIcon },
+  { href: '/inbox',      label: 'Posteingang', icon: InboxIcon },
   { href: '/calendar',   label: 'Kalender',   icon: CalendarIcon },
   { href: '/companies',  label: 'Companies',  icon: BuildingOffice2Icon },
   { href: '/contacts',   label: 'Contacts',   icon: UserGroupIcon },
@@ -27,7 +29,7 @@ const nav = [
 
 const iconStyle = { width: 16, height: 16, flexShrink: 0 }
 
-export default function Sidebar({ userName, userEmail }: { userName: string | null; userEmail: string | null }) {
+export default function Sidebar({ userName, userEmail, inboxCount = 0 }: { userName: string | null; userEmail: string | null; inboxCount?: number }) {
   const path = usePathname()
   return (
     <aside style={{ width: 240, minHeight: '100vh', background: '#fff', borderRight: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column' }}>
@@ -41,6 +43,7 @@ export default function Sidebar({ userName, userEmail }: { userName: string | nu
             <Link key={href} href={href} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 8, fontSize: 14, fontWeight: 500, textDecoration: 'none', marginBottom: 2, background: active ? '#eff6ff' : 'transparent', color: active ? '#1d4ed8' : '#4b5563' }}>
               <Icon style={{ ...iconStyle, color: active ? '#2563eb' : '#9ca3af' }} />
               {label}
+              {href === '/inbox' && inboxCount > 0 && <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, padding: '1px 7px', borderRadius: 10, background: '#2563eb', color: '#fff' }}>{inboxCount > 99 ? '99+' : inboxCount}</span>}
             </Link>
           )
         })}

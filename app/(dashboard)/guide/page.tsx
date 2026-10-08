@@ -133,7 +133,10 @@ export default function GuidePage() {
 
       <Section id="google" title="7 · Gmail & Kalender" intro="Unter Einstellungen verbindet jede:r einmal das eigene @altoris.one-Google-Konto (nur Lesezugriff).">
         <ul style={{ fontSize: 14, color: '#374151', lineHeight: 1.8, paddingLeft: 20, listStyle: 'disc' }}>
-          <li><b>E-Mails</b> mit Kontakten (exakte Adresse) oder mit der Domain einer Company werden automatisch als Aktivität geloggt – inklusive Zuordnung zum offenen Deal. Private Adressen (gmail.com, web.de …) und Newsletter werden ignoriert.</li>
+          <li><b>E-Mails</b> mit Kontakten (exakte Adresse) oder mit der Domain einer Company werden automatisch mit <b>vollem Text</b> als Aktivität geloggt – inklusive Zuordnung zum offenen Deal. Antworten im selben Verlauf folgen automatisch.</li>
+          <li><b>Posteingang</b>: Geschäftliche E-Mails ohne Treffer landen dort. Pro Mail oder ganzem Verlauf: <b>neuen Kontakt anlegen</b> (Name, Company und Domain werden vorgeschlagen), einer bestehenden Company / Kontakt / Deal <b>zuordnen</b> oder <b>ignorieren</b>. Sobald ein Kontakt oder eine Company-Domain existiert, werden wartende und künftige Mails automatisch zugeordnet.</li>
+          <li><b>Gmail-Label „Revenue OS“</b>: Lege in Gmail einmal ein Label mit genau diesem Namen an. Jede Mail mit diesem Label kommt beim nächsten Sync ins CRM – auch ältere Mails und solche, die sonst als Newsletter gefiltert würden.</li>
+          <li>Interne Mails (nur @altoris.one) und Newsletter / automatische Benachrichtigungen werden nie übernommen.</li>
           <li><b>Vergangene Meetings</b> mit solchen Teilnehmer:innen werden ebenfalls als Aktivität geloggt; „Letzter Kontakt“ aktualisiert sich von selbst.</li>
           <li><b>Team-Kalender</b> (Tag / Woche / Monat) zeigt die Termine aller verbundenen Kolleg:innen plus alle offenen Aufgaben. Gemeinsame Termine erscheinen nur einmal. „+ Aufgabe“ legt direkt eine Aufgabe an.</li>
           <li><b>Meetings planen</b>: „+ Meeting“ im Kalender (oder Klick auf eine freie Uhrzeit), „📅 Meeting“ auf Company- und Deal-Seite. Teilnehmer aus den Kontakten wählen, Google-Meet-Link wird automatisch erstellt, Google verschickt die Einladung. Mit Deal verknüpft, wird das Meeting zum nächsten Schritt.</li>
