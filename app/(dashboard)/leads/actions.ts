@@ -122,6 +122,7 @@ async function convertLead(leadId: string, stage: string): Promise<{ error: stri
       owner_id: lead.owner_id || (await supabase.auth.getUser()).data.user?.id || null,
       champion_person_id: lead.person_id,
       notes: lead.notes,
+      ...(lead.qualification && Object.keys(lead.qualification).length ? { qualification: lead.qualification } : {}),
     })
     .select('id')
     .single()

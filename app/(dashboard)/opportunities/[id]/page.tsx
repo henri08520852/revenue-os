@@ -13,6 +13,8 @@ import Timeline from '@/components/record/Timeline'
 import AiAssistant from '@/components/record/AiAssistant'
 import QuickActions from '@/components/record/QuickActions'
 import TaskList from '@/components/TaskList'
+import QualificationCard from '@/components/QualificationCard'
+import { closeReasonLabel } from '@/lib/dealMeta'
 import { loadTasks } from '@/lib/tasks'
 
 type Stage = typeof OPPORTUNITY_STAGES[number]
@@ -77,6 +79,14 @@ export default async function DealPage({ params }: { params: { id: string } }) {
           </div>
           {company && <Link href={`/companies/${company.id}`} style={{ display: 'inline-block', marginTop: 4, fontSize: 13, color: '#2563eb', textDecoration: 'none', fontWeight: 500 }}>{company.name}</Link>}
           {opp.value_eur ? <p style={{ fontSize: 26, fontWeight: 700, color: '#111827', marginTop: 10 }}>{Number(opp.value_eur).toLocaleString('de-DE')} €</p> : null}
+          {(stage === 'won' || stage === 'lost') && (opp.close_reason || opp.close_note) && (
+            <div style={{ marginTop: 10, padding: '9px 12px', borderRadius: 10, background: stage === 'won' ? '#f0fdf4' : '#f9fafb', border: `1px solid ${stage === 'won' ? '#bbf7d0' : '#e5e7eb'}` }}>
+              <p style={{ fontSize: 12.5, fontWeight: 600, color: stage === 'won' ? '#15803d' : '#374151' }}>
+                {stage === 'won' ? 'Gewonnen' : 'Verloren'}: {closeReasonLabel(stage, opp.close_reason) ?? '—'}{opp.close_competitor ? ` · ${stage === 'won' ? 'gegen' : 'an'} ${opp.close_competitor}` : ''}
+              </p>
+              {opp.close_note && <p style={{ fontSize: 12, color: '#4b5563', marginTop: 2 }}>{opp.close_note}</p>}
+            </div>
+          )}
           <div style={{ marginTop: 8 }}><DealOwner oppId={opp.id} ownerId={opp.owner_id ?? null} team={team} /></div>
           <div style={{ marginTop: 14 }}>
             <QuickActions
@@ -104,6 +114,9 @@ export default async function DealPage({ params }: { params: { id: string } }) {
             nextStage={nextStage}
             stageLabels={STAGE_LABELS}
           />
+        </Card>
+        <Card title="Qualifizierung">
+          <QualificationCard kind="deal" id={opp.id} initial={opp.qualification ?? null} />
         </Card>
         {opp.notes && (
           <Card title="Ursprüngliche Notiz">

@@ -31,7 +31,7 @@ export default async function PipelinePage({ searchParams }: { searchParams: Sea
       .eq('project_id', PROJECT_ID).neq('stage', 'converted')
       .order('next_follow_up_at', { ascending: true, nullsFirst: false }),
     supabase.from('opportunities')
-      .select('id, name, stage, value_eur, owner_id, next_step, next_step_due_at, companies(id, name, domain)')
+      .select('id, name, stage, value_eur, owner_id, next_step, next_step_due_at, qualification, companies(id, name, domain)')
       .eq('project_id', PROJECT_ID)
       .order('value_eur', { ascending: false, nullsFirst: false }),
   ])

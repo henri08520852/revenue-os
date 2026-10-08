@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { OPPORTUNITY_STAGES } from '@/lib/stages'
 import { setOpportunityStage } from './actions'
+import CloseDealDialog from '@/components/CloseDealDialog'
 
 const STAGES = OPPORTUNITY_STAGES
 type Stage = typeof STAGES[number]
@@ -31,6 +32,7 @@ export default function DealEditor({
   const [saved, setSaved] = useState(false)
   const [stageError, setStageError] = useState<string | null>(null)
   const [moving, setMoving] = useState(false)
+  const [closing, setClosing] = useState<'won' | 'lost' | null>(null)
   const isClosed = currentStage === 'won' || currentStage === 'lost'
   const router = useRouter()
   const supabase = createClient()
@@ -81,17 +83,18 @@ export default function DealEditor({
       </div>
       {!isClosed && (
         <div className="flex gap-2" style={{ marginTop: 8 }}>
-          <button onClick={() => moveStage('won')} disabled={moving}
+          <button onClick={() => setClosing('won')} disabled={moving}
             style={{ flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#15803d', borderRadius: 8, cursor: 'pointer' }}>
             ✓ Gewonnen
           </button>
-          <button onClick={() => moveStage('lost')} disabled={moving}
+          <button onClick={() => setClosing('lost')} disabled={moving}
             style={{ flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600, border: '1px solid #e5e7eb', background: 'white', color: '#6b7280', borderRadius: 8, cursor: 'pointer' }}>
             ✕ Verloren
           </button>
         </div>
       )}
       {stageError && <p style={{ fontSize: 11, color: '#dc2626', marginTop: 6 }}>{stageError}</p>}
+      {closing && <CloseDealDialog oppId={oppId} dealName={name || 'Deal'} stage={closing} onClose={() => setClosing(null)} onDone={() => router.refresh()} />}
 
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">Deal-Name</label>

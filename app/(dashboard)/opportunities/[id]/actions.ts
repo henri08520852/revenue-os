@@ -1,6 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { LOST_REASONS, WON_REASONS } from '@/lib/dealMeta'
 
 type Result = { error: string | null }
 
@@ -79,5 +80,30 @@ export async function setOpportunityOwner(oppId: string, ownerId: string | null)
   revalidatePath(`/opportunities/${oppId}`)
   revalidatePath('/pipeline')
   revalidatePath('/today')
+  return { error: null }
+}
+
+// Won / lost with a reason; the reason is also logged so it shows in the timeline and the AI context
+export async function closeDeal(oppId: string, input: { stage: 'won' | 'lost'; reason: string; competitor: string | null; note: string | null }): Promise<Result> {
+  if (!['won', 'lost'].includes(input.stage)) return { error: 'Ungültige Stage' }
+  const list: readonly { key: string; label: string }[] = input.stage === 'won' ? WON_REASONS : LOST_REASONS
+  const reason = list.find(r => r.key === input.reason)
+  if (!reason) return { error: 'Bitte einen Grund wählen' }
+  const competitor = input.competitor?.trim() || null
+  const note = input.note?.trim() || null
+  const supabase = createClient() as any
+  const { data: opp, error } = await supabase.from('opportunities')
+    .update({ stage: input.stage, close_reason: reason.key, close_competitor: competitor, close_note: note })
+    .eq('id', oppId).select('project_id, company_id').single()
+  if (error) return { error: error.message }
+  const { data: { user } } = await supabase.auth.getUser()
+  await supabase.from('activities').insert({
+    project_id: opp.project_id, company_id: opp.company_id, opportunity_id: oppId,
+    activity_type: 'note', direction: 'internal', channel: 'note', source: 'manual',
+    occurred_at: new Date().toISOString(), created_by: user?.email ?? null,
+    summary: `Deal ${input.stage === 'won' ? 'gewonnen' : 'verloren'}: ${reason.label}${competitor ? ` (${input.stage === 'won' ? 'gegen' : 'an'} ${competitor})` : ''}`,
+    extracted_intel: note ? { body: note } : {},
+  })
+  revalidatePath('/', 'layout')
   return { error: null }
 }

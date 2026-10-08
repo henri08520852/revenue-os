@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { loadTimeline, TimelineItem } from '@/lib/records'
 import { loadTasks } from '@/lib/tasks'
 import { OPPORTUNITY_STAGE_LABELS } from '@/lib/stages'
+import { QUALI_CRITERIA, closeReasonLabel } from '@/lib/dealMeta'
 
 export type AiTarget = { kind: 'contact' | 'company' | 'deal'; id: string }
 
@@ -96,6 +97,10 @@ export async function buildContext(target: AiTarget): Promise<{ title: string; t
     facts.push(`Deal: ${title}`, `Company: ${o.company?.name ?? '—'}`, `Stage: ${stage(o.stage)}`, `Wert: ${o.value_eur ? `${o.value_eur} €/Jahr` : '—'}`,
       `Angelegt: ${day(o.created_at)}`)
     if (o.notes) facts.push(`Notiz: ${o.notes}`)
+    if (o.close_reason) facts.push(`${o.stage === 'won' ? 'Gewonnen' : 'Verloren'} wegen: ${closeReasonLabel(o.stage, o.close_reason)}${o.close_competitor ? ` (Wettbewerber: ${o.close_competitor})` : ''}${o.close_note ? ` – ${o.close_note}` : ''}`)
+    const q = o.qualification || {}
+    const quali = QUALI_CRITERIA.filter(c => q[c.key]).map(c => `${c.label}: ${q[c.key].status === 'yes' ? 'bestätigt' : q[c.key].status === 'no' ? 'nein' : 'unklar'}${q[c.key].note ? ` (${q[c.key].note})` : ''}`)
+    if (quali.length) facts.push(`Qualifizierung: ${quali.join('; ')}`)
     for (const c of contacts || []) if (c.person) facts.push(`Buying Center: ${name(c.person)}${c.person.job_title ? `, ${c.person.job_title}` : ''} – ${c.role}`)
   }
 

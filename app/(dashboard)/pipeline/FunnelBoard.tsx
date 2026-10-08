@@ -8,6 +8,9 @@ import { dayKeyBerlin } from '@/lib/tz'
 import { updateOpportunityStage } from './actions'
 import { convertLeadAtStage, updateLeadStage } from '../leads/actions'
 import { Lead, LeadCard, Member, personName } from '../leads/LeadBoard'
+import CloseDealDialog from '@/components/CloseDealDialog'
+import QualificationCard from '@/components/QualificationCard'
+import { Qualification, qualiScore } from '@/lib/dealMeta'
 
 export type Show = 'all' | 'leads' | 'deals'
 
@@ -30,7 +33,7 @@ const DEAL_CLOSED: Col[] = [
   { key: 'lost', label: 'Verloren', color: '#9ca3af' },
 ]
 
-export type FunnelLead = Lead & { owner_name: string | null }
+export type FunnelLead = Lead & { owner_name: string | null; qualification?: Qualification | null }
 export type FunnelDeal = {
   id: string
   name: string | null
@@ -39,6 +42,7 @@ export type FunnelDeal = {
   owner_name: string | null
   next_step: string | null
   next_step_due_at: string | null
+  qualification?: Qualification | null
   companies: { id: string; name: string; domain?: string | null } | null
 }
 
@@ -49,6 +53,12 @@ const euro = (v: number) => `€${v.toLocaleString('de-DE')}`
 function OwnerBadge({ name }: { name: string | null }) {
   if (!name) return null
   return <span title={`Owner: ${name}`} style={{ fontSize: 10, fontWeight: 600, color: '#1d4ed8', background: '#eff6ff', borderRadius: 10, padding: '1px 6px', flexShrink: 0 }}>{name}</span>
+}
+
+function QualiBadge({ q }: { q?: Qualification | null }) {
+  const n = qualiScore(q)
+  if (!q || !Object.keys(q).length) return null
+  return <span title="Qualifizierung" style={{ fontSize: 10, fontWeight: 700, color: n >= 4 ? '#15803d' : n >= 2 ? '#a16207' : '#6b7280', background: n >= 4 ? '#dcfce7' : n >= 2 ? '#fef9c3' : '#f3f4f6', borderRadius: 10, padding: '1px 6px' }}>{n}/5</span>
 }
 
 function LeadMini({ lead }: { lead: FunnelLead }) {
@@ -65,6 +75,7 @@ function LeadMini({ lead }: { lead: FunnelLead }) {
       <p style={{ fontSize: 11, marginTop: 4, color: overdue ? '#dc2626' : '#9ca3af', fontWeight: overdue ? 600 : 400 }}>
         {lead.next_follow_up_at ? `${overdue ? '⚠ ' : '📅 '}Follow-up ${fmtDay(lead.next_follow_up_at)}` : lead.stage === 'disqualified' ? 'disqualifiziert' : 'kein Follow-up'}
       </p>
+      <div style={{ marginTop: 4 }}><QualiBadge q={lead.qualification} /></div>
     </div>
   )
 }
@@ -81,6 +92,7 @@ function DealMini({ deal }: { deal: FunnelDeal }) {
       {deal.value_eur ? <p style={{ fontSize: 12, color: '#6b7280', marginTop: 1 }}>{euro(deal.value_eur)}</p> : null}
       {deal.next_step && <p style={{ fontSize: 11, color: '#6b7280', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>→ {deal.next_step}</p>}
       {deal.next_step_due_at && <p style={{ fontSize: 11, marginTop: 2, color: overdue ? '#dc2626' : '#9ca3af', fontWeight: overdue ? 600 : 400 }}>{overdue ? '⚠ ' : ''}{fmtDay(deal.next_step_due_at)}</p>}
+      <div style={{ marginTop: 4 }}><QualiBadge q={deal.qualification} /></div>
     </div>
   )
 }
@@ -121,12 +133,16 @@ function Group({ label, color, children }: { label: string; color: string; child
 function LeadModal({ lead, team, onClose }: { lead: FunnelLead; team: Member[]; onClose: () => void }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#f9fafb', borderRadius: 16, width: '100%', maxWidth: 380, padding: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#f9fafb', borderRadius: 16, width: '100%', maxWidth: 400, padding: 16, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Lead</span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, color: '#9ca3af', cursor: 'pointer' }}>×</button>
         </div>
         <LeadCard lead={lead} focused={false} team={team} />
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '12px 14px', marginTop: 8 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Qualifizierung</p>
+          <QualificationCard kind="lead" id={lead.id} initial={lead.qualification ?? null} />
+        </div>
         <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>Aufgaben, E-Mails und Notizen zum Lead findest du auf der {lead.company ? <Link href={`/companies/${lead.company.id}`} style={{ color: '#2563eb', textDecoration: 'none' }}>Company-Seite</Link> : 'Company-Seite'}.</p>
       </div>
     </div>
@@ -191,6 +207,7 @@ export default function FunnelBoard({ leads: initialLeads, deals: initialDeals, 
   const [view, setView] = useState<'board' | 'list'>('board')
   const [activeId, setActiveId] = useState<string | null>(null)
   const [openLead, setOpenLead] = useState<FunnelLead | null>(null)
+  const [closing, setClosing] = useState<{ deal: FunnelDeal; stage: 'won' | 'lost' } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
@@ -220,6 +237,7 @@ export default function FunnelBoard({ leads: initialLeads, deals: initialDeals, 
       if (area !== 'deal') return
       const deal = deals.find(d => d.id === id)
       if (!deal || deal.stage === stage) return
+      if (stage === 'won' || stage === 'lost') { setClosing({ deal, stage }); return }
       setDeals(prev => prev.map(d => d.id === id ? { ...d, stage } : d))
       startTransition(async () => {
         try { await updateOpportunityStage(id, stage); router.refresh() }
@@ -309,6 +327,7 @@ export default function FunnelBoard({ leads: initialLeads, deals: initialDeals, 
           </DndContext>
         )}
 
+      {closing && <CloseDealDialog oppId={closing.deal.id} dealName={closing.deal.name || closing.deal.companies?.name || 'Deal'} stage={closing.stage} onClose={() => setClosing(null)} onDone={() => router.refresh()} />}
       {openLead && <LeadModal lead={openLead} team={team} onClose={() => setOpenLead(null)} />}
     </div>
   )
