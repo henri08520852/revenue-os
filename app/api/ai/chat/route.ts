@@ -8,7 +8,8 @@ import { AiTarget, buildContext } from '@/lib/ai/context'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
-const MODEL = 'claude-opus-5-5'
+// Summaries and Q&A over CRM data – the small model is plenty; override with AI_MODEL if needed
+const MODEL = process.env.AI_MODEL || 'claude-haiku-5-5'
 
 const SYSTEM = `Du bist der Vertriebs-Assistent im CRM „Revenue OS“ des Teams von Altoris (Produkt: HireFlow, Recruiting-Software).
 Du bekommst den vollständigen CRM-Kontext eines Kontakts, einer Company oder eines Deals: Stammdaten, Aufgaben und den Verlauf mit E-Mails, Notizen, Anrufen, Meetings und Deal-Änderungen.
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
   const history = (body?.messages || [])
     .filter(m => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
     .slice(-20)
-  const messages: Anthropic.Beta.BetaMessageParam[] = body?.briefing
+  const messages: Anthropic.MessageParam[] = body?.briefing
     ? [{ role: 'user', content: BRIEFING_PROMPT }]
     : history.map(m => ({ role: m.role, content: m.content }))
   if (!messages.length || messages[0].role !== 'user') return new Response('Keine Frage übermittelt', { status: 400 })
@@ -56,12 +57,10 @@ export async function POST(req: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        const run = client.beta.messages.stream({
+        const run = client.messages.stream({
           model: MODEL,
           max_tokens: 16000,
-          betas: ['server-side-fallback-2026-07-01'],
-          fallbacks: 'default',
-          output_config: { effort: 'medium' },
+          output_config: { effort: 'low' },
           system: [
             { type: 'text', text: SYSTEM },
             // The record context is identical for follow-up questions → cached (~10x cheaper)
