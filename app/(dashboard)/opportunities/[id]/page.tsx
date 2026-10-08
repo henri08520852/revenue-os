@@ -2,7 +2,9 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import DealEditor from './DealEditor'
-import { OPPORTUNITY_STAGES, OPPORTUNITY_STAGE_LABELS } from '@/lib/stages'
+import { ACTIVE_OPPORTUNITY_STAGES, OPPORTUNITY_STAGES, OPPORTUNITY_STAGE_LABELS } from '@/lib/stages'
+import DealContacts from './DealContacts'
+import DealNotes from './DealNotes'
 
 const STAGES = OPPORTUNITY_STAGES
 type Stage = typeof STAGES[number]
@@ -30,19 +32,21 @@ const ACTIVITY_ICONS: Record<string, string> = {
 export default async function DealPage({ params }: { params: { id: string } }) {
   const supabase = createClient()
 
-  const { data: opp, error } = await supabase
+  const { data: oppData, error } = await supabase
     .from('opportunities')
     .select('*, companies(id, name, domain, account_score, signal_score)')
     .eq('id', params.id)
     .single()
 
-  if (error || !opp) notFound()
+  if (error || !oppData) notFound()
+  const opp = oppData as any
 
   const company = (opp as any).companies
   const stage = opp.stage as Stage
-  const stageIdx = STAGES.indexOf(stage)
-  const prevStage = stageIdx > 0 ? STAGES[stageIdx - 1] : null
-  const nextStage = stageIdx < STAGES.length - 1 ? STAGES[stageIdx + 1] : null
+  // Prev/next walk the open stages only; won/lost have their own buttons in DealEditor
+  const activeIdx = ACTIVE_OPPORTUNITY_STAGES.indexOf(stage)
+  const prevStage = activeIdx > 0 ? ACTIVE_OPPORTUNITY_STAGES[activeIdx - 1] : null
+  const nextStage = activeIdx >= 0 && activeIdx < ACTIVE_OPPORTUNITY_STAGES.length - 1 ? ACTIVE_OPPORTUNITY_STAGES[activeIdx + 1] : null
 
   const { data: activities } = await supabase
     .from('activities')
@@ -50,6 +54,33 @@ export default async function DealPage({ params }: { params: { id: string } }) {
     .eq('company_id', company?.id)
     .order('occurred_at', { ascending: false })
     .limit(20)
+
+  const db = supabase as any
+  const [{ data: contacts }, { data: companyPeople }, { data: history }, { data: notes }] = await Promise.all([
+    db.from('opportunity_contacts')
+      .select('id, role, created_at, person:people(id, full_name, first_name, last_name, job_title, email)')
+      .eq('opportunity_id', opp.id)
+      .order('created_at', { ascending: true }),
+    company?.id
+      ? db.from('people')
+          .select('id, full_name, first_name, last_name, job_title, email')
+          .eq('company_id', company.id)
+          .order('last_name', { ascending: true })
+      : Promise.resolve({ data: [] }),
+    db.from('opportunity_stage_history')
+      .select('id, from_stage, to_stage, changed_at')
+      .eq('opportunity_id', opp.id)
+      .order('changed_at', { ascending: false }),
+    db.from('activities')
+      .select('id, summary, occurred_at, created_by')
+      .eq('opportunity_id', opp.id)
+      .eq('activity_type', 'note')
+      .order('occurred_at', { ascending: false }),
+  ])
+
+  // Deal notes have their own card — keep them out of the company timeline
+  const timeline = (activities || []).filter((a: any) => !(a.activity_type === 'note' && a.opportunity_id === opp.id))
+  const stageLabel = (s: string | null) => (s && (STAGE_LABELS as Record<string, string>)[s]) || s || '—'
 
   const now = new Date()
   const isOverdue = opp.next_step_due_at
@@ -131,18 +162,19 @@ export default async function DealPage({ params }: { params: { id: string } }) {
 
       <div className="grid grid-cols-3 gap-6">
         <div className="col-span-2">
+          <DealNotes oppId={opp.id} notes={notes || []} legacyNote={opp.notes || null} />
           <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
             <h2 className="text-sm font-semibold text-gray-700 mb-4">
               Aktivitaeten {company?.name && <span className="font-normal text-gray-400">({company.name})</span>}
               <span className="text-xs font-normal text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full ml-2">
-                {activities?.length || 0}
+                {timeline.length}
               </span>
             </h2>
-            {(!activities || activities.length === 0) && (
+            {timeline.length === 0 && (
               <p className="text-sm text-gray-400 py-8 text-center">Noch keine Aktivitaeten</p>
             )}
             <div className="space-y-3">
-              {(activities || []).map((act: any) => (
+              {timeline.map((act: any) => (
                 <div key={act.id} className="flex gap-3 py-2 border-b border-gray-50 last:border-0">
                   <div className="text-base shrink-0 pt-0.5">{ACTIVITY_ICONS[act.activity_type] || '•'}</div>
                   <div className="text-xs text-gray-400 w-14 shrink-0 pt-0.5">
@@ -173,6 +205,40 @@ export default async function DealPage({ params }: { params: { id: string } }) {
               stageLabels={STAGE_LABELS}
             />
           </div>
+          <DealContacts
+            oppId={opp.id}
+            companyId={company?.id ?? null}
+            contacts={contacts || []}
+            companyPeople={companyPeople || []}
+          />
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 12 }}>Stage-Verlauf</h3>
+            {!history?.length ? (
+              <p style={{ fontSize: 12, color: '#9ca3af' }}>Noch keine Stage-Wechsel erfasst</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {history.map((h: any, i: number) => {
+                  // history is newest first: time in this stage runs until the next (newer) change
+                  const until = i === 0 ? new Date().toISOString() : history[i - 1].changed_at
+                  const days = Math.max(0, Math.floor((new Date(until).getTime() - new Date(h.changed_at).getTime()) / 86400000))
+                  return (
+                    <div key={h.id} style={{ display: 'flex', gap: 10 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', marginTop: 5, flexShrink: 0, background: i === 0 ? '#2563eb' : '#d1d5db' }} />
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontSize: 12, color: '#111827' }}>
+                          {h.from_stage ? <>{stageLabel(h.from_stage)} → <b>{stageLabel(h.to_stage)}</b></> : <>Angelegt in <b>{stageLabel(h.to_stage)}</b></>}
+                        </p>
+                        <p style={{ fontSize: 11, color: '#9ca3af' }}>
+                          {new Date(h.changed_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                          {' · '}{i === 0 ? `seit ${days} Tagen` : `${days} Tage`}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
           <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Details</h3>
             <dl className="space-y-2 text-sm">
@@ -182,11 +248,11 @@ export default async function DealPage({ params }: { params: { id: string } }) {
                   {new Date(opp.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })}
                 </dd>
               </div>
-              {opp.closed_at && (
+              {(opp.won_at || opp.lost_at) && (
                 <div className="flex justify-between">
                   <dt className="text-gray-400">Abgeschlossen</dt>
                   <dd className="text-gray-700">
-                    {new Date(opp.closed_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                    {new Date(opp.won_at || opp.lost_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })}
                   </dd>
                 </div>
               )}

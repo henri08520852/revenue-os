@@ -5,7 +5,7 @@ export type Json = string | number | boolean | null | { [key: string]: Json } | 
 
 export type AccountStatus = 'target' | 'warm' | 'hot' | 'active_deal' | 'customer' | 'inactive'
 export type LeadStage = 'outreach' | 'contacted' | 'qualified' | 'converted' | 'disqualified'
-export type OpportunityContactRole = 'primary' | 'stakeholder' | 'economic_buyer' | 'champion' | 'blocker'
+export type OpportunityContactRole = 'champion' | 'decision_maker' | 'economic_buyer' | 'stakeholder' | 'primary' | 'blocker'
 export type OpportunityStage = 'discovery' | 'erstgespraech' | 'evaluation' | 'proposal' | 'negotiation' | 'won' | 'lost'
 export type ActivityType = 'email' | 'call' | 'meeting' | 'linkedin_comment' | 'linkedin_message' | 'linkedin_connection' | 'whatsapp' | 'intro' | 'note' | 'proposal' | 'event_meeting' | 'manual_research' | 'voice_note'
 export type ActionType = 'ask_intro' | 'call' | 'send_email' | 'send_whatsapp' | 'linkedin_comment' | 'linkedin_connect' | 'linkedin_message' | 'attend_event' | 'research_buyer' | 'research_company' | 'prepare_meeting' | 'follow_up' | 'send_proposal' | 'review_pilot' | 'ask_referral' | 'wait'
@@ -153,6 +153,19 @@ export interface Database {
         }
         Insert: { id?: string; opportunity_id: string; person_id: string; role?: OpportunityContactRole }
         Update: Partial<Database['public']['Tables']['opportunity_contacts']['Insert']>
+      }
+      opportunity_stage_history: {
+        Row: {
+          id: string
+          opportunity_id: string
+          project_id: string
+          from_stage: OpportunityStage | null
+          to_stage: OpportunityStage
+          changed_at: string
+          changed_by: string | null
+        }
+        Insert: Omit<Database['public']['Tables']['opportunity_stage_history']['Row'], 'id' | 'changed_at' | 'changed_by'> & { id?: string; changed_at?: string; changed_by?: string | null }
+        Update: Partial<Database['public']['Tables']['opportunity_stage_history']['Insert']>
       }
       activities: {
         Row: {
