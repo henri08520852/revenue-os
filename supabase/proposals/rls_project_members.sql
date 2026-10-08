@@ -68,7 +68,7 @@ declare
   project_tables text[] := array[
     'actions','activities','candidate_companies','companies','connector_runs',
     'discovery_searches','jobs','leads','observations','opportunities',
-    'people','relationships','signals','source_subscriptions'
+    'opportunity_stage_history','people','relationships','signals','source_subscriptions'
   ];
 begin
   foreach t in array project_tables loop
@@ -129,7 +129,7 @@ revoke all on project_members from anon;
 --   foreach t in array array[
 --     'actions','activities','candidate_companies','companies','connector_runs',
 --     'discovery_searches','jobs','leads','observations','opportunities',
---     'people','relationships','signals','source_subscriptions',
+--     'opportunity_stage_history','people','relationships','signals','source_subscriptions',
 --     'projects','opportunity_contacts','data_sources','project_members'
 --   ] loop
 --     execute format('alter table %I disable row level security', t);
