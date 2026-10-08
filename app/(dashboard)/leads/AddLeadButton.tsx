@@ -8,9 +8,16 @@ type Person = { id: string; company_id: string | null; full_name: string | null;
 
 const EMPTY = { companyId: '', personId: '', name: '', nextFollowUp: '', notes: '' }
 
-export default function AddLeadButton({ companies, people }: { companies: Company[]; people: Person[] }) {
+export default function AddLeadButton({ companies, people, fixedCompanyId, variant = 'primary' }: {
+  companies: Company[]
+  people: Person[]
+  // Company page: company is preselected and the picker hidden
+  fixedCompanyId?: string
+  variant?: 'primary' | 'secondary'
+}) {
+  const initial = { ...EMPTY, companyId: fixedCompanyId ?? '' }
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState(EMPTY)
+  const [form, setForm] = useState(initial)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
@@ -18,7 +25,7 @@ export default function AddLeadButton({ companies, people }: { companies: Compan
 
   function close() {
     setOpen(false)
-    setForm(EMPTY)
+    setForm(initial)
     setError(null)
   }
 
@@ -50,9 +57,12 @@ export default function AddLeadButton({ companies, people }: { companies: Compan
 
   return (
     <>
-      <button onClick={() => setOpen(true)} style={{
+      <button onClick={() => setOpen(true)} style={variant === 'primary' ? {
         display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13, fontWeight: 500,
         background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer',
+      } : {
+        display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 14, fontWeight: 500,
+        background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 8, cursor: 'pointer',
       }}>
         + Lead
       </button>
@@ -66,7 +76,7 @@ export default function AddLeadButton({ companies, people }: { companies: Compan
             </div>
 
             <form id="add-lead-form" onSubmit={submit} style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div>
+              {!fixedCompanyId && <div>
                 <label style={labelStyle}>Company *</label>
                 <select value={form.companyId} required
                   onChange={e => setForm(f => ({ ...f, companyId: e.target.value, personId: '' }))}
@@ -74,7 +84,7 @@ export default function AddLeadButton({ companies, people }: { companies: Compan
                   <option value="">— wählen —</option>
                   {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
-              </div>
+              </div>}
 
               <div>
                 <label style={labelStyle}>Ansprechpartner (optional)</label>

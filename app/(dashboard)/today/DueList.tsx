@@ -41,7 +41,7 @@ export function groupDue(items: DueItem[], now = new Date()) {
 const KIND_META: Record<DueItem['kind'], { label: string; color: string }> = {
   lead:    { label: 'LEAD',    color: '#7c3aed' },
   deal:    { label: 'DEAL',    color: '#16a34a' },
-  company: { label: 'COMPANY', color: '#2563eb' },
+  company: { label: 'ERINNERUNG', color: '#2563eb' },
 }
 
 const GROUPS = [

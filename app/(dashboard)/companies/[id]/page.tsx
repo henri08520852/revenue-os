@@ -7,6 +7,8 @@ import AddContactButton from './AddContactButton'
 import AddDealButton from './AddDealButton'
 import QuickNoteButton from './QuickNoteButton'
 import FollowUpButton from './FollowUpButton'
+import AddLeadButton from '../../leads/AddLeadButton'
+import { OPPORTUNITY_STAGE_LABELS } from '@/lib/stages'
 
 const SIGNAL_LABELS: Record<string, { label: string; icon: string; color: string }> = {
   news_funding:    { label: 'Funding',            icon: '💰', color: '#10b981' },
@@ -24,6 +26,13 @@ const ACTIVITY_ICONS: Record<string, string> = {
   call: '📞', email: '✉️', linkedin: '💼', meeting: '🤝', note: '📝',
 }
 
+const LEAD_STAGE_LABELS: Record<string, string> = {
+  outreach: 'Outreach', contacted: 'Kontaktiert', qualified: 'Qualifiziert',
+  converted: 'Umgewandelt', disqualified: 'Disqualifiziert',
+}
+
+const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })
+
 const BUYER_ROLE_LABELS: Record<string, string> = {
   economic_buyer: '💰 Budget', champion: '⭐ Champion',
   influencer: '💡 Influencer', user: '👤 Nutzer', blocker: '🚧 Blocker',
@@ -40,6 +49,15 @@ export default async function CompanyPage({ params }: { params: { id: string } }
     supabase.from('activities').select('*, people(first_name, last_name)').eq('company_id', params.id).order('occurred_at', { ascending: false }).limit(20),
     supabase.from('people').select('*').eq('company_id', params.id).order('created_at', { ascending: false }),
   ])
+
+  const db = supabase as any
+  const [{ data: leadsData }, { data: dealsData }] = await Promise.all([
+    db.from('leads').select('id, name, stage, next_follow_up_at, converted_to_opportunity_id').eq('company_id', params.id).order('created_at', { ascending: false }),
+    db.from('opportunities').select('id, name, stage, value_eur, next_step, next_step_due_at').eq('company_id', params.id).order('created_at', { ascending: false }),
+  ])
+  // Converted leads are represented by their deal
+  const leads = (leadsData || []).filter((l: any) => l.stage !== 'converted')
+  const deals = dealsData || []
 
   if (companyRes.error || !companyRes.data) notFound()
 
@@ -87,15 +105,25 @@ export default async function CompanyPage({ params }: { params: { id: string } }
             ))}
           </div>
         </div>
-        {projectId && (
+        {projectId && (<>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
-            <LogActivityButton companyId={company.id} projectId={projectId} />
-            <AddContactButton companyId={company.id} projectId={projectId} />
+            <AddLeadButton
+              companies={[{ id: company.id, name: company.name }]}
+              people={people.map((p: any) => ({ id: p.id, company_id: p.company_id, full_name: p.full_name, first_name: p.first_name, last_name: p.last_name, job_title: p.job_title }))}
+              fixedCompanyId={company.id}
+              variant="secondary"
+            />
             <AddDealButton companyId={company.id} companyName={company.name} projectId={projectId} />
+            <span style={{ width: 1, height: 24, background: '#e5e7eb', margin: '0 4px' }} />
+            <AddContactButton companyId={company.id} projectId={projectId} />
+            <LogActivityButton companyId={company.id} projectId={projectId} />
             <QuickNoteButton companyId={company.id} projectId={projectId} />
             <FollowUpButton companyId={company.id} projectId={projectId} currentFollowUp={(metrics.next_follow_up_at as string) || null} />
           </div>
-        )}
+          {metrics.next_follow_up_at && metrics.follow_up_note && (
+            <p style={{ fontSize: 12, color: '#6b7280', marginTop: 10 }}>⏰ Erinnerung: {metrics.follow_up_note}</p>
+          )}
+        </>)}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20 }}>
@@ -181,6 +209,46 @@ export default async function CompanyPage({ params }: { params: { id: string } }
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: '#374151', margin: '0 0 12px' }}>Vertrieb</p>
+            {leads.length === 0 && deals.length === 0 ? (
+              <p style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.5 }}>
+                Noch kein Lead oder Deal. Starte mit <b style={{ color: '#1d4ed8' }}>+ Lead</b>, sobald du die Company ansprichst.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {deals.map((d: any) => {
+                  const closed = d.stage === 'won' || d.stage === 'lost'
+                  return (
+                    <Link key={d.id} href={`/opportunities/${d.id}`} style={{ display: 'block', padding: '10px 12px', borderRadius: 10, textDecoration: 'none', background: d.stage === 'won' ? '#f0fdf4' : closed ? '#f9fafb' : '#eff6ff', border: '1px solid ' + (d.stage === 'won' ? '#bbf7d0' : closed ? '#f3f4f6' : '#bfdbfe') }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#16a34a' }}>DEAL</span>
+                        <span style={{ fontSize: 11, color: '#6b7280' }}>{(OPPORTUNITY_STAGE_LABELS as Record<string, string>)[d.stage] || d.stage}</span>
+                      </div>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: '#111827', margin: '2px 0 0' }}>{d.name || 'Deal'}</p>
+                      {d.value_eur ? <p style={{ fontSize: 12, color: '#374151', margin: '2px 0 0' }}>{Number(d.value_eur).toLocaleString('de-DE')} €</p> : null}
+                      {!closed && d.next_step && (
+                        <p style={{ fontSize: 11, color: '#1d4ed8', margin: '4px 0 0' }}>→ {d.next_step}{d.next_step_due_at ? ` · ${fmtDate(d.next_step_due_at)}` : ''}</p>
+                      )}
+                    </Link>
+                  )
+                })}
+                {leads.map((l: any) => (
+                  <Link key={l.id} href={`/leads?focus=${l.id}`} style={{ display: 'block', padding: '10px 12px', borderRadius: 10, textDecoration: 'none', background: l.stage === 'disqualified' ? '#f9fafb' : '#f5f3ff', border: '1px solid ' + (l.stage === 'disqualified' ? '#f3f4f6' : '#ddd6fe') }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#7c3aed' }}>LEAD</span>
+                      <span style={{ fontSize: 11, color: '#6b7280' }}>{LEAD_STAGE_LABELS[l.stage] || l.stage}</span>
+                    </div>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#111827', margin: '2px 0 0' }}>{l.name || company.name}</p>
+                    {l.next_follow_up_at && l.stage !== 'disqualified' && (
+                      <p style={{ fontSize: 11, color: '#6d28d9', margin: '4px 0 0' }}>Follow-up · {fmtDate(l.next_follow_up_at)}</p>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
             <p style={{ fontSize: 13, fontWeight: 600, color: '#374151', margin: '0 0 12px' }}>Job-Metriken</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

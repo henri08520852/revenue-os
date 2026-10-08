@@ -69,7 +69,7 @@ export default async function TodayPage() {
       id: c.id,
       href: `/companies/${c.id}`,
       title: c.name,
-      subtitle: c.current_metrics?.follow_up_note || 'Follow-up',
+      subtitle: c.current_metrics?.follow_up_note || 'Erinnerung',
       dueAt: c.current_metrics?.next_follow_up_at,
     })),
     ...(dueLeads || []).map((l: any) => {

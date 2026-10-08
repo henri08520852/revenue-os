@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import LeadBoard from './LeadBoard'
 import AddLeadButton from './AddLeadButton'
@@ -35,7 +36,8 @@ export default async function LeadsPage({ searchParams }: { searchParams: { focu
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: '#111827' }}>Leads</h1>
           <p style={{ fontSize: 13, color: '#9ca3af', marginTop: 4 }}>
-            {open} offen · {converted} in Deals umgewandelt
+            {open} offen · {converted} in Deals umgewandelt ·{' '}
+            <Link href="/guide#leads" style={{ color: '#2563eb', textDecoration: 'none' }}>Wie funktionieren Leads?</Link>
           </p>
         </div>
         <AddLeadButton companies={companies || []} people={people || []} />

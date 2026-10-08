@@ -35,7 +35,7 @@ export default function StatusBadge({ status, companyId }: { status: string; com
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className={`px-3 py-1 rounded-full text-xs font-medium ${COLORS[current] || COLORS.target} cursor-pointer hover:opacity-80 transition-opacity`}
+        className={`capitalize px-3 py-1 rounded-full text-xs font-medium ${COLORS[current] || COLORS.target} cursor-pointer hover:opacity-80 transition-opacity`}
       >
         {current.replace('_', ' ')} ▾
       </button>

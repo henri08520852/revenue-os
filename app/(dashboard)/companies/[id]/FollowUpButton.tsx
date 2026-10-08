@@ -40,8 +40,8 @@ export default function FollowUpButton({ companyId, currentFollowUp }: Props) {
       ? `⏰ Überfällig: ${formatDate(currentFollowUp)}`
       : isDueToday
         ? '⏰ Heute fällig'
-        : `🗓 ${formatDate(currentFollowUp)}`
-    : '🗓 Follow-up'
+        : `⏰ ${formatDate(currentFollowUp)}`
+    : '⏰ Erinnerung'
 
   const btnStyle = isOverdue
     ? 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
@@ -63,7 +63,7 @@ export default function FollowUpButton({ companyId, currentFollowUp }: Props) {
       <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
       <div className="absolute left-0 top-full mt-2 z-20 w-72 p-3 bg-white border border-gray-200 rounded-xl shadow-lg">
       <div className="space-y-2">
-        <label className="block text-xs font-medium text-gray-500">Follow-up am</label>
+        <label className="block text-xs font-medium text-gray-500">Erinnerung am</label>
         <input
           type="date"
           value={date}
@@ -74,7 +74,7 @@ export default function FollowUpButton({ companyId, currentFollowUp }: Props) {
           type="text"
           value={note}
           onChange={e => setNote(e.target.value)}
-          placeholder="Kontext (optional)"
+          placeholder="Worum geht's? (optional)"
           className="block w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>

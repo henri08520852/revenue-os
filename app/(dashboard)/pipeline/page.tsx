@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import PipelineClient from './PipelineClient'
 import { ACTIVE_OPPORTUNITY_STAGES } from '@/lib/stages'
@@ -30,7 +31,10 @@ export default async function PipelinePage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Pipeline</h1>
-            <p className="text-gray-400 text-sm mt-1">{allOpps.length} Deals gesamt</p>
+            <p className="text-gray-400 text-sm mt-1">
+              {allOpps.length} Deals gesamt ·{' '}
+              <Link href="/guide#deals" className="text-blue-600 hover:text-blue-800">Was bedeuten die Stages?</Link>
+            </p>
           </div>
           <div className="flex gap-6 text-right">
             <div>

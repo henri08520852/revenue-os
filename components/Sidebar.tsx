@@ -11,6 +11,7 @@ import {
   BoltIcon,
   SparklesIcon,
   FunnelIcon,
+  QuestionMarkCircleIcon,
 } from '@heroicons/react/24/outline'
 
 const nav = [
@@ -49,6 +50,10 @@ export default function Sidebar() {
         })}
       </nav>
       <div style={{ padding: '12px', borderTop: '1px solid #f3f4f6' }}>
+        <Link href="/guide" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 8, fontSize: 14, fontWeight: 500, textDecoration: 'none', background: path === '/guide' ? '#eff6ff' : 'transparent', color: path === '/guide' ? '#1d4ed8' : '#6b7280' }}>
+          <QuestionMarkCircleIcon style={{ ...iconStyle, color: path === '/guide' ? '#2563eb' : '#9ca3af' }} />
+          So funktioniert&apos;s
+        </Link>
         <Link href="/settings" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 8, fontSize: 14, fontWeight: 500, color: '#6b7280', textDecoration: 'none' }}>
           <Cog6ToothIcon style={{ ...iconStyle, color: '#9ca3af' }} />
           Einstellungen
