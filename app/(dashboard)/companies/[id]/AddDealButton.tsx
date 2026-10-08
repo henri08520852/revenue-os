@@ -10,6 +10,14 @@ interface Props {
   projectId: string
 }
 
+const STAGES = [
+  { value: 'discovery',     label: 'Discovery',     color: '#6b7280' },
+  { value: 'erstgespraech', label: 'Erstgespräch',  color: '#3b82f6' },
+  { value: 'evaluation',    label: 'Evaluation',    color: '#8b5cf6' },
+  { value: 'proposal',      label: 'Proposal',      color: '#f59e0b' },
+  { value: 'negotiation',   label: 'Verhandlung',   color: '#ef4444' },
+]
+
 export default function AddDealButton({ companyId, companyName, projectId }: Props) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -48,61 +56,69 @@ export default function AddDealButton({ companyId, companyName, projectId }: Pro
     }
   }
 
-  const STAGES = [
-    { value: 'discovery',     label: 'Discovery' },
-    { value: 'erstgespraech', label: 'Erstgespräch' },
-    { value: 'evaluation',    label: 'Evaluation' },
-    { value: 'proposal',      label: 'Proposal' },
-    { value: 'negotiation',   label: 'Verhandlung' },
-  ]
+  const inputStyle = {
+    width: '100%',
+    padding: '9px 12px',
+    border: '1px solid #e5e7eb',
+    borderRadius: 8,
+    fontSize: 13,
+    color: '#111827',
+    background: 'white',
+    outline: 'none',
+    boxSizing: 'border-box' as const,
+  }
+
+  const labelStyle = {
+    display: 'block',
+    fontSize: 11,
+    fontWeight: 600,
+    color: '#9ca3af',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    marginBottom: 6,
+  }
 
   return (
     <>
       <button
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all shadow-sm"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '7px 14px', fontSize: 13, fontWeight: 500,
+          background: '#16a34a', color: 'white', border: 'none',
+          borderRadius: 8, cursor: 'pointer',
+        }}
       >
         💼 Deal anlegen
       </button>
 
       {open && (
         <div
-          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '16px' }}
+          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16 }}
           onClick={() => setOpen(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
+            style={{ background: 'white', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', width: '100%', maxWidth: 460 }}
             onClick={e => e.stopPropagation()}
           >
-            <div className="px-6 py-4 border-b border-gray-100">
-              <h2 className="text-base font-semibold text-gray-900">Deal anlegen</h2>
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h2 style={{ fontSize: 15, fontWeight: 700, color: '#111827', margin: 0 }}>💼 Deal anlegen</h2>
+              <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', fontSize: 18, color: '#9ca3af', cursor: 'pointer', padding: 0, lineHeight: 1 }}>×</button>
             </div>
 
-            <form onSubmit={submit} className="px-6 py-4 space-y-4">
+            <form onSubmit={submit} style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">Deal-Name</label>
-                <input
-                  value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  required
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                />
+                <label style={labelStyle}>Deal-Name</label>
+                <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required style={inputStyle} />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">Stage</label>
-                <div className="flex gap-2 flex-wrap">
+                <label style={labelStyle}>Stage</label>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {STAGES.map(s => (
-                    <button
-                      key={s.value}
-                      type="button"
-                      onClick={() => setForm(f => ({ ...f, stage: s.value as any }))}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
-                        form.stage === s.value
-                          ? 'bg-gray-900 text-white border-gray-900'
-                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
+                    <button key={s.value} type="button" onClick={() => setForm(f => ({ ...f, stage: s.value as any }))}
+                      style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: 'pointer', border: '1.5px solid', borderColor: form.stage === s.value ? s.color : '#e5e7eb', background: form.stage === s.value ? s.color : 'white', color: form.stage === s.value ? 'white' : '#6b7280' }}>
                       {s.label}
                     </button>
                   ))}
@@ -110,55 +126,33 @@ export default function AddDealButton({ companyId, companyName, projectId }: Pro
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">Potenzial (€/Jahr, optional)</label>
-                <input
-                  type="number"
-                  value={form.value}
-                  onChange={e => setForm(f => ({ ...f, value: e.target.value }))}
-                  placeholder="5000"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                />
+                <label style={labelStyle}>Potenzial (€/Jahr)</label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: '#9ca3af' }}>€</span>
+                  <input type="number" value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))} placeholder="5.000" style={{ ...inputStyle, paddingLeft: 24 }} />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">Nächster Schritt</label>
-                <input
-                  value={form.nextStep}
-                  onChange={e => setForm(f => ({ ...f, nextStep: e.target.value }))}
-                  placeholder="Demo vereinbaren"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">Fällig am</label>
-                <input
-                  type="date"
-                  value={form.nextStepDate}
-                  onChange={e => setForm(f => ({ ...f, nextStepDate: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10 }}>
+                <div>
+                  <label style={labelStyle}>Nächster Schritt</label>
+                  <input value={form.nextStep} onChange={e => setForm(f => ({ ...f, nextStep: e.target.value }))} placeholder="Demo vereinbaren" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Fällig am</label>
+                  <input type="date" value={form.nextStepDate} onChange={e => setForm(f => ({ ...f, nextStepDate: e.target.value }))} style={{ ...inputStyle, width: 'auto' }} />
+                </div>
               </div>
 
               {error && (
-                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+                <p style={{ fontSize: 12, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 12px', margin: 0 }}>{error}</p>
               )}
             </form>
 
-            <div className="px-6 py-4 border-t border-gray-100 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Abbrechen
-              </button>
-              <button
-                onClick={submit}
-                disabled={loading}
-                className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-40 transition-colors"
-              >
-                {loading ? 'Speichern…' : 'Deal anlegen'}
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #f3f4f6', display: 'flex', gap: 10 }}>
+              <button type="button" onClick={() => setOpen(false)} style={{ flex: 1, padding: '9px 0', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, color: '#6b7280', background: 'white', cursor: 'pointer' }}>Abbrechen</button>
+              <button onClick={submit} disabled={loading} style={{ flex: 1, padding: '9px 0', background: loading ? '#9ca3af' : '#16a34a', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: loading ? 'default' : 'pointer' }}>
+                {loading ? 'Speichern…' : '💼 Deal anlegen'}
               </button>
             </div>
           </div>
