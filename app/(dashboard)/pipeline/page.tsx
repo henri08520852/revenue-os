@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import PipelineClient from './PipelineClient'
+import { getTeamContext, memberName } from '@/lib/team'
 import { ACTIVE_OPPORTUNITY_STAGES } from '@/lib/stages'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
@@ -16,7 +17,8 @@ export default async function PipelinePage() {
     .eq('project_id', PROJECT_ID)
     .order('value_eur', { ascending: false })
 
-  const allOpps = opps || []
+  const { team } = await getTeamContext()
+  const allOpps = ((opps || []) as any[]).map(o => ({ ...o, owner_name: memberName(team, o.owner_id) }))
   const pipelineTotal = allOpps
     .filter(o => ACTIVE_STAGES.includes(o.stage))
     .reduce((s, o) => s + (o.value_eur || 0), 0)

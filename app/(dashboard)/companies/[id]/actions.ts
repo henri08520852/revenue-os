@@ -31,8 +31,14 @@ export async function addCompanyNote(companyId: string, text: string): Promise<R
 }
 
 // Company follow-ups live in companies.current_metrics (next_follow_up_at / follow_up_note)
-async function updateFollowUp(companyId: string, patch: { next_follow_up_at: string | null; follow_up_note: string | null }): Promise<Result> {
+async function updateFollowUp(companyId: string, patch: { next_follow_up_at: string | null; follow_up_note: string | null; follow_up_owner_id?: string | null }): Promise<Result> {
   const supabase = createClient() as any
+  if (patch.next_follow_up_at) {
+    const { data: { user } } = await supabase.auth.getUser()
+    patch.follow_up_owner_id = user?.id ?? null
+  } else {
+    patch.follow_up_owner_id = null
+  }
   const { data: company, error: cErr } = await supabase
     .from('companies').select('current_metrics').eq('id', companyId).single()
   if (cErr || !company) return { error: cErr?.message || 'Company nicht gefunden' }

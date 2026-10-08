@@ -6,16 +6,18 @@ import { createLead } from './actions'
 type Company = { id: string; name: string }
 type Person = { id: string; company_id: string | null; full_name: string | null; first_name: string | null; last_name: string | null; job_title: string | null }
 
-const EMPTY = { companyId: '', personId: '', name: '', nextFollowUp: '', notes: '' }
+const EMPTY = { companyId: '', personId: '', name: '', nextFollowUp: '', notes: '', ownerId: '' }
 
-export default function AddLeadButton({ companies, people, fixedCompanyId, variant = 'primary' }: {
+export default function AddLeadButton({ companies, people, fixedCompanyId, variant = 'primary', team = [], currentUserId = null }: {
   companies: Company[]
   people: Person[]
   // Company page: company is preselected and the picker hidden
   fixedCompanyId?: string
   variant?: 'primary' | 'secondary'
+  team?: { user_id: string; display_name: string }[]
+  currentUserId?: string | null
 }) {
-  const initial = { ...EMPTY, companyId: fixedCompanyId ?? '' }
+  const initial = { ...EMPTY, companyId: fixedCompanyId ?? '', ownerId: currentUserId ?? '' }
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(initial)
   const [error, setError] = useState<string | null>(null)
@@ -40,6 +42,7 @@ export default function AddLeadButton({ companies, people, fixedCompanyId, varia
         name: form.name.trim() || null,
         nextFollowUp: form.nextFollowUp || null,
         notes: form.notes.trim() || null,
+        ownerId: form.ownerId || null,
       })
       if (res.error) setError(res.error)
       else close()
@@ -105,9 +108,20 @@ export default function AddLeadButton({ companies, people, fixedCompanyId, varia
                 <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="z.B. Recruiting Q1" style={inputStyle} />
               </div>
 
-              <div>
-                <label style={labelStyle}>Follow-up am</label>
-                <input type="date" value={form.nextFollowUp} onChange={e => setForm(f => ({ ...f, nextFollowUp: e.target.value }))} style={{ ...inputStyle, width: 'auto' }} />
+              <div style={{ display: 'grid', gridTemplateColumns: team.length ? '1fr 1fr' : '1fr', gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>Follow-up am</label>
+                  <input type="date" value={form.nextFollowUp} onChange={e => setForm(f => ({ ...f, nextFollowUp: e.target.value }))} style={inputStyle} />
+                </div>
+                {team.length > 0 && (
+                  <div>
+                    <label style={labelStyle}>Owner</label>
+                    <select value={form.ownerId} onChange={e => setForm(f => ({ ...f, ownerId: e.target.value }))} style={inputStyle}>
+                      <option value="">— niemand —</option>
+                      {team.map(m => <option key={m.user_id} value={m.user_id}>{m.display_name}{m.user_id === currentUserId ? ' (du)' : ''}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div>

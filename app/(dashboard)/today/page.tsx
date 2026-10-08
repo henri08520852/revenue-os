@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import TriggerQueueButton from './TriggerQueueButton'
 import ActionCard from './ActionCard'
 import DueList, { DueItem } from './DueList'
+import { getTeamContext, memberName } from '@/lib/team'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
 
@@ -13,8 +14,10 @@ const PRIORITY_LABELS: Record<number, { label: string; color: string }> = {
   5: { label: 'Optional', color: 'bg-gray-100 text-gray-500' },
 }
 
-export default async function TodayPage() {
+export default async function TodayPage({ searchParams }: { searchParams: { mine?: string } }) {
   const supabase = createClient()
+  const { me, team } = await getTeamContext()
+  const mineOnly = searchParams.mine === '1' && !!me
 
   const { data: actions } = await supabase
     .from('actions')
@@ -36,7 +39,7 @@ export default async function TodayPage() {
 
   const { data: dueLeads } = await (supabase as any)
     .from('leads')
-    .select('id, name, next_follow_up_at, company:companies(name), person:people(full_name, first_name, last_name)')
+    .select('id, name, owner_id, next_follow_up_at, company:companies(name), person:people(full_name, first_name, last_name)')
     .eq('project_id', PROJECT_ID)
     .not('next_follow_up_at', 'is', null)
     .not('stage', 'in', '(converted,disqualified)')
@@ -46,7 +49,7 @@ export default async function TodayPage() {
 
   const { data: dueDeals } = await (supabase as any)
     .from('opportunities')
-    .select('id, name, next_step, next_step_due_at, company:companies(name)')
+    .select('id, name, owner_id, next_step, next_step_due_at, company:companies(name)')
     .eq('project_id', PROJECT_ID)
     .not('next_step_due_at', 'is', null)
     .not('stage', 'in', '(won,lost)')
@@ -63,7 +66,7 @@ export default async function TodayPage() {
     .lte('current_metrics->>next_follow_up_at', dueUntil)
     .limit(100)
 
-  const dueItems: DueItem[] = [
+  const allDue: (DueItem & { ownerId: string | null })[] = [
     ...(dueCompanies || []).map((c: any) => ({
       kind: 'company' as const,
       id: c.id,
@@ -71,6 +74,8 @@ export default async function TodayPage() {
       title: c.name,
       subtitle: c.current_metrics?.follow_up_note || 'Erinnerung',
       dueAt: c.current_metrics?.next_follow_up_at,
+      ownerId: c.current_metrics?.follow_up_owner_id ?? null,
+      owner: memberName(team, c.current_metrics?.follow_up_owner_id),
     })),
     ...(dueLeads || []).map((l: any) => {
       const person = l.person && (l.person.full_name || [l.person.first_name, l.person.last_name].filter(Boolean).join(' '))
@@ -81,6 +86,8 @@ export default async function TodayPage() {
         title: l.company?.name || l.name || 'Lead',
         subtitle: [person, l.name].filter(Boolean).join(' · ') || 'Follow-up',
         dueAt: l.next_follow_up_at,
+        ownerId: l.owner_id ?? null,
+        owner: memberName(team, l.owner_id),
       }
     }),
     ...(dueDeals || []).map((o: any) => ({
@@ -90,8 +97,11 @@ export default async function TodayPage() {
       title: o.name || o.company?.name || 'Deal',
       subtitle: o.next_step || o.company?.name || null,
       dueAt: o.next_step_due_at,
+      ownerId: o.owner_id ?? null,
+      owner: memberName(team, o.owner_id),
     })),
   ]
+  const dueItems = mineOnly ? allDue.filter(i => i.ownerId === me!.user_id) : allDue
 
   const today = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })
 
@@ -119,7 +129,7 @@ export default async function TodayPage() {
         ))}
       </div>
 
-      <DueList items={dueItems} />
+      <DueList items={dueItems} mineOnly={mineOnly} showToggle={team.length > 0} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24 }}>
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24 }}>

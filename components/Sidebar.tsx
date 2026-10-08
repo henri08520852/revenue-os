@@ -25,7 +25,7 @@ const nav = [
 
 const iconStyle = { width: 16, height: 16, flexShrink: 0 }
 
-export default function Sidebar() {
+export default function Sidebar({ userName, userEmail }: { userName: string | null; userEmail: string | null }) {
   const path = usePathname()
   return (
     <aside style={{ width: 240, minHeight: '100vh', background: '#fff', borderRight: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column' }}>
@@ -54,14 +54,21 @@ export default function Sidebar() {
           <QuestionMarkCircleIcon style={{ ...iconStyle, color: path === '/guide' ? '#2563eb' : '#9ca3af' }} />
           So funktioniert&apos;s
         </Link>
-        <Link href="/settings" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 8, fontSize: 14, fontWeight: 500, color: '#6b7280', textDecoration: 'none' }}>
+        <Link href="/settings" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 8, fontSize: 14, fontWeight: 500, textDecoration: 'none', background: path === '/settings' ? '#eff6ff' : 'transparent', color: path === '/settings' ? '#1d4ed8' : '#6b7280' }}>
           <Cog6ToothIcon style={{ ...iconStyle, color: '#9ca3af' }} />
           Einstellungen
         </Link>
-        <div style={{ marginTop: 12, paddingLeft: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981' }}></div>
-          <span style={{ fontSize: 12, color: '#9ca3af' }}>Supabase verbunden</span>
-        </div>
+        {userName && (
+          <Link href="/settings" title={userEmail ?? undefined} style={{ marginTop: 8, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', borderRadius: 8, background: '#f9fafb' }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#2563eb', color: '#fff', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {userName[0]?.toUpperCase()}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: '#111827', lineHeight: 1.2 }}>{userName}</p>
+              <p style={{ fontSize: 11, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>{userEmail}</p>
+            </div>
+          </Link>
+        )}
       </div>
     </aside>
   )

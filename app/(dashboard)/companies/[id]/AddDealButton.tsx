@@ -8,6 +8,8 @@ interface Props {
   companyId: string
   companyName: string
   projectId: string
+  team?: { user_id: string; display_name: string }[]
+  currentUserId?: string | null
 }
 
 const STAGES = [
@@ -18,7 +20,7 @@ const STAGES = [
   { value: 'negotiation',   label: 'Verhandlung',   color: '#ef4444' },
 ]
 
-export default function AddDealButton({ companyId, companyName, projectId }: Props) {
+export default function AddDealButton({ companyId, companyName, projectId, team = [], currentUserId = null }: Props) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -28,6 +30,7 @@ export default function AddDealButton({ companyId, companyName, projectId }: Pro
     value: '',
     nextStep: '',
     nextStepDate: '',
+    ownerId: currentUserId ?? '',
   })
   const router = useRouter()
   const supabase = createClient()
@@ -45,6 +48,7 @@ export default function AddDealButton({ companyId, companyName, projectId }: Pro
       value_eur: form.value ? parseFloat(form.value) : null,
       next_step: form.nextStep || null,
       next_step_due_at: form.nextStepDate ? new Date(form.nextStepDate).toISOString() : null,
+      owner_id: form.ownerId || null,
     })
 
     if (error) {
@@ -124,6 +128,16 @@ export default function AddDealButton({ companyId, companyName, projectId }: Pro
                   ))}
                 </div>
               </div>
+
+              {team.length > 0 && (
+                <div>
+                  <label style={labelStyle}>Owner</label>
+                  <select value={form.ownerId} onChange={e => setForm(f => ({ ...f, ownerId: e.target.value }))} style={inputStyle}>
+                    <option value="">— niemand —</option>
+                    {team.map(m => <option key={m.user_id} value={m.user_id}>{m.display_name}{m.user_id === currentUserId ? ' (du)' : ''}</option>)}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label style={labelStyle}>Potenzial (€/Jahr)</label>

@@ -28,6 +28,7 @@ type Opp = {
   name: string
   stage: string
   value_eur: number | null
+  owner_name?: string | null
   companies: { id: string; name: string; domain?: string; account_score?: number; signal_score?: number } | null
   next_step?: string | null
   next_step_due_at?: string | null
@@ -61,9 +62,16 @@ function OppCard({ opp }: { opp: Opp }) {
       boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
     }}>
       <Link href={`/opportunities/${opp.id}`} style={{ textDecoration: 'none' }}>
-        <p style={{ fontWeight: 600, fontSize: 13, color: '#111827', marginBottom: 2 }}>
-          {opp.companies?.name || opp.name || '—'}
-        </p>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6, marginBottom: 2 }}>
+          <p style={{ fontWeight: 600, fontSize: 13, color: '#111827' }}>
+            {opp.companies?.name || opp.name || '—'}
+          </p>
+          {opp.owner_name && (
+            <span title={`Owner: ${opp.owner_name}`} style={{ fontSize: 10, fontWeight: 600, color: '#1d4ed8', background: '#eff6ff', borderRadius: 10, padding: '1px 6px', flexShrink: 0 }}>
+              {opp.owner_name}
+            </span>
+          )}
+        </div>
         {opp.value_eur ? (
           <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
             €{opp.value_eur.toLocaleString('de-DE')}

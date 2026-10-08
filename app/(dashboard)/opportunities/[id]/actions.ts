@@ -115,3 +115,13 @@ export async function setOpportunityStage(oppId: string, stage: string): Promise
   revalidatePath('/companies', 'layout')
   return { error: null }
 }
+
+export async function setOpportunityOwner(oppId: string, ownerId: string | null): Promise<Result> {
+  const supabase = createClient() as any
+  const { error } = await supabase.from('opportunities').update({ owner_id: ownerId || null }).eq('id', oppId)
+  if (error) return { error: error.message }
+  revalidatePath(`/opportunities/${oppId}`)
+  revalidatePath('/pipeline')
+  revalidatePath('/today')
+  return { error: null }
+}

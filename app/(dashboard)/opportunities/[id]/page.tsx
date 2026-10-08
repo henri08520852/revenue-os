@@ -5,6 +5,8 @@ import DealEditor from './DealEditor'
 import { ACTIVE_OPPORTUNITY_STAGES, OPPORTUNITY_STAGES, OPPORTUNITY_STAGE_LABELS } from '@/lib/stages'
 import DealContacts from './DealContacts'
 import DealNotes from './DealNotes'
+import DealOwner from './DealOwner'
+import { getTeamContext } from '@/lib/team'
 
 const STAGES = OPPORTUNITY_STAGES
 type Stage = typeof STAGES[number]
@@ -56,6 +58,7 @@ export default async function DealPage({ params }: { params: { id: string } }) {
     .limit(20)
 
   const db = supabase as any
+  const { team } = await getTeamContext()
   const [{ data: contacts }, { data: companyPeople }, { data: history }, { data: notes }] = await Promise.all([
     db.from('opportunity_contacts')
       .select('id, role, created_at, person:people(id, full_name, first_name, last_name, job_title, email)')
@@ -112,12 +115,15 @@ export default async function DealPage({ params }: { params: { id: string } }) {
                 {STAGE_LABELS[stage]}
               </span>
             </div>
-            {company && (
-              <Link href={'/companies/' + company.id}
-                className="inline-flex items-center gap-1.5 mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium">
-                {company.name}
-              </Link>
-            )}
+            <div className="flex items-center gap-4 mt-2 flex-wrap">
+              {company && (
+                <Link href={'/companies/' + company.id}
+                  className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium">
+                  {company.name}
+                </Link>
+              )}
+              <DealOwner oppId={opp.id} ownerId={opp.owner_id ?? null} team={team} />
+            </div>
             {opp.value_eur && (
               <p className="mt-3 text-3xl font-bold text-gray-900">
                 {opp.value_eur.toLocaleString('de-DE')} EUR

@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from 'react'
 import { useFormState, useFormStatus } from 'react-dom'
 import Link from 'next/link'
-import { convertLeadToOpportunity, updateLeadFollowUp, updateLeadStage } from './actions'
+import { convertLeadToOpportunity, updateLeadFollowUp, updateLeadOwner, updateLeadStage } from './actions'
 
 export const LEAD_STAGES = [
   { key: 'outreach',     label: 'Outreach',     color: '#94a3b8' },
@@ -15,8 +15,11 @@ export const LEAD_STAGES = [
 
 const MOVABLE = ['outreach', 'contacted', 'qualified', 'disqualified']
 
+type Member = { user_id: string; display_name: string }
+
 type Lead = {
   id: string
+  owner_id?: string | null
   name: string | null
   stage: string
   notes: string | null
@@ -62,7 +65,7 @@ function ConvertButton({ leadId }: { leadId: string }) {
   )
 }
 
-function LeadCard({ lead, focused }: { lead: Lead; focused: boolean }) {
+function LeadCard({ lead, focused, team }: { lead: Lead; focused: boolean; team: Member[] }) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const done = lead.stage === 'converted' || lead.stage === 'disqualified'
@@ -87,13 +90,26 @@ function LeadCard({ lead, focused }: { lead: Lead; focused: boolean }) {
       opacity: pending ? 0.6 : 1,
       boxShadow: focused ? '0 0 0 4px #dbeafe' : 'none',
     }}>
-      {lead.company ? (
-        <Link href={`/companies/${lead.company.id}`} style={{ fontSize: 13, fontWeight: 600, color: '#111827', textDecoration: 'none' }}>
-          {lead.company.name}
-        </Link>
-      ) : (
-        <p style={{ fontSize: 13, fontWeight: 600, color: '#9ca3af' }}>Ohne Company</p>
-      )}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6 }}>
+        {lead.company ? (
+          <Link href={`/companies/${lead.company.id}`} style={{ fontSize: 13, fontWeight: 600, color: '#111827', textDecoration: 'none' }}>
+            {lead.company.name}
+          </Link>
+        ) : (
+          <p style={{ fontSize: 13, fontWeight: 600, color: '#9ca3af' }}>Ohne Company</p>
+        )}
+        {team.length > 0 && (
+          <select
+            value={lead.owner_id ?? ''}
+            onChange={e => run(() => updateLeadOwner(lead.id, e.target.value || null))}
+            title="Owner"
+            style={{ fontSize: 11, padding: '1px 4px', border: 'none', borderRadius: 10, background: lead.owner_id ? '#eff6ff' : '#f3f4f6', color: lead.owner_id ? '#1d4ed8' : '#9ca3af', maxWidth: 90, cursor: 'pointer', flexShrink: 0 }}
+          >
+            <option value="">kein Owner</option>
+            {team.map(m => <option key={m.user_id} value={m.user_id}>{m.display_name}</option>)}
+          </select>
+        )}
+      </div>
       {lead.name && <p style={{ fontSize: 12, color: '#4b5563', marginTop: 2 }}>{lead.name}</p>}
       {contact && (
         <p style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
@@ -145,7 +161,7 @@ function LeadCard({ lead, focused }: { lead: Lead; focused: boolean }) {
   )
 }
 
-export default function LeadBoard({ leads, focusId }: { leads: Lead[]; focusId: string | null }) {
+export default function LeadBoard({ leads, focusId, team = [] }: { leads: Lead[]; focusId: string | null; team?: Member[] }) {
   useEffect(() => {
     if (focusId) document.getElementById(`lead-${focusId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [focusId])
@@ -166,7 +182,7 @@ export default function LeadBoard({ leads, focusId }: { leads: Lead[]; focusId: 
             {items.length === 0 ? (
               <p style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', padding: '24px 0' }}>Keine Leads</p>
             ) : (
-              items.map(lead => <LeadCard key={lead.id} lead={lead} focused={lead.id === focusId} />)
+              items.map(lead => <LeadCard key={lead.id} lead={lead} focused={lead.id === focusId} team={team} />)
             )}
           </div>
         )

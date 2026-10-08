@@ -20,13 +20,16 @@ export async function createLead(input: {
   name: string | null
   nextFollowUp: string | null
   notes: string | null
+  ownerId?: string | null
 }): Promise<{ error: string | null }> {
   if (!PROJECT_ID) return { error: 'NEXT_PUBLIC_DEFAULT_PROJECT_ID not set' }
   if (!input.companyId) return { error: 'Company fehlt' }
 
   const supabase = createClient() as any
+  const { data: { user } } = await supabase.auth.getUser()
   const { error } = await supabase.from('leads').insert({
     project_id: PROJECT_ID,
+    owner_id: input.ownerId || user?.id || null,
     company_id: input.companyId,
     person_id: input.personId || null,
     name: input.name || null,
@@ -54,6 +57,15 @@ export async function updateLeadStage(leadId: string, stage: string): Promise<{ 
   revalidatePath('/leads')
   revalidatePath('/today')
   revalidatePath('/companies', 'layout')
+  return { error: null }
+}
+
+export async function updateLeadOwner(leadId: string, ownerId: string | null): Promise<{ error: string | null }> {
+  const supabase = createClient() as any
+  const { error } = await supabase.from('leads').update({ owner_id: ownerId || null }).eq('id', leadId)
+  if (error) return { error: error.message }
+  revalidatePath('/leads')
+  revalidatePath('/today')
   return { error: null }
 }
 
@@ -94,6 +106,7 @@ export async function convertLeadToOpportunity(leadId: string, _prev: ConvertSta
       company_id: lead.company_id,
       name: lead.name || lead.company?.name || 'Neuer Deal',
       stage: 'discovery',
+      owner_id: lead.owner_id || (await supabase.auth.getUser()).data.user?.id || null,
       champion_person_id: lead.person_id,
       notes: lead.notes,
     })

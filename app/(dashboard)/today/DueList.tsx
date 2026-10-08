@@ -9,6 +9,7 @@ export type DueItem = {
   title: string
   subtitle: string | null
   dueAt: string
+  owner?: string | null
 }
 
 // YYYY-MM-DD of a date in Berlin time — server runs in UTC on Vercel
@@ -50,7 +51,7 @@ const GROUPS = [
   { key: 'week',    label: 'Diese Woche',  color: '#6b7280', bg: '#f9fafb' },
 ] as const
 
-export default function DueList({ items }: { items: DueItem[] }) {
+export default function DueList({ items, mineOnly, showToggle }: { items: DueItem[]; mineOnly?: boolean; showToggle?: boolean }) {
   const groups = groupDue(items)
   const total = groups.overdue.length + groups.today.length + groups.week.length
 
@@ -58,7 +59,18 @@ export default function DueList({ items }: { items: DueItem[] }) {
     <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24, marginBottom: 24 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>Fällig</h2>
-        <span style={{ fontSize: 13, color: '#6b7280' }}>{total} Follow-ups & nächste Schritte</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 13, color: '#6b7280' }}>{total} Follow-ups & nächste Schritte</span>
+          {showToggle && (
+            <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 8, padding: 2 }}>
+              {[{ href: '/today', label: 'Alle', active: !mineOnly }, { href: '/today?mine=1', label: 'Meine', active: !!mineOnly }].map(t => (
+                <Link key={t.label} href={t.href} style={{ fontSize: 12, fontWeight: 500, padding: '4px 10px', borderRadius: 6, textDecoration: 'none', background: t.active ? '#fff' : 'transparent', color: t.active ? '#111827' : '#6b7280', boxShadow: t.active ? '0 1px 2px rgba(0,0,0,0.08)' : 'none' }}>
+                  {t.label}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {total === 0 ? (
@@ -97,6 +109,7 @@ export default function DueList({ items }: { items: DueItem[] }) {
                         )}
                         <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
                           {new Date(item.dueAt).toLocaleDateString('de-DE', { timeZone: TZ, weekday: 'short', day: '2-digit', month: '2-digit' })}
+                          {item.owner ? ` · ${item.owner}` : ''}
                         </p>
                       </Link>
                     ))}

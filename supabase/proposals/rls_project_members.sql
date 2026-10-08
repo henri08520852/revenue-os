@@ -20,6 +20,9 @@
 
 -- ------------------------------------------------------------
 -- PART A: membership table + helper
+-- (project_members already exists since migration 020 — the app adds
+--  each user on first login. Once RLS is on, that self-insert is blocked,
+--  so new team members must be added via SQL / service role.)
 -- ------------------------------------------------------------
 create table if not exists project_members (
   project_id  uuid not null references projects(id) on delete cascade,
@@ -109,11 +112,16 @@ create policy data_sources_read on data_sources
   for select to authenticated using (true);
 revoke all on data_sources from anon;
 
--- project_members: users see their own memberships; writes via service role / SQL editor
+-- project_members: members see their team (settings page, owner pickers) and may
+-- edit their own display name; adding members only via service role / SQL editor
 alter table project_members enable row level security;
 drop policy if exists project_members_self_select on project_members;
-create policy project_members_self_select on project_members
-  for select to authenticated using (user_id = auth.uid());
+drop policy if exists project_members_team_select on project_members;
+create policy project_members_team_select on project_members
+  for select to authenticated using (is_project_member(project_id));
+drop policy if exists project_members_self_update on project_members;
+create policy project_members_self_update on project_members
+  for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
 revoke all on project_members from anon;
 
 -- NOTE: reference_posts belongs to the Marketing/PR agent app that shares
