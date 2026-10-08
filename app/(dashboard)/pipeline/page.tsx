@@ -1,9 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
 import PipelineClient from './PipelineClient'
+import { ACTIVE_OPPORTUNITY_STAGES } from '@/lib/stages'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
 
-const ACTIVE_STAGES = ['discovery', 'erstgespraech', 'evaluation', 'proposal', 'negotiation']
+const ACTIVE_STAGES: string[] = ACTIVE_OPPORTUNITY_STAGES
 
 export default async function PipelinePage() {
   const supabase = createClient()

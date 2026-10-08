@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { OPPORTUNITY_STAGES } from '@/lib/stages'
 
-const STAGES = ['discovery', 'erstgespraech', 'evaluation', 'proposal', 'negotiation', 'won', 'lost'] as const
+const STAGES = OPPORTUNITY_STAGES
 type Stage = typeof STAGES[number]
 
 interface Props {

@@ -1,5 +1,5 @@
 -- ============================================================
--- 017 (PROPOSAL — NOT APPLIED): Row Level Security for revenue-os
+-- PROPOSAL — NOT APPLIED: Row Level Security for revenue-os
 --
 -- Lives in supabase/proposals/ on purpose so `supabase db push`
 -- does not pick it up. Move to supabase/migrations/ once reviewed.

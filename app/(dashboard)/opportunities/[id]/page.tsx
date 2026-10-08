@@ -2,19 +2,12 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import DealEditor from './DealEditor'
+import { OPPORTUNITY_STAGES, OPPORTUNITY_STAGE_LABELS } from '@/lib/stages'
 
-const STAGES = ['discovery', 'erstgespraech', 'evaluation', 'proposal', 'negotiation', 'won', 'lost'] as const
+const STAGES = OPPORTUNITY_STAGES
 type Stage = typeof STAGES[number]
 
-const STAGE_LABELS: Record<Stage, string> = {
-  discovery:     'Discovery',
-  erstgespraech: 'Erstgespraech',
-  evaluation:    'Evaluation',
-  proposal:      'Proposal',
-  negotiation:   'Verhandlung',
-  won:           'Gewonnen',
-  lost:          'Verloren',
-}
+const STAGE_LABELS = OPPORTUNITY_STAGE_LABELS
 
 const STAGE_COLORS: Record<Stage, string> = {
   discovery:     'bg-gray-100 text-gray-600',
