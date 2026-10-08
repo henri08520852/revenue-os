@@ -33,7 +33,7 @@ export function TaskRow({ task, ownerName, hideLinks, onEdit }: { task: Task; ow
   const hide = new Set(hideLinks ?? [])
   const links = [
     !hide.has('deal') && task.deal ? { href: `/opportunities/${task.deal.id}`, label: `◆ ${task.deal.name || 'Deal'}`, color: '#16a34a' } : null,
-    !hide.has('lead') && task.lead && !task.deal ? { href: `/leads?focus=${task.lead.id}`, label: `● Lead${task.lead.name ? ' ' + task.lead.name : ''}`, color: '#7c3aed' } : null,
+    !hide.has('lead') && task.lead && !task.deal ? { href: `/pipeline?focus=${task.lead.id}`, label: `● Lead${task.lead.name ? ' ' + task.lead.name : ''}`, color: '#7c3aed' } : null,
     !hide.has('company') && task.company ? { href: `/companies/${task.company.id}`, label: task.company.name, color: '#1d4ed8' } : null,
     !hide.has('person') && task.person ? { href: `/contacts/${task.person.id}`, label: `👤 ${task.person.name}`, color: '#2563eb' } : null,
   ].filter(Boolean) as { href: string; label: string; color: string }[]

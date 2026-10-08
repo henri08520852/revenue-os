@@ -67,7 +67,7 @@ export default async function DealPage({ params }: { params: { id: string } }) {
 
   return (
     <RecordLayout
-      breadcrumb={[{ label: 'Deals', href: '/pipeline' }, ...(company ? [{ label: company.name, href: `/companies/${company.id}` }] : []), { label: opp.name || 'Deal' }]}
+      breadcrumb={[{ label: 'Pipeline', href: '/pipeline?show=deals' }, ...(company ? [{ label: company.name, href: `/companies/${company.id}` }] : []), { label: opp.name || 'Deal' }]}
       left={<>
         <Card>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -128,7 +128,7 @@ export default async function DealPage({ params }: { params: { id: string } }) {
         <Card title="Herkunft">
           {(leads || []).length
             ? (leads || []).map((l: any) => (
-              <AssocRow key={l.id} href={`/leads?focus=${l.id}`} title={l.name || company?.name || 'Lead'} sub={l.converted_at ? `umgewandelt am ${fmtDate(l.converted_at)}` : null} badge={LEAD_STAGES[l.stage] ?? l.stage} badgeColor={{ bg: '#ede9fe', fg: '#6d28d9' }} />
+              <AssocRow key={l.id} href={`/pipeline?focus=${l.id}`} title={l.name || company?.name || 'Lead'} sub={l.converted_at ? `umgewandelt am ${fmtDate(l.converted_at)}` : null} badge={LEAD_STAGES[l.stage] ?? l.stage} badgeColor={{ bg: '#ede9fe', fg: '#6d28d9' }} />
             ))
             : <Empty text="Direkt als Deal angelegt" />}
           <div style={{ fontSize: 12, color: '#6b7280', marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>

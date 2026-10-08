@@ -119,7 +119,7 @@ export default async function ContactPage({ params }: { params: { id: string } }
         </Card>
         <Card title="Leads" count={(leads || []).length}>
           {(leads || []).length ? (leads || []).map((l: any) => (
-            <AssocRow key={l.id} href={`/leads?focus=${l.id}`} title={l.name || person.company?.name || 'Lead'}
+            <AssocRow key={l.id} href={`/pipeline?focus=${l.id}`} title={l.name || person.company?.name || 'Lead'}
               sub={l.next_follow_up_at ? `Follow-up ${new Date(l.next_follow_up_at).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit' })}` : null}
               badge={LEAD_STAGES[l.stage] ?? l.stage} badgeColor={{ bg: '#ede9fe', fg: '#6d28d9' }} />
           )) : <Empty text="Kein Lead mit diesem Kontakt." />}

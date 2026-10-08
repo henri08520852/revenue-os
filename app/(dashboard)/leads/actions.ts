@@ -57,9 +57,7 @@ export async function createLead(input: {
     const { error: tErr } = await setFollowUpTask(supabase, created, toIsoOrNull(input.nextFollowUp))
     if (tErr) return { error: tErr.message }
   }
-  revalidatePath('/leads')
-  revalidatePath('/today')
-  revalidatePath('/companies', 'layout')
+  revalidatePath('/', 'layout')
   return { error: null }
 }
 
@@ -72,9 +70,7 @@ export async function updateLeadStage(leadId: string, stage: string): Promise<{ 
     .eq('id', leadId)
     .is('converted_to_opportunity_id', null)
   if (error) return { error: error.message }
-  revalidatePath('/leads')
-  revalidatePath('/today')
-  revalidatePath('/companies', 'layout')
+  revalidatePath('/', 'layout')
   return { error: null }
 }
 
@@ -82,8 +78,7 @@ export async function updateLeadOwner(leadId: string, ownerId: string | null): P
   const supabase = createClient() as any
   const { error } = await supabase.from('leads').update({ owner_id: ownerId || null }).eq('id', leadId)
   if (error) return { error: error.message }
-  revalidatePath('/leads')
-  revalidatePath('/today')
+  revalidatePath('/', 'layout')
   return { error: null }
 }
 
@@ -93,16 +88,18 @@ export async function updateLeadFollowUp(leadId: string, date: string | null): P
   if (lErr || !lead) return { error: lErr?.message || 'Lead nicht gefunden' }
   const { error } = await setFollowUpTask(supabase, lead, toIsoOrNull(date))
   if (error) return { error: error.message }
-  revalidatePath('/leads')
-  revalidatePath('/today')
-  revalidatePath('/companies', 'layout')
+  revalidatePath('/', 'layout')
   return { error: null }
 }
 
 export type ConvertState = { error: string | null }
 
-// Used with useFormState: returns an error message, or redirects to the new deal on success
-export async function convertLeadToOpportunity(leadId: string, _prev: ConvertState): Promise<ConvertState> {
+const DEAL_STAGES = ['discovery', 'erstgespraech', 'evaluation', 'proposal', 'negotiation']
+
+// Creates the deal for a lead (champion = lead contact), marks the lead converted and moves
+// its open tasks to the deal. Returns the deal id (also when the lead was converted before).
+async function convertLead(leadId: string, stage: string): Promise<{ error: string | null; oppId?: string }> {
+  if (!DEAL_STAGES.includes(stage)) return { error: `Ungültige Stage: ${stage}` }
   const supabase = createClient() as any
 
   const { data: lead, error: leadErr } = await supabase
@@ -112,8 +109,7 @@ export async function convertLeadToOpportunity(leadId: string, _prev: ConvertSta
     .single()
   if (leadErr || !lead) return { error: leadErr?.message || 'Lead nicht gefunden' }
 
-  // Already converted → just go to the deal
-  if (lead.converted_to_opportunity_id) redirect(`/opportunities/${lead.converted_to_opportunity_id}`)
+  if (lead.converted_to_opportunity_id) return { error: null, oppId: lead.converted_to_opportunity_id }
   if (!lead.company_id) return { error: 'Lead hat keine Company — Deal braucht eine Company' }
 
   const { data: opp, error: oppErr } = await supabase
@@ -122,7 +118,7 @@ export async function convertLeadToOpportunity(leadId: string, _prev: ConvertSta
       project_id: lead.project_id,
       company_id: lead.company_id,
       name: lead.name || lead.company?.name || 'Neuer Deal',
-      stage: 'discovery',
+      stage,
       owner_id: lead.owner_id || (await supabase.auth.getUser()).data.user?.id || null,
       champion_person_id: lead.person_id,
       notes: lead.notes,
@@ -161,9 +157,18 @@ export async function convertLeadToOpportunity(leadId: string, _prev: ConvertSta
   // Open lead tasks continue on the deal (they stay linked to the lead for history)
   await supabase.from('tasks').update({ opportunity_id: opp.id }).eq('lead_id', leadId).eq('status', 'open')
 
-  revalidatePath('/leads')
-  revalidatePath('/pipeline')
-  revalidatePath('/today')
-  revalidatePath('/companies', 'layout')
-  redirect(`/opportunities/${opp.id}`)
+  revalidatePath('/', 'layout')
+  return { error: null, oppId: opp.id }
+}
+
+// Used with useFormState: returns an error message, or redirects to the new deal on success
+export async function convertLeadToOpportunity(leadId: string, _prev: ConvertState): Promise<ConvertState> {
+  const res = await convertLead(leadId, 'discovery')
+  if (res.error || !res.oppId) return { error: res.error || 'Deal konnte nicht angelegt werden' }
+  redirect(`/opportunities/${res.oppId}`)
+}
+
+// Pipeline board: lead dragged into a deal column
+export async function convertLeadAtStage(leadId: string, stage: string) {
+  return convertLead(leadId, stage)
 }

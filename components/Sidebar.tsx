@@ -6,7 +6,6 @@ import AppSwitcher from './AppSwitcher'
 import {
   BuildingOffice2Icon,
   UserGroupIcon,
-  ChartBarIcon,
   CalendarDaysIcon,
   Cog6ToothIcon,
   SparklesIcon,
@@ -22,8 +21,7 @@ const nav = [
   { href: '/calendar',   label: 'Kalender',   icon: CalendarIcon },
   { href: '/companies',  label: 'Companies',  icon: BuildingOffice2Icon },
   { href: '/contacts',   label: 'Contacts',   icon: UserGroupIcon },
-  { href: '/leads',      label: 'Leads',      icon: FunnelIcon },
-  { href: '/pipeline',   label: 'Deals',      icon: ChartBarIcon },
+  { href: '/pipeline',   label: 'Pipeline',   icon: FunnelIcon },
   { href: '/candidates', label: 'Candidates', icon: SparklesIcon },
 ]
 

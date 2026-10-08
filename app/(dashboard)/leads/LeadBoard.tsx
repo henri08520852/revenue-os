@@ -2,7 +2,7 @@
 
 import { dayKeyBerlin } from '@/lib/tz'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useFormState, useFormStatus } from 'react-dom'
 import Link from 'next/link'
 import { convertLeadToOpportunity, updateLeadFollowUp, updateLeadOwner, updateLeadStage } from './actions'
@@ -17,9 +17,9 @@ export const LEAD_STAGES = [
 
 const MOVABLE = ['outreach', 'contacted', 'qualified', 'disqualified']
 
-type Member = { user_id: string; display_name: string }
+export type Member = { user_id: string; display_name: string }
 
-type Lead = {
+export type Lead = {
   id: string
   owner_id?: string | null
   name: string | null
@@ -65,7 +65,7 @@ function ConvertButton({ leadId }: { leadId: string }) {
   )
 }
 
-function LeadCard({ lead, focused, team }: { lead: Lead; focused: boolean; team: Member[] }) {
+export function LeadCard({ lead, focused, team }: { lead: Lead; focused: boolean; team: Member[] }) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const done = lead.stage === 'converted' || lead.stage === 'disqualified'
@@ -156,36 +156,6 @@ function LeadCard({ lead, focused, team }: { lead: Lead; focused: boolean; team:
         </>
       )}
       {error && <p style={{ fontSize: 11, color: '#dc2626', marginTop: 6 }}>{error}</p>}
-    </div>
-  )
-}
-
-export default function LeadBoard({ leads, focusId, team = [] }: { leads: Lead[]; focusId: string | null; team?: Member[] }) {
-  useEffect(() => {
-    if (focusId) document.getElementById(`lead-${focusId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, [focusId])
-
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${LEAD_STAGES.length}, minmax(180px, 1fr))`, gap: 12, overflowX: 'auto', paddingBottom: 4 }}>
-      {LEAD_STAGES.map(stage => {
-        const items = leads.filter(l => l.stage === stage.key)
-        return (
-          <div key={stage.key} style={{ background: '#f3f4f6', borderRadius: 12, padding: 12, minHeight: 200 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, padding: '0 2px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color }} />
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{stage.label}</span>
-              </div>
-              <span style={{ fontSize: 12, color: '#9ca3af' }}>{items.length}</span>
-            </div>
-            {items.length === 0 ? (
-              <p style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', padding: '24px 0' }}>Keine Leads</p>
-            ) : (
-              items.map(lead => <LeadCard key={lead.id} lead={lead} focused={lead.id === focusId} team={team} />)
-            )}
-          </div>
-        )
-      })}
     </div>
   )
 }

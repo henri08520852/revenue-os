@@ -81,7 +81,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: { v
     sub: [t.has_time ? hm(t.due_at!) : null, t.deal?.name ?? t.company?.name ?? t.person?.name ?? null].filter(Boolean).join(' · ') || null,
     start: t.due_at!, end: null, allDay: true,
     owners: [nameOf.get(t.owner_id ?? '') ?? ''].filter(Boolean), colors: [], company: t.company, meet: null,
-    href: t.deal ? `/opportunities/${t.deal.id}` : t.lead ? `/leads?focus=${t.lead.id}` : t.person ? `/contacts/${t.person.id}` : t.company ? `/companies/${t.company.id}` : '/tasks',
+    href: t.deal ? `/opportunities/${t.deal.id}` : t.lead ? `/pipeline?focus=${t.lead.id}` : t.person ? `/contacts/${t.person.id}` : t.company ? `/companies/${t.company.id}` : '/tasks',
     external: false,
   }))
 

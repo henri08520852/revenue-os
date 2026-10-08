@@ -180,7 +180,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
             fixedCompanyId={company.id} variant="secondary" team={team} currentUserId={me?.user_id ?? null} />
         }>
           {!leads.length ? <Empty text="Kein offener Lead" /> : leads.map((l: any) => (
-            <AssocRow key={l.id} href={`/leads?focus=${l.id}`} title={l.name || company.name}
+            <AssocRow key={l.id} href={`/pipeline?focus=${l.id}`} title={l.name || company.name}
               sub={l.next_follow_up_at && l.stage !== 'disqualified' ? `Follow-up ${fmtDate(l.next_follow_up_at)}` : null}
               badge={LEAD_STAGE_LABELS[l.stage] ?? l.stage} badgeColor={{ bg: '#ede9fe', fg: '#6d28d9' }} />
           ))}

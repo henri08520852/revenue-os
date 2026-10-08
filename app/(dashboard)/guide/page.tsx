@@ -4,7 +4,7 @@ import Link from 'next/link'
 
 const FLOW = [
   { title: 'Company',  sub: 'Status: Target',            color: '#1d4ed8', bg: '#dbeafe', href: '/companies' },
-  { title: 'Lead',     sub: 'Status: Warm',              color: '#6d28d9', bg: '#ede9fe', href: '/leads' },
+  { title: 'Lead',     sub: 'Status: Warm',              color: '#6d28d9', bg: '#ede9fe', href: '/pipeline?show=leads' },
   { title: 'Deal',     sub: 'Status: Hot',               color: '#c2410c', bg: '#ffedd5', href: '/pipeline' },
   { title: 'Gewonnen', sub: 'Status: Customer',          color: '#15803d', bg: '#dcfce7', href: '/pipeline' },
 ]
@@ -96,15 +96,15 @@ export default function GuidePage() {
         <p style={{ ...lead, marginTop: 10, marginBottom: 0 }}>Ziel: „Fällig“ jeden Tag auf null bringen – erledigen, neues Datum setzen oder Lead/Deal schließen.</p>
       </Section>
 
-      <Section id="leads" title="2 · Leads – Ansprache vor dem Deal" intro="Ein Lead ist eine Company (optional mit Ansprechpartner), die wir aktiv ansprechen. Anlegen über „+ Lead“ auf der Leads-Seite oder direkt auf der Company-Seite. Jeder offene Lead sollte ein Follow-up-Datum haben.">
+      <Section id="leads" title="2 · Leads – Ansprache vor dem Deal" intro="Ein Lead ist eine Company (optional mit Ansprechpartner), die wir aktiv ansprechen. Leads und Deals stehen gemeinsam unter „Pipeline“ (Filter Alle / Leads / Deals) – links die Lead-Spalten, rechts die Deal-Spalten. Anlegen über „+ Lead“ in der Pipeline oder direkt auf der Company-Seite. Klick auf eine Lead-Karte öffnet sie zum Bearbeiten. Jeder offene Lead sollte ein Follow-up haben.">
         {LEAD_STAGES.map(([k, v]) => <div key={k} style={row}><b style={{ color: '#6d28d9' }}>{k}</b><span style={{ color: '#4b5563' }}>{v}</span></div>)}
         <p style={{ ...lead, marginTop: 14, marginBottom: 0 }}>
-          <b>In Deal umwandeln</b> (Button auf der Lead-Karte): legt den Deal in „Discovery“ an, übernimmt den Ansprechpartner als Champion
-          und die Notiz – und öffnet direkt die Deal-Seite. Der Lead bleibt als „Umgewandelt“ mit Link zum Deal erhalten.
+          <b>In Deal umwandeln</b>: Lead-Karte in eine Deal-Spalte ziehen (Deal startet in dieser Stage) oder Button „In Deal umwandeln“ in der Lead-Karte (startet in „Discovery“). Das legt den Deal an, übernimmt den Ansprechpartner als Champion
+          die Notiz und alle offenen Aufgaben. Der Lead bleibt als Herkunft auf der Deal-Seite sichtbar.
         </p>
       </Section>
 
-      <Section id="deals" title="3 · Deals" intro="Ein Deal ist eine konkrete Verkaufschance mit Wert. Unter „Deals“ per Drag & Drop verschieben, auf der Deal-Seite pflegen: nächster Schritt mit Datum, Wert, Buying Center, Notizen. Jeder Stage-Wechsel wird im Stage-Verlauf protokolliert.">
+      <Section id="deals" title="3 · Deals" intro="Ein Deal ist eine konkrete Verkaufschance mit Wert. In der „Pipeline“ per Drag & Drop verschieben, auf der Deal-Seite pflegen: nächster Schritt mit Datum, Wert, Buying Center, Notizen. Jeder Stage-Wechsel wird im Stage-Verlauf protokolliert.">
         {DEAL_STAGES.map(([k, v]) => <div key={k} style={row}><b style={{ color: '#c2410c' }}>{k}</b><span style={{ color: '#4b5563' }}>{v}</span></div>)}
       </Section>
 
