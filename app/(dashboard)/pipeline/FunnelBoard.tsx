@@ -137,14 +137,14 @@ function ListView({ leads, deals, onLead }: { leads: FunnelLead[]; deals: Funnel
   const th = { textAlign: 'left' as const, padding: '10px 16px', fontWeight: 600, color: '#6b7280', fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }
   const td = { padding: '10px 16px', fontSize: 13 }
   const rows = [
-    ...deals.map(d => ({ key: 'd' + d.id, type: 'Deal', stage: d.stage, name: d.companies?.name || d.name || '—', sub: d.companies?.name && d.name !== d.companies.name ? d.name : null, value: d.value_eur, next: d.next_step, due: d.next_step_due_at, owner: d.owner_name, href: `/opportunities/${d.id}`, lead: null as FunnelLead | null })),
+    ...deals.map(d => ({ key: 'd' + d.id, type: 'Deal', stage: d.stage, name: d.name || d.companies?.name || '—', sub: d.companies?.name && d.name && d.name !== d.companies.name ? d.companies.name : null, value: d.value_eur, next: d.next_step, due: d.next_step_due_at, owner: d.owner_name, href: `/opportunities/${d.id}`, lead: null as FunnelLead | null })),
     ...leads.map(l => ({ key: 'l' + l.id, type: 'Lead', stage: l.stage, name: l.company?.name || l.name || 'Lead', sub: l.company ? l.name : null, value: null, next: l.next_follow_up_at ? 'Follow-up' : null, due: l.next_follow_up_at, owner: l.owner_name, href: null, lead: l })),
   ]
   return (
     <div style={{ background: 'white', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead><tr style={{ background: '#f9fafb', borderBottom: '1px solid #f3f4f6' }}>
-          {['Typ', 'Unternehmen', 'Stage', 'Wert', 'Nächster Schritt', 'Fällig', 'Owner'].map(h => <th key={h} style={th}>{h}</th>)}
+          {['Typ', 'Name', 'Stage', 'Wert', 'Nächster Schritt', 'Fällig', 'Owner'].map(h => <th key={h} style={th}>{h}</th>)}
         </tr></thead>
         <tbody>
           {rows.map(r => {
