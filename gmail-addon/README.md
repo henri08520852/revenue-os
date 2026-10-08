@@ -25,7 +25,8 @@ Unbekannte Absender lassen sich direkt als Kontakt (mit neuer Company) anlegen.
 7. **Freischalten**: Beim ersten Mal steht dort
    „Add-on noch nicht freigeschaltet … GMAIL_ADDON_AUDIENCE = 1234…apps.googleusercontent.com“.
    Diesen Wert in Vercel unter *Settings → Environment Variables* als `GMAIL_ADDON_AUDIENCE`
-   (Production) eintragen und unter *Deployments* das letzte Deployment *Redeploy*en.
+   (Production) eintragen und unter *Deployments* das letzte Deployment *Redeploy*en –
+   neue Umgebungsvariablen gelten erst ab dem nächsten Deployment.
 8. Gmail neu laden – fertig.
 
 ## Weitere Teammitglieder
