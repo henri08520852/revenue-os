@@ -2,13 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import AppSwitcher from './AppSwitcher'
 import {
   BuildingOffice2Icon,
   UserGroupIcon,
   ChartBarIcon,
   CalendarDaysIcon,
   Cog6ToothIcon,
-  BoltIcon,
   SparklesIcon,
   FunnelIcon,
   QuestionMarkCircleIcon,
@@ -32,13 +32,7 @@ export default function Sidebar({ userName, userEmail }: { userName: string | nu
   return (
     <aside style={{ width: 240, minHeight: '100vh', background: '#fff', borderRight: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '20px 24px', borderBottom: '1px solid #f3f4f6' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 28, height: 28, borderRadius: 8, background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <BoltIcon style={{ width: 16, height: 16, color: '#fff' }} />
-          </div>
-          <span style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>Revenue OS</span>
-        </div>
-        <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 4, marginLeft: 36 }}>by Hireflow</p>
+        <AppSwitcher />
       </div>
       <nav style={{ flex: 1, padding: '16px 12px' }}>
         {nav.map(({ href, label, icon: Icon }) => {
