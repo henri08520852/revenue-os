@@ -10,6 +10,7 @@ import QuickActions from '@/components/record/QuickActions'
 import Properties from '@/components/record/Properties'
 import TaskList from '@/components/TaskList'
 import { loadTasks } from '@/lib/tasks'
+import { CreateButton } from '@/components/CreateRecord'
 
 const BUYER_ROLES = [
   { value: 'champion', label: '⭐ Champion' },
@@ -109,15 +110,15 @@ export default async function ContactPage({ params }: { params: { id: string } }
             ? <AssocRow href={`/companies/${person.company.id}`} title={person.company.name} sub={person.company.domain} badge={status?.label} badgeColor={status ? { bg: status.bg, fg: status.text } : undefined} />
             : <Empty text="Keiner Company zugeordnet – unter „Bearbeiten“ wählen." />}
         </Card>
-        <Card title="Deals" count={deals.length}>
+        <Card title="Deals" count={deals.length} action={<CreateButton kind="deal" preset={{ companyId: person.company_id, personId: person.id }} />}>
           {deals.length ? deals.map((l: any) => (
             <AssocRow key={l.deal.id} href={`/opportunities/${l.deal.id}`} title={l.deal.name || 'Deal'}
               sub={[DEAL_ROLES[l.role] ?? l.role, l.deal.value_eur ? `${Number(l.deal.value_eur).toLocaleString('de-DE')} €` : null].filter(Boolean).join(' · ')}
               badge={(OPPORTUNITY_STAGE_LABELS as Record<string, string>)[l.deal.stage] ?? l.deal.stage}
               badgeColor={l.deal.stage === 'won' ? { bg: '#dcfce7', fg: '#166534' } : l.deal.stage === 'lost' ? { bg: '#f3f4f6', fg: '#6b7280' } : { bg: '#dbeafe', fg: '#1d4ed8' }} />
-          )) : <Empty text="In keinem Deal – auf der Deal-Seite im Buying Center hinzufügen." />}
+          )) : <Empty text="In keinem Deal." />}
         </Card>
-        <Card title="Leads" count={(leads || []).length}>
+        <Card title="Leads" count={(leads || []).length} action={<CreateButton kind="lead" preset={{ companyId: person.company_id, personId: person.id }} />}>
           {(leads || []).length ? (leads || []).map((l: any) => (
             <AssocRow key={l.id} href={`/pipeline?focus=${l.id}`} title={l.name || person.company?.name || 'Lead'}
               sub={l.next_follow_up_at ? `Follow-up ${new Date(l.next_follow_up_at).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit' })}` : null}

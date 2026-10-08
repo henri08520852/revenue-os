@@ -1,9 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import StatusBadge from './StatusBadge'
-import AddContactButton from './AddContactButton'
-import AddDealButton from './AddDealButton'
-import AddLeadButton from '../../leads/AddLeadButton'
+import { CreateButton } from '@/components/CreateRecord'
 import { OPPORTUNITY_STAGE_LABELS } from '@/lib/stages'
 import { getTeamContext } from '@/lib/team'
 import { getMeetingData } from '@/lib/meetingData'
@@ -159,13 +157,13 @@ export default async function CompanyPage({ params }: { params: { id: string } }
         )}
       </>}
       right={<>
-        <Card title="Kontakte" count={people.length} action={<AddContactButton companyId={company.id} projectId={projectId} />}>
+        <Card title="Kontakte" count={people.length} action={<CreateButton kind="contact" preset={{ companyId: company.id }} />}>
           {!people.length ? <Empty text="Noch keine Kontakte" /> : people.map((p: any) => (
             <AssocRow key={p.id} href={`/contacts/${p.id}`} title={`${personLabel(p)}${p.is_decision_maker ? ' ★' : ''}`} sub={[p.job_title, p.email].filter(Boolean).join(' · ') || null}
               badge={p.buyer_role ? BUYER_ROLE_LABELS[p.buyer_role] ?? p.buyer_role : null} />
           ))}
         </Card>
-        <Card title="Deals" count={deals.length} action={<AddDealButton companyId={company.id} companyName={company.name} projectId={projectId} team={team} currentUserId={me?.user_id ?? null} />}>
+        <Card title="Deals" count={deals.length} action={<CreateButton kind="deal" preset={{ companyId: company.id }} />}>
           {!deals.length ? <Empty text="Noch kein Deal" /> : deals.map((d: any) => (
             <AssocRow key={d.id} href={`/opportunities/${d.id}`} title={d.name || 'Deal'}
               sub={[d.value_eur ? `${Number(d.value_eur).toLocaleString('de-DE')} €` : null, !['won', 'lost'].includes(d.stage) && d.next_step ? `→ ${d.next_step}${d.next_step_due_at ? ` · ${fmtDate(d.next_step_due_at)}` : ''}` : null].filter(Boolean).join(' · ') || null}
@@ -173,12 +171,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
               badgeColor={d.stage === 'won' ? { bg: '#dcfce7', fg: '#166534' } : d.stage === 'lost' ? { bg: '#f3f4f6', fg: '#6b7280' } : { bg: '#dbeafe', fg: '#1d4ed8' }} />
           ))}
         </Card>
-        <Card title="Leads" count={leads.length} action={
-          <AddLeadButton
-            companies={[{ id: company.id, name: company.name }]}
-            people={people.map((p: any) => ({ id: p.id, company_id: p.company_id, full_name: p.full_name, first_name: p.first_name, last_name: p.last_name, job_title: p.job_title }))}
-            fixedCompanyId={company.id} variant="secondary" team={team} currentUserId={me?.user_id ?? null} />
-        }>
+        <Card title="Leads" count={leads.length} action={<CreateButton kind="lead" preset={{ companyId: company.id }} />}>
           {!leads.length ? <Empty text="Kein offener Lead" /> : leads.map((l: any) => (
             <AssocRow key={l.id} href={`/pipeline?focus=${l.id}`} title={l.name || company.name}
               sub={l.next_follow_up_at && l.stage !== 'disqualified' ? `Follow-up ${fmtDate(l.next_follow_up_at)}` : null}

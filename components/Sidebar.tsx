@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import AppSwitcher from './AppSwitcher'
+import { NewMenu } from './CreateRecord'
 import {
   BuildingOffice2Icon,
   UserGroupIcon,
@@ -37,6 +38,7 @@ export default function Sidebar({ userName, userEmail, inboxCount = 0 }: { userN
         <AppSwitcher />
       </div>
       <nav style={{ flex: 1, padding: '16px 12px' }}>
+        <div style={{ marginBottom: 12 }}><NewMenu /></div>
         {nav.map(({ href, label, icon: Icon }) => {
           const active = path === href || path.startsWith(href + '/')
           return (

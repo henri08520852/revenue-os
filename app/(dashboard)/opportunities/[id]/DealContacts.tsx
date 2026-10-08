@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { addOpportunityContact, removeOpportunityContact, updateOpportunityContactRole } from './actions'
+import { CreateButton } from '@/components/CreateRecord'
 
 export const CONTACT_ROLES = [
   { key: 'champion',       label: 'Champion',        icon: '⭐', color: '#d97706' },
@@ -100,8 +101,7 @@ export default function DealContacts({ oppId, companyId, contacts, companyPeople
       <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: 12 }}>
         {available.length === 0 ? (
           <p style={{ fontSize: 11, color: '#9ca3af' }}>
-            Keine weiteren Kontakte bei dieser Company.{' '}
-            {companyId && <Link href={`/companies/${companyId}`} style={{ color: '#2563eb', textDecoration: 'none' }}>Kontakt anlegen →</Link>}
+            Keine weiteren Kontakte bei dieser Company.
           </p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -123,6 +123,9 @@ export default function DealContacts({ oppId, companyId, contacts, companyPeople
             </div>
           </div>
         )}
+        <div style={{ marginTop: 8 }}>
+          <CreateButton kind="contact" label="+ Neuer Kontakt" preset={{ companyId, dealId: oppId, dealRole: 'stakeholder' }} />
+        </div>
       </div>
 
       {error && <p style={{ fontSize: 11, color: '#dc2626', marginTop: 8 }}>{error}</p>}

@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import FunnelBoard, { Show } from './FunnelBoard'
-import AddLeadButton from '../leads/AddLeadButton'
+import { CreateButton } from '@/components/CreateRecord'
 import { getTeamContext, memberName } from '@/lib/team'
 import { ACTIVE_OPPORTUNITY_STAGES } from '@/lib/stages'
 
@@ -25,7 +25,7 @@ export default async function PipelinePage({ searchParams }: { searchParams: Sea
     if (f?.converted_to_opportunity_id) redirect(`/opportunities/${f.converted_to_opportunity_id}`)
   }
 
-  const [{ data: leads }, { data: opps }, { data: companies }, { data: people }] = await Promise.all([
+  const [{ data: leads }, { data: opps }] = await Promise.all([
     supabase.from('leads')
       .select('*, company:companies(id, name, domain), person:people(id, full_name, first_name, last_name, job_title)')
       .eq('project_id', PROJECT_ID).neq('stage', 'converted')
@@ -34,8 +34,6 @@ export default async function PipelinePage({ searchParams }: { searchParams: Sea
       .select('id, name, stage, value_eur, owner_id, next_step, next_step_due_at, companies(id, name, domain)')
       .eq('project_id', PROJECT_ID)
       .order('value_eur', { ascending: false, nullsFirst: false }),
-    supabase.from('companies').select('id, name').eq('project_id', PROJECT_ID).order('name'),
-    supabase.from('people').select('id, company_id, full_name, first_name, last_name, job_title').eq('project_id', PROJECT_ID).order('last_name'),
   ])
 
   const mine = (o: any) => !ownerFilter || o.owner_id === ownerFilter
@@ -71,7 +69,7 @@ export default async function PipelinePage({ searchParams }: { searchParams: Sea
             <div><p style={{ fontSize: 20, fontWeight: 700, color: '#111827' }}>{openDeals.length}</p><p style={{ fontSize: 11, color: '#9ca3af' }}>Offene Deals</p></div>
             <div><p style={{ fontSize: 20, fontWeight: 700, color: '#111827' }}>€{pipelineTotal.toLocaleString('de-DE')}</p><p style={{ fontSize: 11, color: '#9ca3af' }}>Offenes Volumen</p></div>
             <div><p style={{ fontSize: 20, fontWeight: 700, color: '#16a34a' }}>€{wonTotal.toLocaleString('de-DE')}</p><p style={{ fontSize: 11, color: '#9ca3af' }}>Gewonnen</p></div>
-            <AddLeadButton companies={companies || []} people={people || []} team={team} currentUserId={me?.user_id ?? null} />
+            <div style={{ display: 'flex', gap: 8 }}><CreateButton kind="lead" /><CreateButton kind="deal" primary /></div>
           </div>
         </div>
 
