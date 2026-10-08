@@ -6,7 +6,15 @@ export const GOOGLE_SCOPES = [
   'email',
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/calendar.readonly',
+  // Create meetings (with Meet link) and send invitations from Revenue OS
+  'https://www.googleapis.com/auth/calendar.events',
 ]
+
+export const CALENDAR_WRITE_SCOPE = 'https://www.googleapis.com/auth/calendar.events'
+
+export function canWriteCalendar(scopes: string | null | undefined) {
+  return !!scopes && scopes.split(/\s+/).includes(CALENDAR_WRITE_SCOPE)
+}
 
 // Only accounts of this Workspace domain may connect / use the app
 export const ALLOWED_EMAIL_DOMAIN = (process.env.ALLOWED_EMAIL_DOMAIN || 'altoris.one').toLowerCase()

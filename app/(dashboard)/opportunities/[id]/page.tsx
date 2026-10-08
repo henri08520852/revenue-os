@@ -7,6 +7,8 @@ import DealContacts from './DealContacts'
 import DealNotes from './DealNotes'
 import DealOwner from './DealOwner'
 import { getTeamContext } from '@/lib/team'
+import { getMeetingData } from '@/lib/meetingData'
+import { MeetingButton } from '@/components/MeetingDialog'
 
 const STAGES = OPPORTUNITY_STAGES
 type Stage = typeof STAGES[number]
@@ -59,6 +61,7 @@ export default async function DealPage({ params }: { params: { id: string } }) {
 
   const db = supabase as any
   const { team } = await getTeamContext()
+  const meetingData = await getMeetingData()
   const [{ data: contacts }, { data: companyPeople }, { data: history }, { data: notes }] = await Promise.all([
     db.from('opportunity_contacts')
       .select('id, role, created_at, person:people(id, full_name, first_name, last_name, job_title, email)')
@@ -123,6 +126,16 @@ export default async function DealPage({ params }: { params: { id: string } }) {
                 </Link>
               )}
               <DealOwner oppId={opp.id} ownerId={opp.owner_id ?? null} team={team} />
+              <MeetingButton
+                data={meetingData}
+                label="📅 Meeting planen"
+                prefill={{
+                  companyId: company?.id ?? null,
+                  opportunityId: opp.id,
+                  title: `${company?.name ?? opp.name ?? 'Meeting'} × Altoris`,
+                  attendeeEmails: (contacts || []).map((c: any) => c.person?.email).filter(Boolean).map((e: string) => e.toLowerCase()),
+                }}
+              />
             </div>
             {opp.value_eur && (
               <p className="mt-3 text-3xl font-bold text-gray-900">

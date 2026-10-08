@@ -10,6 +10,8 @@ import FollowUpButton from './FollowUpButton'
 import AddLeadButton from '../../leads/AddLeadButton'
 import { OPPORTUNITY_STAGE_LABELS } from '@/lib/stages'
 import { getTeamContext } from '@/lib/team'
+import { getMeetingData } from '@/lib/meetingData'
+import { MeetingButton } from '@/components/MeetingDialog'
 
 const SIGNAL_LABELS: Record<string, { label: string; icon: string; color: string }> = {
   news_funding:    { label: 'Funding',            icon: '💰', color: '#10b981' },
@@ -53,6 +55,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
 
   const db = supabase as any
   const { me, team } = await getTeamContext()
+  const meetingData = await getMeetingData()
   const [{ data: leadsData }, { data: dealsData }] = await Promise.all([
     db.from('leads').select('id, name, stage, next_follow_up_at, converted_to_opportunity_id').eq('company_id', params.id).order('created_at', { ascending: false }),
     db.from('opportunities').select('id, name, stage, value_eur, next_step, next_step_due_at').eq('company_id', params.id).order('created_at', { ascending: false }),
@@ -118,6 +121,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
               currentUserId={me?.user_id ?? null}
             />
             <AddDealButton companyId={company.id} companyName={company.name} projectId={projectId} team={team} currentUserId={me?.user_id ?? null} />
+            <MeetingButton data={meetingData} prefill={{ companyId: company.id, opportunityId: deals.find((d: any) => !['won', 'lost'].includes(d.stage))?.id ?? null }} />
             <span style={{ width: 1, height: 24, background: '#e5e7eb', margin: '0 4px' }} />
             <AddContactButton companyId={company.id} projectId={projectId} />
             <LogActivityButton companyId={company.id} projectId={projectId} />

@@ -2,7 +2,7 @@ import { getTeamContext, initials } from '@/lib/team'
 import ProfileForm from './ProfileForm'
 import GoogleConnect from './GoogleConnect'
 import { createServiceClient } from '@/lib/supabase/server'
-import { googleConfigured } from '@/lib/google/oauth'
+import { canWriteCalendar, googleConfigured } from '@/lib/google/oauth'
 
 const card = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: 24, marginBottom: 20 }
 const h2 = { fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 16 }
@@ -12,7 +12,7 @@ async function loadConnection(userId: string | undefined) {
   try {
     // google_connections is service-role only (tokens) — select just the display fields
     const { data } = await createServiceClient()
-      .from('google_connections').select('google_email, gmail_last_synced_at, last_error').eq('user_id', userId).maybeSingle()
+      .from('google_connections').select('google_email, gmail_last_synced_at, last_error, scopes').eq('user_id', userId).maybeSingle()
     return data ?? null
   } catch {
     return null
@@ -34,7 +34,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: { g
 
       <section style={card}>
         <h2 style={h2}>Gmail & Kalender</h2>
-        <GoogleConnect conn={conn} status={searchParams.google ?? null} configured={googleConfigured()} />
+        <GoogleConnect conn={conn} status={searchParams.google ?? null} configured={googleConfigured()} needsReconnect={!!conn && !canWriteCalendar((conn as any).scopes)} />
       </section>
 
       <section style={card}>

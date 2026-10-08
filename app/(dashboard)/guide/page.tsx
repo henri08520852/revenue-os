@@ -135,7 +135,8 @@ export default function GuidePage() {
         <ul style={{ fontSize: 14, color: '#374151', lineHeight: 1.8, paddingLeft: 20, listStyle: 'disc' }}>
           <li><b>E-Mails</b> mit Kontakten (exakte Adresse) oder mit der Domain einer Company werden automatisch als Aktivität geloggt – inklusive Zuordnung zum offenen Deal. Private Adressen (gmail.com, web.de …) und Newsletter werden ignoriert.</li>
           <li><b>Vergangene Meetings</b> mit solchen Teilnehmer:innen werden ebenfalls als Aktivität geloggt; „Letzter Kontakt“ aktualisiert sich von selbst.</li>
-          <li><b>Team-Kalender</b> zeigt die Termine aller verbundenen Kolleg:innen plus fällige Follow-ups und nächste Schritte. Gemeinsame Termine erscheinen nur einmal.</li>
+          <li><b>Team-Kalender</b> (Tag / Woche / Monat) zeigt die Termine aller verbundenen Kolleg:innen plus Follow-ups, Deal-Schritte und Erinnerungen. Gemeinsame Termine erscheinen nur einmal. „⏰ Follow-up“ setzt direkt eine Deadline für Lead, Deal oder Company.</li>
+          <li><b>Meetings planen</b>: „+ Meeting“ im Kalender (oder Klick auf eine freie Uhrzeit), „📅 Meeting“ auf Company- und Deal-Seite. Teilnehmer aus den Kontakten wählen, Google-Meet-Link wird automatisch erstellt, Google verschickt die Einladung. Mit Deal verknüpft, wird das Meeting zum nächsten Schritt.</li>
           <li>Der Sync läuft beim Öffnen der App (höchstens alle 10 Minuten) und einmal täglich automatisch.</li>
         </ul>
       </Section>

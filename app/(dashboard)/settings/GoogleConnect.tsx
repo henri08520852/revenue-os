@@ -24,7 +24,7 @@ function ago(iso: string | null) {
   return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
 }
 
-export default function GoogleConnect({ conn, status, configured }: { conn: Conn; status: string | null; configured: boolean }) {
+export default function GoogleConnect({ conn, status, configured, needsReconnect }: { conn: Conn; status: string | null; configured: boolean; needsReconnect?: boolean }) {
   const [busy, setBusy] = useState<null | 'sync' | 'disconnect'>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(status ? STATUS[status] ?? null : null)
   const router = useRouter()
@@ -79,6 +79,13 @@ export default function GoogleConnect({ conn, status, configured }: { conn: Conn
         <p style={{ fontSize: 13, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px' }}>
           Noch nicht eingerichtet: GOOGLE_CLIENT_ID und GOOGLE_CLIENT_SECRET fehlen in Vercel (siehe Setup-Anleitung).
         </p>
+      )}
+
+      {conn && needsReconnect && (
+        <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10 }}>
+          <p style={{ fontSize: 13, color: '#92400e' }}>Neu: Meetings mit Google-Meet-Link direkt aus Revenue OS verschicken. Dafür einmal neu verbinden (Schreibrecht für den Kalender).</p>
+          <a href="/api/google/connect" style={{ ...btn(true), flexShrink: 0 }}>Neu verbinden</a>
+        </div>
       )}
 
       {msg && <p style={{ fontSize: 13, color: msg.ok ? '#16a34a' : '#dc2626', marginTop: 12 }}>{msg.text}</p>}
