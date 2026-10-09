@@ -23,6 +23,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const { data: company, error: insertError } = await supabase.from('companies').insert({ project_id: candidate.project_id, name: candidate.name, account_status: 'target' }).select('id').single()
   if (insertError || !company) return NextResponse.json({ error: insertError?.message ?? 'insert failed' }, { status: 500 })
 
-  await supabase.from('candidate_companies').update({ status: 'approved', existing_company_id: company.id, reviewed_at: new Date().toISOString() }).eq('id', id)
+  await supabase.from('candidate_companies').update({ status: 'accepted', existing_company_id: company.id, reviewed_at: new Date().toISOString() }).eq('id', id)
   return NextResponse.json({ ok: true, company_id: company.id })
 }

@@ -64,7 +64,8 @@ export const roleKey = (title: string) =>
 const AGENCY = /(personal(dienst|service|vermittl|leasing|partner|management)|zeitarbeit|arbeitnehmerüberlassung|staffing|recruit|headhunt|jobs? ?(service|agentur)|randstad|adecco|manpower|hays\b|amadeus fire|orizon|persona service|tempton|brunel|dekra arbeit|gi group|jobactive|piening|ferchau|trenkwalder|avantgarde experts|robert half|page personnel|michael page)/i
 const PUBLIC = /^(stadt|landeshauptstadt|landkreis|kreis|gemeinde|markt|bundes|bundesagentur|land |freistaat|universität|hochschule|technische universität|max-planck|fraunhofer|helmholtz|bundeswehr|polizei|deutsche rentenversicherung|aok|landratsamt|bezirksamt)/i
 const LARGE = /^(deutsche bahn|db |lidl|aldi|edeka|rewe|kaufland|netto|penny|dm-drogerie|rossmann|amazon|dhl|deutsche post|siemens|bosch|robert bosch|bmw|mercedes|volkswagen|audi|porsche|sap|telekom|deutsche telekom|vodafone|allianz|ergo|axa|sparkasse|volksbank|commerzbank|deutsche bank|mcdonald|burger king|ikea|obi|bauhaus|hornbach|decathlon|h&m|zalando|otto|tui|lufthansa|basf|bayer|henkel|thyssenkrupp|continental|schaeffler|zf |würth|helios|asklepios|sana|fresenius|vivantes|charité|ameos|johanniter|malteser|drk|deutsches rotes kreuz|caritas|diakonie|awo|arbeiterwohlfahrt)/i
-export const excluded = (name: string) => AGENCY.test(name) || PUBLIC.test(name.trim()) || LARGE.test(name.trim())
+const PUBLIC_ANY = /(landesbetrieb|\baör\b|anstalt des öffentlichen rechts|körperschaft des öffentlichen|des bundes\b|des landes\b|landesamt|bundesamt|kreisverwaltung|stadtverwaltung|stadtwerke)/i
+export const excluded = (name: string) => AGENCY.test(name) || PUBLIC.test(name.trim()) || PUBLIC_ANY.test(name) || LARGE.test(name.trim())
 
 const VOLUME = /werkstudent|trainee|ausbildung|azubi|lehrling|lehrstelle|duales studium|dual|praktik|aushilfe|minijob|kundenservice|kundenberat|call ?center|vertrieb|sales|verkäuf|sachbearbeit|kaufm|empfang|assistenz|lager|logistik|fahrer|pflege|erzieh|service/i
 
@@ -368,16 +369,16 @@ export async function storeScores(svc: any, projectId: string, byEmployer: Map<s
     const companyId = companyByKey.get(key) ?? null
 
     const { data: existing } = await svc.from('candidate_companies').select('id, status')
-      .eq('project_id', projectId).eq('normalized_name', key).limit(1)
+      .eq('project_id', projectId).eq('hiring->>key', key).limit(1)
     const patch = {
-      hiring: s.hiring, score: s.score, confidence: s.score, signal_hint: 'hiring_pressure', evidence: s.evidence,
+      hiring: { ...s.hiring, key }, score: s.score, confidence: s.score, signal_hint: 'hiring_pressure', evidence: s.evidence,
       existing_company_id: companyId, updated_at: new Date().toISOString(),
     }
     if (existing?.length) {
       await svc.from('candidate_companies').update(patch).eq('id', existing[0].id)
     } else {
       const { error } = await svc.from('candidate_companies').insert({
-        project_id: projectId, name, normalized_name: key, source_type: 'hiring', status: 'pending', ...patch,
+        project_id: projectId, name, source_type: 'hiring', status: 'pending', ...patch,
       })
       if (!error) stats.candidates++
     }

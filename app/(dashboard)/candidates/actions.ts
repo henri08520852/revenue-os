@@ -58,7 +58,7 @@ export async function takeCandidate(id: string, asLead: boolean): Promise<Result
         expires_at: new Date(Date.now() + 21 * 86400000).toISOString(),
       })
     }
-    await supabase.from('candidate_companies').update({ status: 'approved', existing_company_id: companyId, reviewed_at: new Date().toISOString(), reviewed_by: user.email ?? null }).eq('id', id)
+    await supabase.from('candidate_companies').update({ status: 'accepted', existing_company_id: companyId, reviewed_at: new Date().toISOString(), reviewed_by: user.email ?? null }).eq('id', id)
     revalidatePath('/candidates')
     return { error: null, href }
   } catch (e: any) {
