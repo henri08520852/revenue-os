@@ -158,6 +158,8 @@ export async function fetchBA(params: { was?: string; angebotsart?: number; arbe
   const data = await baGet(q)
   // v4 calls the list "stellenangebote", v6 "ergebnisliste"; field names differ between versions
   const list = Array.isArray(data?.stellenangebote) ? data.stellenangebote : Array.isArray(data?.ergebnisliste) ? data.ergebnisliste : null
+  // No hits → v6 leaves out the list entirely
+  if (!list && typeof data?.maxErgebnisse === 'number' && (data.maxErgebnisse === 0 || !data.ergebnisliste)) return []
   if (!list) {
     const v = baVariant != null ? `${BA_VARIANTS[baVariant].path}+${BA_VARIANTS[baVariant].auth}` : '?'
     baVariant = null
