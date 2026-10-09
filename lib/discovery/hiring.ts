@@ -89,12 +89,34 @@ async function fetchJson(url: string, headers: Record<string, string> = {}) {
   return res.json()
 }
 
+// The BA API answered 403 from Vercel with the plain request → try known endpoint/header
+// variants once and keep the first that works; errors carry the BA's answer for diagnosis.
+const BA_VARIANTS: { url: string; headers: Record<string, string> }[] = [
+  { url: BA_URL, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; RevenueOS-JobSignals/1.0)', 'Accept-Language': 'de-DE,de;q=0.9' } },
+  { url: BA_URL.replace('/pc/v4/jobs', '/pc/v4/app/jobs'), headers: { 'User-Agent': 'Mozilla/5.0 (compatible; RevenueOS-JobSignals/1.0)', 'Accept-Language': 'de-DE,de;q=0.9' } },
+  { url: BA_URL, headers: { 'User-Agent': 'curl/8.5.0' } },
+  { url: BA_URL, headers: {} },
+]
+let baVariant: number | null = null
+
+async function baGet(q: URLSearchParams) {
+  const tried: string[] = []
+  for (const i of baVariant != null ? [baVariant] : BA_VARIANTS.map((_, i) => i)) {
+    const v = BA_VARIANTS[i]
+    const res = await fetch(`${v.url}?${q}`, { headers: { Accept: 'application/json', 'X-API-Key': BA_KEY, ...v.headers }, signal: AbortSignal.timeout(12_000) })
+    if (res.ok) { baVariant = i; return res.json() }
+    const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 120)
+    tried.push(`V${i + 1} ${res.status}${body ? ` „${body}“` : ''}`)
+  }
+  throw new Error(`BA-Jobbörse: ${tried.join(' | ')}`)
+}
+
 export async function fetchBA(params: { was?: string; angebotsart?: number; arbeitgeber?: string; page?: number }): Promise<Posting[]> {
   const q = new URLSearchParams({ size: '100', page: String(params.page ?? 1), veroeffentlichtseit: String(WINDOW_DAYS), zeitarbeit: 'false', pav: 'false' })
   if (params.was) q.set('was', params.was)
   if (params.angebotsart) q.set('angebotsart', String(params.angebotsart))
   if (params.arbeitgeber) q.set('arbeitgeber', params.arbeitgeber)
-  const data = await fetchJson(`${BA_URL}?${q}`, { 'X-API-Key': BA_KEY })
+  const data = await baGet(q)
   return (data.stellenangebote || []).filter((s: any) => s.refnr && s.arbeitgeber && s.titel).map((s: any) => ({
     source: 'ba', externalId: String(s.refnr), employer: String(s.arbeitgeber).trim(), title: String(s.titel).trim(),
     location: [s.arbeitsort?.ort, s.arbeitsort?.region].filter(Boolean)[0] ?? null, country: 'DE',
@@ -209,10 +231,11 @@ export async function runHiringDiscovery(svc: any, projectId: string, opts: { bu
 
   // 1) Broad search: role keywords across Germany (+ AT/CH via Google Jobs)
   const fetched: Posting[] = []
-  for (let i = 0; i < BA_QUERIES_PER_RUN && left() > 25_000; i++) {
+  let baDown = false // no request variant got through → don't hammer the API
+  for (let i = 0; i < BA_QUERIES_PER_RUN && left() > 25_000 && !baDown; i++) {
     const q = BA_QUERIES[(day * BA_QUERIES_PER_RUN + i) % BA_QUERIES.length]
     for (let page = 1; page <= BA_PAGES; page++) {
-      try { fetched.push(...await fetchBA({ ...q, page })) } catch (e: any) { stats.errors.push(`BA ${q.was || q.angebotsart}: ${e.message}`); break }
+      try { fetched.push(...await fetchBA({ ...q, page })) } catch (e: any) { stats.errors.push(`BA ${q.was || q.angebotsart}: ${e.message}`); baDown = baVariant == null; break }
     }
   }
   for (let i = 0; i < GOOGLE_QUERIES_PER_RUN && SERPAPI_KEY && left() > 20_000; i++) {

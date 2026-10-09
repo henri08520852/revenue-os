@@ -84,7 +84,8 @@ export async function searchNow(): Promise<{ error: string | null; summary?: str
     const a = await pollAtsAccounts(svc, PROJECT_ID, 20_000)
     revalidatePath('/candidates')
     const summary = `${s.postings} Stellen aus Jobbörsen · ${a.checked} Karriereseiten geprüft · ${s.employers + a.employers} Firmen bewertet · ${s.candidates + a.candidates} neu`
-    return { error: s.postings || a.checked ? null : s.errors[0] ?? 'Keine Stellen gefunden', summary }
+    const errors = Array.from(new Set(s.errors.map(e => e.replace(/^BA [^:]+: /, '')))).slice(0, 2).join(' · ')
+    return { error: s.postings || a.checked ? null : errors || 'Keine Stellen gefunden', summary: errors && (s.postings || a.checked) ? `${summary} · Hinweis: ${errors}` : summary }
   } catch (e: any) {
     return { error: e?.message || 'Fehler' }
   }
