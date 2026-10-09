@@ -6,6 +6,7 @@ Unten rechts auf LinkedIn erscheint der Button **⚡ Revenue OS**:
   **In Revenue OS speichern** legt Kontakt + Firma an (oder aktualisiert sie), optional einen Lead in *Outreach* und eine Follow-up-Aufgabe.
 - **In einer Nachricht** (`linkedin.com/messaging/…`): **Nachricht loggen** speichert die letzte Nachricht (oder markierten Text) als Aktivität.
   Eine *Antwort* der Person schiebt den Lead automatisch von *Outreach* auf *Im Gespräch*.
+- Schon bekannte Firmen werden erkannt (Auswahl aus dem CRM), optional E-Mail für den Gmail-Abgleich, Lead-Phase *Outreach* oder *Im Gespräch*, Aufgaben direkt anlegen.
 
 Die Erweiterung liest nur die sichtbare Seite und nur, wenn du klickst. Sie nutzt deine Revenue-OS-Anmeldung (gleiche Rechte wie in der App).
 
