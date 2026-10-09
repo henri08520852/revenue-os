@@ -327,7 +327,7 @@ export function toRows(projectId: string, postings: Posting[]) {
     .filter(p => { const k = `${p.source}|${p.externalId}`; return !seen.has(k) && (seen.add(k), true) })
     .map(p => ({
       project_id: projectId, source: p.source, external_id: p.externalId, employer_key: employerKey(p.employer),
-      employer_name: p.employer, title: p.title.slice(0, 300), role_key: roleKey(p.title) || null, location: p.location,
+      employer_name: p.employer, title: p.title.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").slice(0, 300), role_key: roleKey(p.title) || null, location: p.location,
       country: p.country, url: p.url, ats: atsOf(p.url) ?? (BOARDS.includes(p.source) ? null : p.source),
       published_at: p.publishedAt && !isNaN(Date.parse(p.publishedAt)) ? new Date(p.publishedAt).toISOString() : null, last_seen_at: now,
     }))

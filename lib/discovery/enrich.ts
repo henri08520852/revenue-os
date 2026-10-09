@@ -163,6 +163,40 @@ export function contactFromDetails(d: any, job: string | null): { contact: HrCon
   return { contact, website, employees }
 }
 
+// Shared mailboxes (bewerbung@, jobs@ …) don't reach a person → not a contact
+const GENERIC_MAIL = /^(bewerbung|bewerbungen|jobs?|karriere|career|careers|hr|personal|recruiting|recruitment|people|info|kontakt|contact|office|hello|hallo|mail|application|applications|talent)[.@_-]/i
+
+// "Ihre Ansprechpartnerin: Frau Sabine Müller, Personalreferentin, Tel. 0821 …, s.mueller@firma.de"
+export function contactFromText(text: string, job: string | null, source: string): HrContact | null {
+  const kw = /(ansprechpartner(?:in)?|ansprechperson|kontaktperson|ihre? kontakt|deine? kontakt|fragen (?:beantwortet|vorab)|contact person|your contact|ihre? recruiter(?:in)?|deine? recruiter(?:in)?)/gi
+  for (const m of Array.from(text.matchAll(kw))) {
+    const start = (m.index ?? 0) + m[0].length
+    const tail = text.slice(start, start + 120)
+    // Names are case-sensitive: skip filler ("ist", "dir gerne", ":") up to the first capitalised first + last name
+    const n = tail.match(/(?:(Frau|Herr|Mrs?\.?|Ms\.?)[ \t]+)?(?:Dr\.?[ \t]+)?([A-ZÄÖÜ][a-zäöüßéè']+(?:-[A-ZÄÖÜ]?[a-zäöüßéè']+)*(?:[ \t]+[A-ZÄÖÜ][a-zäöüßéè']+(?:-[A-ZÄÖÜ]?[a-zäöüßéè']+)*){1,2})/)
+    if (!n || (n.index ?? 0) > 40) continue
+    const name = n[2].trim()
+    if (/gmbh|team|abteilung|personal|recruiting|human|bewerbung|unternehmen|firma|ihnen|dir|uns/i.test(name)) continue
+    const after = text.slice(start + (n.index ?? 0), start + (n.index ?? 0) + 400)
+    const email = (after.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i) || [])[0]?.toLowerCase() ?? null
+    const phone = (after.match(/(?:tel(?:efon)?\.?|phone|fon|mobil)\s*[:.]?\s*(\+?\(?\d[\d\s/().-]{6,20}\d)/i) || [])[1]?.trim() ?? null
+    const title = (after.slice(n[0].length).match(/^\s*[,(–\n-]\s*([A-ZÄÖÜ][^,\n()@]{3,50})/) || [])[1]?.trim() ?? null
+    return { name, title, email: email && !GENERIC_MAIL.test(email) ? email : null, phone, job, source }
+  }
+  return null
+}
+
+const descriptionOf = (d: any): string => {
+  const parts: string[] = []
+  const walk = (x: any, depth: number) => {
+    if (!x || depth > 5) return
+    if (typeof x === 'string') { if (x.length > 40) parts.push(x); return }
+    if (typeof x === 'object') for (const v of Object.values(x)) walk(v, depth + 1)
+  }
+  walk(d, 0)
+  return textOf(parts.join('\n'))
+}
+
 async function baContact(svc: any, projectId: string, key: string) {
   // HR roles first: their ad usually names the recruiting contact
   const { data: jobs } = await svc.from('job_postings').select('external_id, title').eq('project_id', projectId).eq('employer_key', key).eq('source', 'ba').limit(20)
@@ -172,33 +206,51 @@ async function baContact(svc: any, projectId: string, key: string) {
     try {
       const d = await fetchBADetails(j.external_id)
       const r = contactFromDetails(d, j.title)
+      if (!r.contact) r.contact = contactFromText(descriptionOf(d), j.title, 'BA-Stellenanzeige')
+      if (r.contact?.email && GENERIC_MAIL.test(r.contact.email) && !r.contact.name) r.contact = null
       if (r.contact || r.website || r.employees) return { ...r, shape: null, error: null }
-      shape = shape ?? shapeOf(d, 2).slice(0, 800)
+      shape = shape ?? Object.keys(d || {}).join(', ').slice(0, 1500)
     } catch (e: any) { error = e?.message || String(e) }
   }
   return { contact: null, website: null, employees: null, shape, error }
 }
 
-// ---------- batch for the cron / button ----------
+// Personio job page: "Dein Kontakt" / "Ansprechpartner" section
+async function personioContact(c: any): Promise<HrContact | null> {
+  const links = (Array.isArray(c.evidence) ? c.evidence : []).map((e: any) => e.link).filter((l: string) => /jobs\.personio\.(de|com)\/job\//.test(l || '')).slice(0, 2)
+  for (const l of links) {
+    const page = await fetchHtml(l)
+    const found = page ? contactFromText(textOf(page.html), null, 'Personio-Stellenanzeige') : null
+    if (found) return found
+  }
+  return null
+}
 
-export async function enrichCandidates(svc: any, projectId: string, opts: { budgetMs?: number; ids?: string[] } = {}) {
+// ---------- batch for the cron / page ----------
+
+// Bump when the reading logic improves → older entries are read again automatically
+export const ENRICH_VERSION = 2
+
+export async function enrichCandidates(svc: any, projectId: string, opts: { budgetMs?: number; ids?: string[]; limit?: number } = {}) {
   const started = Date.now(), budget = opts.budgetMs ?? 40_000
-  let q = svc.from('candidate_companies').select('id, name, hiring, score, enrichment_data').eq('project_id', projectId).eq('source_type', 'hiring')
-  q = opts.ids ? q.in('id', opts.ids) : q.eq('status', 'pending').is('enrichment_data->impressum', null).order('score', { ascending: false }).limit(20)
+  let q = svc.from('candidate_companies').select('id, name, hiring, score, evidence, enrichment_data').eq('project_id', projectId).eq('source_type', 'hiring')
+  q = opts.ids ? q.in('id', opts.ids) : q.eq('status', 'pending').or(`enrichment_data.is.null,enrichment_data->>v.is.null,enrichment_data->>v.lt.${ENRICH_VERSION}`).order('score', { ascending: false }).limit(opts.limit ?? 40)
   const { data: list } = await q
   const queue = [...(list || [])]
   let done = 0
-  await Promise.all(Array.from({ length: 4 }, async () => {
+  await Promise.all(Array.from({ length: 6 }, async () => {
     while (queue.length && Date.now() - started < budget - 9_000) {
       const c = queue.shift()
       const feed = c.hiring?.feed
       const ba = c.hiring?.sources?.includes('ba') && c.hiring?.key ? await baContact(svc, projectId, c.hiring.key) : null
       const info = await readCompany(c.name, c.hiring?.countries?.[0] ?? null, feed?.ats === 'personio' ? feed.slug : null, ba?.website ?? null)
       if (info.employees == null && ba?.employees) info.employees = ba.employees
-      const hrContact: HrContact | null = ba?.contact ?? (info.hrEmail ? { name: null, title: null, email: info.hrEmail, phone: null, job: null, source: 'Website' } : null)
+      // Only a named person counts as HR contact; shared mailboxes stay on the company (impressum.hrEmail)
+      const named = (x: HrContact | null | undefined) => (x?.name ? x : null)
+      const hrContact: HrContact | null = named(ba?.contact) ?? (feed?.ats === 'personio' ? await personioContact(c) : null)
       const big = (info.employees ?? 0) > 300 && !(c.enrichment_data?.impressum?.employees > 300)
       await svc.from('candidate_companies').update({
-        enrichment_data: { ...(c.enrichment_data || {}), impressum: info, hrContact, ...(ba && !ba.contact ? { baDetails: { shape: ba.shape, error: ba.error } } : {}) },
+        enrichment_data: { ...(c.enrichment_data || {}), v: ENRICH_VERSION, impressum: info, hrContact, ...(ba && !ba.contact ? { baDetails: { shape: ba.shape, error: ba.error } } : {}) },
         ...(big && c.score != null ? { score: Math.max(0, c.score - 30), confidence: Math.max(0, c.score - 30) } : {}),
       }).eq('id', c.id)
       done++

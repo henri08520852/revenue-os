@@ -144,11 +144,11 @@ export async function searchNow(): Promise<{ error: string | null; summary?: str
   }
 }
 
-// "Website & Impressum" for one candidate, on demand
-export async function enrichCandidate(id: string): Promise<{ error: string | null }> {
+// Website & Impressum for the cards still missing it (called by the page in the background)
+export async function enrichMissing(ids: string[]): Promise<{ error: string | null }> {
   const { me, denied } = await getTeamContext()
   if (!me || denied) return { error: 'Nicht berechtigt' }
-  await enrichCandidates(createServiceClient(), PROJECT_ID, { ids: [id], budgetMs: 45_000 })
+  await enrichCandidates(createServiceClient(), PROJECT_ID, { ids: ids.slice(0, 8), budgetMs: 50_000 })
   revalidatePath('/candidates')
   return { error: null }
 }
