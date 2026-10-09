@@ -89,24 +89,46 @@ async function fetchJson(url: string, headers: Record<string, string> = {}) {
   return res.json()
 }
 
-// The BA API answered 403 from Vercel with the plain request → try known endpoint/header
-// variants once and keep the first that works; errors carry the BA's answer for diagnosis.
-const BA_VARIANTS: { url: string; headers: Record<string, string> }[] = [
-  { url: BA_URL, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; RevenueOS-JobSignals/1.0)', 'Accept-Language': 'de-DE,de;q=0.9' } },
-  { url: BA_URL.replace('/pc/v4/jobs', '/pc/v4/app/jobs'), headers: { 'User-Agent': 'Mozilla/5.0 (compatible; RevenueOS-JobSignals/1.0)', 'Accept-Language': 'de-DE,de;q=0.9' } },
-  { url: BA_URL, headers: { 'User-Agent': 'curl/8.5.0' } },
-  { url: BA_URL, headers: {} },
+// The BA API answered 403 (empty body) from Vercel for the plain key request → try the other
+// publicly documented access paths (API version, OAuth client of the BA job search app) once,
+// keep the first that works; errors carry the BA's answers for diagnosis.
+const BA_UA = { 'User-Agent': 'Mozilla/5.0 (compatible; RevenueOS-JobSignals/1.0)', 'Accept-Language': 'de-DE,de;q=0.9' }
+const BA_PATHS = ['/pc/v4/jobs', '/pc/v4/app/jobs', '/pc/v6/jobs', '/pc/v5/jobs']
+const BA_OAUTH = { url: 'https://rest.arbeitsagentur.de/oauth/gettoken_cc', id: 'c003a37f-024f-462a-b36d-b001be4cd24a', secret: '32a39620-32b3-4307-9aa1-511e3d7f48a8' }
+const BA_VARIANTS: { path: string; auth: 'key' | 'oauth' }[] = [
+  ...BA_PATHS.map(path => ({ path, auth: 'key' as const })),
+  ...BA_PATHS.slice(0, 2).map(path => ({ path, auth: 'oauth' as const })),
 ]
 let baVariant: number | null = null
+let baToken: { value: string; until: number } | null = null
+
+async function baBearer() {
+  if (baToken && baToken.until > Date.now()) return baToken.value
+  const res = await fetch(BA_OAUTH.url, {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...BA_UA },
+    body: new URLSearchParams({ client_id: BA_OAUTH.id, client_secret: BA_OAUTH.secret, grant_type: 'client_credentials' }),
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!res.ok) throw new Error(`Token ${res.status}`)
+  const d = await res.json()
+  baToken = { value: d.access_token, until: Date.now() + ((d.expires_in ?? 600) - 60) * 1000 }
+  return baToken.value
+}
 
 async function baGet(q: URLSearchParams) {
   const tried: string[] = []
+  const base = BA_URL.replace(/\/pc\/v\d+\/(app\/)?jobs$/, '')
   for (const i of baVariant != null ? [baVariant] : BA_VARIANTS.map((_, i) => i)) {
     const v = BA_VARIANTS[i]
-    const res = await fetch(`${v.url}?${q}`, { headers: { Accept: 'application/json', 'X-API-Key': BA_KEY, ...v.headers }, signal: AbortSignal.timeout(12_000) })
-    if (res.ok) { baVariant = i; return res.json() }
-    const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 120)
-    tried.push(`V${i + 1} ${res.status}${body ? ` „${body}“` : ''}`)
+    try {
+      const auth: Record<string, string> = v.auth === 'key' ? { 'X-API-Key': BA_KEY } : { Authorization: `Bearer ${await baBearer()}`, OAuthAccessToken: await baBearer() }
+      const res = await fetch(`${base}${v.path}?${q}`, { headers: { Accept: 'application/json', ...BA_UA, ...auth }, signal: AbortSignal.timeout(12_000) })
+      if (res.ok) { baVariant = i; return res.json() }
+      const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 80)
+      tried.push(`${v.path.replace('/pc/', '')}+${v.auth} ${res.status}${body ? ` „${body}“` : ''}`)
+    } catch (e: any) {
+      tried.push(`${v.path.replace('/pc/', '')}+${v.auth} ${e?.message || e}`)
+    }
   }
   throw new Error(`BA-Jobbörse: ${tried.join(' | ')}`)
 }

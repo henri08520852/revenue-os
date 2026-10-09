@@ -77,7 +77,7 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
     setMsg(null)
     startSearch(async () => {
       const res = await searchNow()
-      setMsg(res.error ? `Suche: ${res.error}` : `Suche fertig – ${res.summary}`)
+      setMsg(res.error ? `Fehler bei der Suche: ${res.error}` : `Suche fertig – ${res.summary}`)
       router.refresh()
     })
   }
