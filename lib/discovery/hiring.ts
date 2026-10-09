@@ -181,7 +181,7 @@ export function scoreEmployer(all: Row[]) {
 
 // ---------- run ----------
 
-function toRows(projectId: string, postings: Posting[]) {
+export function toRows(projectId: string, postings: Posting[]) {
   const now = new Date().toISOString()
   const seen = new Set<string>()
   return postings.filter(p => !excluded(p.employer) && employerKey(p.employer))
@@ -194,7 +194,7 @@ function toRows(projectId: string, postings: Posting[]) {
     }))
 }
 
-async function save(svc: any, rows: any[]) {
+export async function save(svc: any, rows: any[]) {
   for (let i = 0; i < rows.length; i += 200) {
     const { error } = await svc.from('job_postings').upsert(rows.slice(i, i + 200), { onConflict: 'project_id,source,external_id' })
     if (error) throw new Error(error.message)
@@ -237,22 +237,23 @@ export async function runHiringDiscovery(svc: any, projectId: string, opts: { bu
     } catch (err: any) { stats.errors.push(`BA ${e.name}: ${err.message}`) }
   }
 
-  // 3) Score every employer seen in this run, using all postings of the last 30 days
+  // 3) Load all postings of the last 30 days for every employer seen in this run
   const keys = Array.from(new Set(rows.map(r => r.employer_key)))
-  const since = new Date(Date.now() - WINDOW_DAYS * 86400000).toISOString()
-  const byEmployer = new Map<string, Row[]>()
-  for (let i = 0; i < keys.length; i += 100) {
-    const { data } = await svc.from('job_postings')
-      .select('employer_key, employer_name, title, role_key, location, country, url, ats, published_at, first_seen_at, last_seen_at, source')
-      .eq('project_id', projectId).in('employer_key', keys.slice(i, i + 100)).gte('last_seen_at', since).limit(5000)
-    for (const r of data || []) byEmployer.set(r.employer_key, [...(byEmployer.get(r.employer_key) || []), r])
-  }
+  const byEmployer = await loadEmployers(svc, projectId, keys)
 
-  // 4) Exact counts from applicant tracking systems for the biggest employers (refreshed every few days)
+  // 4) Exact counts from applicant tracking systems for the biggest employers (refreshed every few days);
+  //    every feed found is also registered for the regular feed rotation (ats-feeds.ts)
   const fresh = new Date(Date.now() - ATS_REFRESH_DAYS * 86400000).toISOString()
-  const withFeed = Array.from(byEmployer.entries())
+  const feeds = Array.from(byEmployer.entries())
     .map(([key, list]) => ({ key, list, feed: list.map(r => feedOf(r.url)).find(Boolean) ?? null }))
-    .filter(e => e.feed && e.list.length >= 2 && !e.list.some(r => r.source === e.feed!.ats && (r.last_seen_at ?? '') >= fresh))
+    .filter(e => e.feed)
+  if (feeds.length) {
+    await svc.from('ats_accounts').upsert(feeds.map(e => ({
+      project_id: projectId, ats: e.feed!.ats, slug: e.feed!.slug, employer_name: e.list[0].employer_name, employer_key: e.key,
+    })), { onConflict: 'project_id,ats,slug', ignoreDuplicates: true })
+  }
+  const withFeed = feeds
+    .filter(e => e.list.length >= 2 && !e.list.some(r => r.source === e.feed!.ats && (r.last_seen_at ?? '') >= fresh))
     .sort((a, b) => b.list.length - a.list.length).slice(0, ATS_FEEDS_PER_RUN)
   for (const e of withFeed) {
     if (left() < 6_000) break
@@ -265,6 +266,25 @@ export async function runHiringDiscovery(svc: any, projectId: string, opts: { bu
     } catch (err: any) { stats.errors.push(`${e.feed!.ats} ${e.feed!.slug}: ${err.message}`) }
   }
 
+  await storeScores(svc, projectId, byEmployer, stats)
+  return stats
+}
+
+// All postings of the last 30 days per employer
+export async function loadEmployers(svc: any, projectId: string, keys: string[]) {
+  const since = new Date(Date.now() - WINDOW_DAYS * 86400000).toISOString()
+  const byEmployer = new Map<string, Row[]>()
+  for (let i = 0; i < keys.length; i += 100) {
+    const { data } = await svc.from('job_postings')
+      .select('employer_key, employer_name, title, role_key, location, country, url, ats, published_at, first_seen_at, last_seen_at, source')
+      .eq('project_id', projectId).in('employer_key', keys.slice(i, i + 100)).gte('last_seen_at', since).limit(5000)
+    for (const r of data || []) byEmployer.set(r.employer_key, [...(byEmployer.get(r.employer_key) || []), r])
+  }
+  return byEmployer
+}
+
+// Score employers → candidate_companies ("Heiße Firmen") + signal on known CRM companies
+export async function storeScores(svc: any, projectId: string, byEmployer: Map<string, Row[]>, stats: { employers: number; candidates: number; signals: number }) {
   const { data: companies } = await svc.from('companies').select('id, name').eq('project_id', projectId)
   const companyByKey = new Map<string, string>((companies || []).map((c: any) => [employerKey(c.name), c.id]))
 
@@ -304,5 +324,4 @@ export async function runHiringDiscovery(svc: any, projectId: string, opts: { bu
       }
     }
   }
-  return stats
 }

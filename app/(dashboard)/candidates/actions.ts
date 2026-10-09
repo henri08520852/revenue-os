@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getTeamContext } from '@/lib/team'
 import { runHiringDiscovery } from '@/lib/discovery/hiring'
+import { pollAtsAccounts } from '@/lib/discovery/ats-feeds'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID!
 type Result = { error: string | null; href?: string }
@@ -78,9 +79,12 @@ export async function searchNow(): Promise<{ error: string | null; summary?: str
   const { me, denied } = await getTeamContext()
   if (!me || denied) return { error: 'Nicht berechtigt' }
   try {
-    const s = await runHiringDiscovery(createServiceClient(), PROJECT_ID, { budgetMs: 50_000 })
+    const svc = createServiceClient()
+    const s = await runHiringDiscovery(svc, PROJECT_ID, { budgetMs: 30_000 })
+    const a = await pollAtsAccounts(svc, PROJECT_ID, 20_000)
     revalidatePath('/candidates')
-    return { error: s.postings ? null : s.errors[0] ?? 'Keine Stellen gefunden', summary: `${s.postings} Stellen gelesen · ${s.employers} Firmen bewertet · ${s.candidates} neu` }
+    const summary = `${s.postings} Stellen aus Jobbörsen · ${a.checked} Karriereseiten geprüft · ${s.employers + a.employers} Firmen bewertet · ${s.candidates + a.candidates} neu`
+    return { error: s.postings || a.checked ? null : s.errors[0] ?? 'Keine Stellen gefunden', summary }
   } catch (e: any) {
     return { error: e?.message || 'Fehler' }
   }

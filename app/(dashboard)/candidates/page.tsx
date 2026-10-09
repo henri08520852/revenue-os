@@ -20,18 +20,23 @@ export default async function CandidatesPage() {
     return { postings: count ?? 0, lastAt: last?.[0]?.last_seen_at ?? null }
   }
 
-  const [{ data }, ba, google, ats] = await Promise.all([
+  const countAts = (status?: string) => {
+    let q = supabase.from('ats_accounts').select('id', { count: 'exact', head: true }).eq('project_id', PROJECT_ID)
+    if (status) q = q.eq('status', status)
+    return q.then((r: any) => r.count ?? 0)
+  }
+  const [{ data }, ba, google, ats, atsKnown, atsActive] = await Promise.all([
     supabase.from('candidate_companies')
       .select('id, name, source_type, signal_hint, confidence, score, hiring, evidence, existing_company_id, enrichment_data, updated_at, created_at')
       .eq('project_id', PROJECT_ID).eq('status', 'pending')
       .order('score', { ascending: false, nullsFirst: false }).order('confidence', { ascending: false }).limit(300),
-    sourceStats(['ba']), sourceStats(['google_jobs']), sourceStats(ATS_SOURCES),
+    sourceStats(['ba']), sourceStats(['google_jobs']), sourceStats(ATS_SOURCES), countAts(), countAts('active'),
   ])
 
   const sources: SourceStatus[] = [
     { name: 'BA-Jobbörse', area: 'Deutschland', active: true, note: 'kostenlos', ...ba },
     { name: 'Google Jobs', area: 'DE · AT · CH', active: !!process.env.SERPAPI_KEY, note: process.env.SERPAPI_KEY ? `${Number(process.env.SERPAPI_SEARCHES_PER_DAY) || 2} Suchen/Tag` : 'SERPAPI_KEY fehlt', ...google },
-    { name: 'Bewerbermanagement-Feeds', area: 'Personio, Greenhouse, Lever, …', active: true, note: 'exakte Stellenzahl', ...ats },
+    { name: 'Karriereseiten', area: 'Personio, Recruitee, Greenhouse, Lever, …', active: true, note: `${atsKnown.toLocaleString('de-DE')} Seiten bekannt, ${atsActive.toLocaleString('de-DE')} mit DACH-Stellen`, ...ats },
     { name: 'Northdata', area: 'Größe, Handelsregister', active: !!process.env.NORTHDATA_API_KEY, note: process.env.NORTHDATA_API_KEY ? 'ab Score 60' : 'NORTHDATA_API_KEY fehlt', postings: null, lastAt: null },
   ]
 
