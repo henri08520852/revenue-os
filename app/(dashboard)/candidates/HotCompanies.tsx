@@ -22,7 +22,7 @@ type Candidate = {
 export type SourceStatus = { name: string; area: string; active: boolean; note: string; postings: number | null; lastAt: string | null }
 
 const NEWS_LABEL: Record<string, string> = { news_funding: 'Funding', news_expansion: 'Expansion', news_leadership: 'Leadership' }
-const SOURCE_LABEL: Record<string, string> = { ba: 'BA-Jobbörse', google_jobs: 'Google Jobs' }
+const SOURCE_LABEL: Record<string, string> = { ba: 'BA-Jobbörse', google_jobs: 'Google Jobs', eures: 'EURES', personio: 'Personio', softgarden: 'softgarden', join: 'JOIN', onlyfy: 'onlyfy', dvinci: 'd.vinci', rexx: 'rexx', concludis: 'concludis', recruitee: 'Recruitee', greenhouse: 'Greenhouse', lever: 'Lever', workable: 'Workable', smartrecruiters: 'SmartRecruiters' }
 
 const card = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '18px 22px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }
 const chip = (bg: string, color: string) => ({ fontSize: 11.5, fontWeight: 600, padding: '2px 9px', borderRadius: 12, background: bg, color } as const)

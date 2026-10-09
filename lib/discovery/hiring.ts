@@ -190,6 +190,48 @@ function baPosting(s: any): Posting | null {
   }
 }
 
+// ---------- EURES (EU job portal: public employment services incl. AMS Austria and Switzerland) ----------
+
+const EURES_URLS = [
+  'https://europa.eu/eures/api/jv-searchengine/public/jv-search/search',
+  'https://europa.eu/eures/eures-apps/searchengine/page/jv-search/search',
+]
+let euresUrl: string | null = null
+
+export async function fetchEures(keyword: string, country: 'at' | 'ch' | 'de', page = 1): Promise<Posting[]> {
+  const body = {
+    resultsPerPage: 50, page, sortSearch: 'MOST_RECENT', keywords: keyword ? [{ keyword, specificSearchCode: 'EVERYWHERE' }] : [],
+    publicationPeriod: 'LAST_MONTH', occupationUris: [], skillUris: [], requiredExperienceCodes: [], positionScheduleCodes: [], sectorCodes: [],
+    educationAndQualificationLevelCodes: [], positionOfferingCodes: [], locationCodes: [country], euresFlagCodes: [], otherBenefitsCodes: [],
+    requiredLanguages: [], minNumberPost: null, sessionId: 'revenueos',
+  }
+  const tried: string[] = []
+  let data: any = null
+  for (const url of euresUrl ? [euresUrl] : EURES_URLS) {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...BA_UA }, body: JSON.stringify(body), signal: AbortSignal.timeout(12_000) }).catch(() => null)
+    if (res?.ok) { euresUrl = url; data = await res.json(); break }
+    tried.push(`${url.includes('/api/') ? 'api' : 'apps'} ${res?.status ?? 'Fehler'}`)
+  }
+  if (!data) throw new Error(`EURES: ${tried.join(' | ')}`)
+  const list = data.jvs ?? data.jobVacancies ?? data.results ?? data.content ?? null
+  if (!Array.isArray(list)) throw new Error(`EURES-Antwort ohne Liste – {${shapeOf(data)}}`)
+  const out = list.map((j: any): Posting | null => {
+    const employer = str(j.employer?.name, j.employerName, j.employer, j.organisationName)
+    const title = str(j.title, j.jobTitle, j.name)
+    const id = str(j.id, j.jvId, j.handle)
+    if (!employer || !title || !id) return null
+    const loc = j.locationMap ? Object.values(j.locationMap).flat()[0] : j.locations?.[0]?.city ?? j.location ?? null
+    const created = j.creationDate ?? j.publicationDate ?? j.lastModificationDate ?? null
+    return {
+      source: 'eures', externalId: id, employer, title, location: typeof loc === 'string' ? loc : null, country: country.toUpperCase(),
+      url: `https://europa.eu/eures/portal/jv-se/jv-details/${encodeURIComponent(id)}?lang=de`,
+      publishedAt: created && !isNaN(new Date(created).getTime()) ? new Date(created).toISOString() : null,
+    }
+  }).filter(Boolean) as Posting[]
+  if (list.length && !out.length) throw new Error(`EURES-Stelle unbekannt aufgebaut – {${shapeOf(list[0], 2)}}`)
+  return out
+}
+
 // "vor 3 Tagen" / "3 days ago" → ISO date
 function ago(text: string | undefined) {
   const m = String(text || '').match(/(\d+)\s*(stunde|hour|tag|day|woche|week|monat|month)/i)
@@ -217,7 +259,7 @@ export async function fetchGoogleJobs(q: string, location: string, gl: string): 
 
 type Row = { employer_name: string; title: string; role_key: string | null; location: string | null; country: string | null; url: string | null; ats: string | null; published_at: string | null; first_seen_at: string; last_seen_at?: string; source: string }
 
-const BOARDS = ['ba', 'google_jobs']
+const BOARDS = ['ba', 'google_jobs', 'eures']
 
 // The applicant tracking system's feed is the complete list; otherwise merge the job boards
 // and drop the same job listed on several of them
@@ -315,6 +357,14 @@ export async function runHiringDiscovery(svc: any, projectId: string, opts: { bu
     for (let page = 1; page <= BA_PAGES; page++) {
       try { fetched.push(...await fetchBA({ ...q, page })) } catch (e: any) { stats.errors.push(`BA ${q.was || q.angebotsart}: ${e.message}`); baDown = baVariant == null; break }
     }
+  }
+  // EURES for Austria and Switzerland (free): one role per country and run, rotating
+  const euresCountries = ['at', 'ch'] as const
+  for (let i = 0; i < euresCountries.length; i++) {
+    const country = euresCountries[i]
+    if (left() < 22_000) break
+    const kw = GOOGLE_ROLES[(day * 2 + i) % GOOGLE_ROLES.length]
+    try { fetched.push(...await fetchEures(kw, country)) } catch (e: any) { stats.errors.push(`EURES ${country} ${kw}: ${e.message}`) }
   }
   for (let i = 0; i < GOOGLE_QUERIES_PER_RUN && SERPAPI_KEY && left() > 20_000; i++) {
     // Step through the list with a stride so consecutive searches hit different cities and roles

@@ -22,6 +22,12 @@ export const PATTERNS: { key: string; url: string; match: 'domain' | 'prefix'; r
   { key: 'jobs.eu.lever.co/*', url: 'jobs.eu.lever.co/', match: 'prefix', root: '^https?://jobs\\.eu\\.lever\\.co/[^/?]+/?(\\?.*)?$' },
   { key: 'apply.workable.com/*', url: 'apply.workable.com/', match: 'prefix', root: '^https?://apply\\.workable\\.com/[^/?]+/?(\\?.*)?$' },
   { key: 'jobs.smartrecruiters.com/*', url: 'jobs.smartrecruiters.com/', match: 'prefix', root: '^https?://jobs\\.smartrecruiters\\.com/[^/?]+/?(\\?.*)?$' },
+  { key: '*.softgarden.io', url: 'softgarden.io', match: 'domain', root: '^https?://[^/]+\\.softgarden\\.io(/(de|en))?(/vacancies)?/?(\\?.*)?$' },
+  { key: 'join.com/companies/*', url: 'join.com/companies/', match: 'prefix', root: '^https?://join\\.com/companies/[^/?]+/?(\\?.*)?$' },
+  { key: '*.onlyfy.jobs', url: 'onlyfy.jobs', match: 'domain', root: '^https?://[^/]+\\.onlyfy\\.jobs/?(\\?.*)?$' },
+  { key: '*.dvinci-hr.com', url: 'dvinci-hr.com', match: 'domain', root: '^https?://[^/]+\\.dvinci-hr\\.com(/(de|en))?(/jobs)?/?(\\?.*)?$' },
+  { key: '*.rexx-systems.com', url: 'rexx-systems.com', match: 'domain', root: '^https?://[^/]+\\.rexx-systems\\.com/?(\\?.*)?$' },
+  { key: '*.concludis.de', url: 'concludis.de', match: 'domain', root: '^https?://[^/]+\\.concludis\\.de/?(\\?.*)?$' },
 ]
 const WAYBACK = process.env.WAYBACK_CDX_URL || 'https://web.archive.org/cdx/search/cdx'
 const REDISCOVER_DAYS = 30
