@@ -6,6 +6,7 @@ import { enrichCandidate, rejectCandidate, searchNow, takeCandidate } from './ac
 
 type Evidence = { title?: string; link?: string | null; source?: string }
 type Hiring = {
+  hrRoles?: string[]
   open: number; new14: number; repeated: { role: string; count: number }[]; volumeRoles: number
   ats: string[]; locations: string[]; countries: string[]; sources: string[]; updatedAt: string
 }
@@ -14,6 +15,7 @@ type Candidate = {
   hiring: Hiring | null; evidence: Evidence[] | null; existing_company_id: string | null; updated_at: string | null; created_at: string
   enrichment_data?: {
     northdata?: { employees?: number | null; signals?: string[] }
+    hrContact?: { name: string | null; title: string | null; email: string | null; phone: string | null; job: string | null; source: string } | null
     impressum?: { website: string | null; domain: string | null; managers: string[]; register: string | null; email: string | null; phone: string | null; employees: number | null; checkedAt: string; note?: string }
   } | null
 }
@@ -161,6 +163,7 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
                       {h.volumeRoles > 0 && <> · {h.volumeRoles} bewerberstarke Rollen</>}
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                      {!!h.hrRoles?.length && <span title={h.hrRoles.join(' · ')} style={chip('#ede9fe', '#6d28d9')}>👥 baut Recruiting auf ({h.hrRoles.length} HR-Stelle{h.hrRoles.length > 1 ? 'n' : ''})</span>}
                       {h.repeated.slice(0, 3).map(r => <span key={r.role} style={chip('#fef3c7', '#92400e')}>{r.count}× {r.role}</span>)}
                       <span style={h.ats.length ? chip('#f3f4f6', '#374151') : chip('#dcfce7', '#15803d')}>{h.ats.length ? `ATS: ${h.ats.join(', ')}` : 'Kein ATS erkannt'}</span>
                       {h.locations.slice(0, 3).map(l => <span key={l} style={chip('#f9fafb', '#6b7280')}>📍 {l}</span>)}
@@ -181,7 +184,14 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
                       {imp.managers.length > 0 && <> · <b>Geschäftsführung:</b> {imp.managers.join(', ')}</>}
                       {imp.register && <> · {imp.register}</>}
                       {(imp.email || imp.phone) && <div style={{ color: '#6b7280' }}>{[imp.email, imp.phone].filter(Boolean).join(' · ')}</div>}
+                      {c.enrichment_data?.hrContact && (() => {
+                        const hr = c.enrichment_data!.hrContact!
+                        return <div><b>HR-Kontakt:</b> {[hr.name, hr.title].filter(Boolean).join(', ') || 'Bewerbungs-Adresse'}{hr.email ? <> · <a href={`mailto:${hr.email}`} style={{ color: '#2563eb', textDecoration: 'none' }}>{hr.email}</a></> : ''}{hr.phone ? ` · ${hr.phone}` : ''}<span style={{ color: '#9ca3af' }}> ({hr.source})</span></div>
+                      })()}
                       {imp.website && imp.note && <div style={{ color: '#9ca3af' }}>{imp.note}</div>}
+                      <button onClick={() => enrich(c)} disabled={enriching === c.id} style={{ background: 'none', border: 'none', padding: 0, marginTop: 2, color: '#9ca3af', fontSize: 11.5, cursor: 'pointer' }}>
+                        {enriching === c.id ? 'liest neu …' : '↻ neu lesen'}
+                      </button>
                     </div>
                   )
                 })()}

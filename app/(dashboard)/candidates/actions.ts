@@ -30,6 +30,21 @@ async function companyFor(supabase: any, c: any): Promise<string> {
   return data.id
 }
 
+// HR contact from the job ad → contact (only with a name; a bare jobs@ address goes on the company)
+async function hrContactAsPerson(supabase: any, companyId: string, c: any): Promise<string | null> {
+  const hr = c.enrichment_data?.hrContact
+  if (!hr?.name) return null
+  const clean = hr.name.replace(/^(frau|herr|dr\.?|prof\.?)\s+/gi, '').trim()
+  const { data: existing } = await supabase.from('people').select('id').eq('company_id', companyId).ilike('full_name', clean).limit(1)
+  if (existing?.length) return existing[0].id
+  const words = clean.split(/\s+/)
+  const { data } = await supabase.from('people').insert({
+    project_id: PROJECT_ID, company_id: companyId, first_name: words.slice(0, -1).join(' ') || null, last_name: words[words.length - 1], full_name: clean,
+    job_title: hr.title || 'Personal / Recruiting', email: hr.email || null, phone: hr.phone || null, buyer_role: 'champion', source: 'ba_jobad',
+  }).select('id').single()
+  return data?.id ?? null
+}
+
 // Managing directors from the Impressum → contacts (decision makers), skipping existing names
 async function managersAsContacts(supabase: any, companyId: string, c: any): Promise<string | null> {
   const imp = c.enrichment_data?.impressum
@@ -63,7 +78,9 @@ export async function takeCandidate(id: string, asLead: boolean): Promise<Result
   try {
     const companyId = await companyFor(supabase, c)
     const managerId = await managersAsContacts(supabase, companyId, c)
-    const reason = c.hiring ? `${c.hiring.open} offene Stellen${c.hiring.new14 ? `, ${c.hiring.new14} neu in 14 Tagen` : ''}${c.hiring.repeated?.[0] ? `, ${c.hiring.repeated[0].count}× ${c.hiring.repeated[0].role}` : ''}` : (c.evidence?.[0]?.title ?? null)
+    const hrId = await hrContactAsPerson(supabase, companyId, c)
+    const contactId = hrId ?? managerId // HR runs the screening day to day → first contact
+    const reason = c.hiring ? `${c.hiring.open} offene Stellen${c.hiring.new14 ? `, ${c.hiring.new14} neu in 14 Tagen` : ''}${c.hiring.repeated?.[0] ? `, ${c.hiring.repeated[0].count}× ${c.hiring.repeated[0].role}` : ''}${c.hiring.hrRoles?.length ? `, baut Recruiting auf (${c.hiring.hrRoles[0]})` : ''}` : (c.evidence?.[0]?.title ?? null)
     let href = `/companies/${companyId}`
     if (asLead) {
       const [{ data: openLead }, { data: openDeal }] = await Promise.all([
@@ -72,13 +89,13 @@ export async function takeCandidate(id: string, asLead: boolean): Promise<Result
       ])
       if (!openLead?.length && !openDeal?.length) {
         const { data: lead, error } = await supabase.from('leads').insert({
-          project_id: PROJECT_ID, company_id: companyId, person_id: managerId, owner_id: user.id, stage: 'outreach', source: 'signal',
+          project_id: PROJECT_ID, company_id: companyId, person_id: contactId, owner_id: user.id, stage: 'outreach', source: 'signal',
           notes: reason ? `Signal: ${reason}` : null,
         }).select('id').single()
         if (error) return { error: error.message }
         await supabase.from('tasks').insert({
           project_id: PROJECT_ID, title: `Erstansprache ${c.name}${reason ? ` (${reason})` : ''}`.slice(0, 200), task_type: 'todo',
-          due_at: `${tomorrow()}T10:00:00.000Z`, has_time: false, owner_id: user.id, created_by: user.id, company_id: companyId, person_id: managerId, lead_id: lead.id,
+          due_at: `${tomorrow()}T10:00:00.000Z`, has_time: false, owner_id: user.id, created_by: user.id, company_id: companyId, person_id: contactId, lead_id: lead.id,
         })
         href = `/pipeline?focus=${lead.id}`
       } else href = openDeal?.length ? `/opportunities/${openDeal[0].id}` : `/pipeline?focus=${openLead![0].id}`

@@ -2,12 +2,13 @@
 // register entry, central e-mail/phone and a size hint ("über 120 Mitarbeitende").
 // Website: link on the company's Personio career page, else a checked guess from the name.
 // Server-only, service role client.
-import { employerKey } from './hiring'
+import { employerKey, fetchBADetails, shapeOf } from './hiring'
 
 export type Impressum = {
   website: string | null; domain: string | null; managers: string[]; register: string | null
-  email: string | null; phone: string | null; employees: number | null; checkedAt: string; note?: string
+  email: string | null; hrEmail?: string | null; phone: string | null; employees: number | null; checkedAt: string; note?: string
 }
+export type HrContact = { name: string | null; title: string | null; email: string | null; phone: string | null; job: string | null; source: string }
 
 const UA = { 'User-Agent': 'Mozilla/5.0 (compatible; RevenueOS-CompanyInfo/1.0)', 'Accept-Language': 'de-DE,de;q=0.9,en;q=0.5' }
 const SOCIAL = /personio|linkedin|xing|facebook|instagram|youtube|twitter|x\.com|kununu|google|apple|tiktok|glassdoor|indeed|stepstone|gstatic|cloudflare|cookiebot|usercentrics|jsdelivr|w3\.org|schema\.org|onetrust|hotjar|vimeo|wa\.me|maps\./i
@@ -110,9 +111,9 @@ const pickEmail = (text: string, domain: string | null) => {
 }
 const pickPhone = (text: string) => (text.match(/(?:tel(?:efon)?\.?|phone|fon|t)\s*[:.]?\s*(\+?\(?\d[\d\s/().-]{6,20}\d)/i) || [])[1]?.replace(/\s+/g, ' ').trim() ?? null
 
-export async function readCompany(name: string, country: string | null, personioSlug: string | null): Promise<Impressum> {
+export async function readCompany(name: string, country: string | null, personioSlug: string | null, websiteHint: string | null = null): Promise<Impressum> {
   const checkedAt = new Date().toISOString()
-  const website = (personioSlug ? await websiteFromPersonio(personioSlug) : null) ?? await websiteByGuess(name, country)
+  const website = websiteHint ?? (personioSlug ? await websiteFromPersonio(personioSlug) : null) ?? await websiteByGuess(name, country)
   if (!website) return { website: null, domain: null, managers: [], register: null, email: null, phone: null, employees: null, checkedAt, note: 'Website nicht gefunden' }
   const domain = hostOf(website)
   const home = await fetchHtml(website)
@@ -127,8 +128,55 @@ export async function readCompany(name: string, country: string | null, personio
   return {
     website, domain, managers: managersOf(impText || homeText), register: registerOf(impText || all),
     email: pickEmail(impText || all, domain), phone: pickPhone(impText || all), employees: employeesOf(all),
+    hrEmail: (all.match(/\b(?:hr|jobs|karriere|career|careers|bewerbung|bewerbungen|recruiting|personal|people)@[a-z0-9.-]+\.[a-z]{2,}/i) || [])[0]?.toLowerCase() ?? null,
     checkedAt, note: impPage ? undefined : 'Kein Impressum gefunden',
   }
+}
+
+// ---------- contact person from the BA job ad ----------
+
+// Walks the job details for the first object that looks like a person with e-mail/phone,
+// plus employer website and size if the API offers them
+export function contactFromDetails(d: any, job: string | null): { contact: HrContact | null; website: string | null; employees: number | null } {
+  let contact: HrContact | null = null, website: string | null = null, employees: number | null = null
+  const walk = (x: any, depth: number) => {
+    if (!x || typeof x !== 'object' || depth > 6) return
+    if (Array.isArray(x)) { x.forEach(v => walk(v, depth + 1)); return }
+    const keys = Object.keys(x)
+    const k = (re: RegExp) => keys.find(key => re.test(key) && typeof x[key] === 'string' && x[key].trim())
+    const nameKey = k(/^(nachname|name|vollername|ansprechpartnername)$/i), firstKey = k(/^vorname$/i)
+    const mailKey = k(/e-?mail/i), phoneKey = k(/telefon|phone|tel$/i)
+    if (!contact && (nameKey || firstKey) && (mailKey || phoneKey) && !/arbeitgeber|firma|unternehmen/i.test(String(x[nameKey!] || ''))) {
+      const name = [x[k(/^titel$/i)!], x[firstKey!], x[nameKey!]].filter(Boolean).join(' ').trim()
+      contact = { name: name || null, title: x[k(/position|funktion|rolle/i)!] ?? null, email: mailKey ? String(x[mailKey]).toLowerCase() : null, phone: phoneKey ? x[phoneKey] : null, job, source: 'BA-Stellenanzeige' }
+    }
+    const webKey = keys.find(key => /(homepage|webseite|website|url)$/i.test(key) && !/extern|allianz|logo|bild|image|video|bewerbung/i.test(key) && typeof x[key] === 'string')
+    if (!website && webKey && /^https?:\/\//.test(x[webKey]) && !/arbeitsagentur/.test(x[webKey])) website = x[webKey]
+    const sizeKey = keys.find(key => /groesse|größe|anzahlmitarbeiter|beschaeftigte|mitarbeiter/i.test(key))
+    if (employees == null && sizeKey) {
+      const m = String(x[sizeKey]).match(/(\d[\d.]*)\D+(\d[\d.]*)|(\d[\d.]*)/)
+      if (m) employees = +(m[1] ?? m[3]).replace(/\./g, '') // lower bound of a range ("zwischen 51 und 500")
+    }
+    for (const key of keys) walk(x[key], depth + 1)
+  }
+  walk(d, 0)
+  return { contact, website, employees }
+}
+
+async function baContact(svc: any, projectId: string, key: string) {
+  // HR roles first: their ad usually names the recruiting contact
+  const { data: jobs } = await svc.from('job_postings').select('external_id, title').eq('project_id', projectId).eq('employer_key', key).eq('source', 'ba').limit(20)
+  const sorted = (jobs || []).sort((a: any, b: any) => Number(/recruit|personal|hr|talent/i.test(b.title)) - Number(/recruit|personal|hr|talent/i.test(a.title))).slice(0, 2)
+  let shape: string | null = null, error: string | null = null
+  for (const j of sorted) {
+    try {
+      const d = await fetchBADetails(j.external_id)
+      const r = contactFromDetails(d, j.title)
+      if (r.contact || r.website || r.employees) return { ...r, shape: null, error: null }
+      shape = shape ?? shapeOf(d, 2).slice(0, 800)
+    } catch (e: any) { error = e?.message || String(e) }
+  }
+  return { contact: null, website: null, employees: null, shape, error }
 }
 
 // ---------- batch for the cron / button ----------
@@ -144,10 +192,13 @@ export async function enrichCandidates(svc: any, projectId: string, opts: { budg
     while (queue.length && Date.now() - started < budget - 9_000) {
       const c = queue.shift()
       const feed = c.hiring?.feed
-      const info = await readCompany(c.name, c.hiring?.countries?.[0] ?? null, feed?.ats === 'personio' ? feed.slug : null)
+      const ba = c.hiring?.sources?.includes('ba') && c.hiring?.key ? await baContact(svc, projectId, c.hiring.key) : null
+      const info = await readCompany(c.name, c.hiring?.countries?.[0] ?? null, feed?.ats === 'personio' ? feed.slug : null, ba?.website ?? null)
+      if (info.employees == null && ba?.employees) info.employees = ba.employees
+      const hrContact: HrContact | null = ba?.contact ?? (info.hrEmail ? { name: null, title: null, email: info.hrEmail, phone: null, job: null, source: 'Website' } : null)
       const big = (info.employees ?? 0) > 300 && !(c.enrichment_data?.impressum?.employees > 300)
       await svc.from('candidate_companies').update({
-        enrichment_data: { ...(c.enrichment_data || {}), impressum: info },
+        enrichment_data: { ...(c.enrichment_data || {}), impressum: info, hrContact, ...(ba && !ba.contact ? { baDetails: { shape: ba.shape, error: ba.error } } : {}) },
         ...(big && c.score != null ? { score: Math.max(0, c.score - 30), confidence: Math.max(0, c.score - 30) } : {}),
       }).eq('id', c.id)
       done++

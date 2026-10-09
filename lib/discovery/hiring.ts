@@ -137,6 +137,19 @@ async function baGet(q: URLSearchParams) {
   throw new Error(`BA-Jobbörse: ${tried.join(' | ')}`)
 }
 
+// Details of one BA job (contact person, employer website, size …); the path differs between API versions
+export async function fetchBADetails(refnr: string) {
+  const base = BA_URL.replace(/\/pc\/v\d+\/(app\/)?jobs$/, '')
+  const id = Buffer.from(refnr).toString('base64')
+  const tried: string[] = []
+  for (const path of ['/pc/v6/jobdetails/', '/pc/v4/jobdetails/', '/pc/v4/app/jobdetails/']) {
+    const res = await fetch(`${base}${path}${id}`, { headers: { Accept: 'application/json', ...BA_UA, 'X-API-Key': BA_KEY }, signal: AbortSignal.timeout(10_000) }).catch(() => null)
+    if (res?.ok) return res.json()
+    tried.push(`${path.replace('/pc/', '')} ${res?.status ?? 'Fehler'}`)
+  }
+  throw new Error(`BA-Details: ${tried.join(' | ')}`)
+}
+
 export async function fetchBA(params: { was?: string; angebotsart?: number; arbeitgeber?: string; page?: number }): Promise<Posting[]> {
   const q = new URLSearchParams({ size: '100', page: String(params.page ?? 1), veroeffentlichtseit: String(WINDOW_DAYS), zeitarbeit: 'false', pav: 'false' })
   if (params.was) q.set('was', params.was)
@@ -156,7 +169,7 @@ export async function fetchBA(params: { was?: string; angebotsart?: number; arbe
   return postings
 }
 
-const shapeOf = (x: any, depth = 1): string => x && typeof x === 'object' && !Array.isArray(x)
+export const shapeOf = (x: any, depth = 1): string => x && typeof x === 'object' && !Array.isArray(x)
   ? Object.entries(x).slice(0, 14).map(([k, v]) => `${k}:${Array.isArray(v) ? `[${v.length}]` : v && typeof v === 'object' ? (depth > 1 ? `{${shapeOf(v, depth - 1)}}` : 'object') : typeof v}`).join(', ')
   : Array.isArray(x) ? `[${x.length}]` : typeof x
 
@@ -218,6 +231,9 @@ function openRoles(all: Row[]) {
   return all.filter(r => r.source === 'ba' || !ba.has(key(r)))
 }
 
+// Roles that build up recruiting itself — the strongest trigger for HireFlow
+export const HR_ROLE = /recruit|talent acquisition|talent ?(manager|partner|scout)|personal ?(referent|leit|sachbearbeit|manager|berater|entwickl|koordinat)|personalwesen|hr[- ]?(manager|business ?partner|generalist|leitung|lead|specialist|spezialist|referent|assistenz|coordinator|koordinator)|head of (people|hr|talent)|people ?(&|and|und) ?culture|people (partner|manager|lead)|employer branding|human resources/i
+
 export function scoreEmployer(all: Row[]) {
   const rows = openRoles(all)
   const feed = all.map(r => feedOf(r.url)).find(Boolean) ?? null
@@ -229,6 +245,7 @@ export function scoreEmployer(all: Row[]) {
   const repeated = Array.from(byRole.entries()).filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).map(([role, count]) => ({ role, count }))
   const volume = rows.filter(r => VOLUME.test(r.title)).length
   const ats = Array.from(new Set(rows.map(r => r.ats).filter(Boolean))) as string[]
+  const hrRoles = Array.from(new Set(rows.filter(r => HR_ROLE.test(r.title)).map(r => r.title))).slice(0, 4)
   const count = (xs: (string | null)[]) => Array.from(xs.reduce((m, x) => x ? m.set(x, (m.get(x) || 0) + 1) : m, new Map<string, number>()).entries()).sort((a, b) => b[1] - a[1]).map(([x]) => x)
 
   let score = Math.min(50, open * 3)
@@ -238,15 +255,17 @@ export function scoreEmployer(all: Row[]) {
   if (volume / open >= 0.3) score += 10
   if (new14 >= 3) score += 10
   if (!ats.length) score += 5 // no known applicant system → screening likely by hand
+  if (hrRoles.length) score += 15 // hiring recruiters/HR → recruiting is a priority right now
   score = Math.max(0, Math.min(100, score))
 
   const parts = [`${open} offene Stellen`]
   if (new14) parts.push(`${new14} neu in 14 Tagen`)
   if (repeated[0]) parts.push(`${repeated[0].count}× ${repeated[0].role}`)
+  if (hrRoles.length) parts.push(`baut Recruiting auf (${hrRoles.length} HR-Stelle${hrRoles.length > 1 ? 'n' : ''})`)
   return {
     score, reason: parts.join(' · '),
     hiring: {
-      open, new14, repeated: repeated.slice(0, 5), volumeRoles: volume, ats,
+      open, new14, repeated: repeated.slice(0, 5), volumeRoles: volume, ats, hrRoles,
       locations: count(rows.map(r => r.location)).slice(0, 4), countries: count(rows.map(r => r.country)),
       sources: count(all.map(r => r.source)), feed, updatedAt: new Date().toISOString(),
     },
