@@ -4,7 +4,7 @@ Unten rechts auf LinkedIn erscheint der Button **⚡ Revenue OS**:
 
 - **Auf einem Profil** (`linkedin.com/in/…`): zeigt, ob die Person schon im CRM ist (Lead/Deal-Status, nächste Aufgabe).
   **In Revenue OS speichern** legt Kontakt + Firma an (oder aktualisiert sie), optional einen Lead in *Outreach* und eine Follow-up-Aufgabe.
-- **In einer Nachricht** (`linkedin.com/messaging/…`): **Nachricht loggen** speichert die letzte Nachricht (oder markierten Text) als Aktivität.
+- **In einer Nachricht** (`linkedin.com/messaging/…`): Name, Position und Firma werden aus dem Chat-Kopf gelesen – **Kontakt anlegen & loggen** geht direkt, ohne Umweg übers Profil. Geloggt wird die letzte Nachricht, markierter Text oder der **ganze Verlauf** (Absender wird pro Nachricht erkannt).
   Eine *Antwort* der Person schiebt den Lead automatisch von *Outreach* auf *Im Gespräch*.
 - Schon bekannte Firmen werden erkannt (Auswahl aus dem CRM), optional E-Mail für den Gmail-Abgleich, Lead-Phase *Outreach* oder *Im Gespräch*, Aufgaben direkt anlegen.
 

@@ -147,32 +147,40 @@ export async function POST(req: Request) {
     }
 
     if (body.action === 'logMessage') {
-      const text = str(body.text, 8000)
-      if (!text) return NextResponse.json({ error: 'Kein Nachrichtentext' }, { status: 400 })
+      // One message ({ text, direction }) or the whole visible conversation ({ messages: [...] })
+      const list: { text: string; direction: 'inbound' | 'outbound' }[] = (Array.isArray(body.messages) ? body.messages : [{ text: body.text, direction: body.direction }])
+        .slice(0, 100).map((m: any) => ({ text: str(m?.text, 8000), direction: m?.direction === 'inbound' ? 'inbound' : 'outbound' }))
+        .filter((m: { text: string }) => m.text)
+      if (!list.length) return NextResponse.json({ error: 'Kein Nachrichtentext' }, { status: 400 })
       const person = await findPerson(supabase, slug, name)
-      if (!person) return NextResponse.json({ error: 'Kontakt noch nicht in Revenue OS – erst auf seinem Profil speichern.' }, { status: 404 })
-      const direction = body.direction === 'inbound' ? 'inbound' : 'outbound'
+      if (!person) return NextResponse.json({ error: 'Kontakt noch nicht in Revenue OS – erst anlegen.' }, { status: 404 })
+
+      const [{ data: deal }, { data: outreachLead }] = person.company_id ? await Promise.all([
+        supabase.from('opportunities').select('id').eq('company_id', person.company_id).not('stage', 'in', '(won,lost)').order('created_at', { ascending: false }).limit(1),
+        supabase.from('leads').select('id').eq('company_id', person.company_id).eq('stage', 'outreach').limit(1),
+      ]) : [{ data: [] }, { data: [] }]
 
       // Same text twice → log once
-      const ref = `li:${person.id}:${direction}:${text.slice(0, 200)}`
-      const { data: dup } = await supabase.from('activities').select('id').eq('person_id', person.id).eq('raw_reference', ref).limit(1)
-      if (!dup?.length) {
-        const { data: deal } = person.company_id
-          ? await supabase.from('opportunities').select('id').eq('company_id', person.company_id).not('stage', 'in', '(won,lost)').order('created_at', { ascending: false }).limit(1)
-          : { data: [] }
-        const { error } = await supabase.from('activities').insert({
+      const refs = list.map(m => `li:${person.id}:${m.direction}:${m.text.slice(0, 200)}`)
+      const { data: existing } = await supabase.from('activities').select('raw_reference').eq('person_id', person.id).in('raw_reference', refs)
+      const seen = new Set((existing || []).map((a: any) => a.raw_reference))
+      const now = Date.now()
+      const rows = list.map((m, i) => ({ m, ref: refs[i], at: new Date(now - (list.length - 1 - i) * 1000).toISOString() }))
+        .filter(r => !seen.has(r.ref) && (seen.add(r.ref), true))
+        .map(({ m, ref, at }) => ({
           project_id: PROJECT_ID, company_id: person.company_id, person_id: person.id, opportunity_id: deal?.[0]?.id ?? null,
-          activity_type: 'linkedin_message', direction, channel: 'linkedin_message', source: 'manual',
-          occurred_at: new Date().toISOString(), created_by: user.email ?? null, raw_reference: ref,
-          summary: direction === 'inbound' ? 'LinkedIn-Antwort' : 'LinkedIn-Nachricht',
-          extracted_intel: { body: text },
-        })
+          activity_type: 'linkedin_message', direction: m.direction, channel: 'linkedin_message', source: 'manual',
+          occurred_at: at, created_by: user.email ?? null, raw_reference: ref,
+          summary: m.direction === 'inbound' ? 'LinkedIn-Antwort' : 'LinkedIn-Nachricht',
+          extracted_intel: { body: m.text },
+        }))
+      if (rows.length) {
+        const { error } = await supabase.from('activities').insert(rows)
         if (error) throw new Error(error.message)
-        if (direction === 'inbound') {
-          await supabase.from('people').update({ last_interaction_at: new Date().toISOString() }).eq('id', person.id)
-        }
       }
-      return NextResponse.json({ ...(await status(supabase, person)), logged: !dup?.length, duplicate: !!dup?.length })
+      const inbound = rows.some(r => r.direction === 'inbound')
+      if (inbound) await supabase.from('people').update({ last_interaction_at: new Date().toISOString() }).eq('id', person.id)
+      return NextResponse.json({ ...(await status(supabase, person)), logged: rows.length, duplicate: !rows.length, advanced: inbound && !!outreachLead?.length })
     }
 
     if (body.action === 'addTask') {

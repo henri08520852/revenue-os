@@ -50,34 +50,86 @@
       company = text(link?.closest('a, button')) || (link?.getAttribute?.('alt') || '').replace(/\s*logo$/i, '')
     }
 
-    let jobTitle = headline.split(/\s+\|\s+/)[0]
-    const m = jobTitle.match(/^(.*?)(?:\s+(?:bei|at)\s+|\s*@\s*)(.+)$/i)
-    if (m) { jobTitle = m[1].trim(); if (!company) company = m[2].trim() }
+    const split = splitHeadline(headline)
+    const jobTitle = split.jobTitle
+    if (!company) company = split.company
     const parts = name.split(' ')
     return { slug, name, firstName: parts.slice(0, -1).join(' ') || name, lastName: parts.length > 1 ? parts[parts.length - 1] : '', jobTitle: jobTitle.slice(0, 160), company: company.slice(0, 120) }
   }
 
+  // "Consultant at The Green Recruitment Company, specialising …" → title + company
+  function splitHeadline(headline) {
+    let jobTitle = String(headline || '').split(/\s+\|\s+/)[0], company = ''
+    const m = jobTitle.match(/^(.*?)(?:\s+(?:bei|at)\s+|\s*@\s*)(.+)$/i)
+    if (m) { jobTitle = m[1].trim(); company = m[2].split(/\s*[,|·]\s*|\s+[-–]\s+/)[0].trim() }
+    return { jobTitle: jobTitle.slice(0, 160), company: company.slice(0, 120) }
+  }
+
+  const GENERIC = /^(contact info|kontaktinfo(rmationen)?|view profile|profil anzeigen|see profile|profil|messaging|nachrichten|inmail|sponsored|active now|online)$/i
+  const firstLine = el => String(el?.innerText || el?.textContent || '').split('\n').map(l => l.trim()).find(Boolean) || ''
+  const looksLikeName = t => !!t && t.length <= 60 && !GENERIC.test(t) && t.split(/\s+/).length >= 2 && t.split(/\s+/).length <= 6 && !/\d{2}|[@:]/.test(t)
+
   function readThread() {
-    const root = document.querySelector('.msg-thread, .msg-convo-wrapper, main') || document
-    const link = root.querySelector('.msg-thread a[href*="/in/"], .msg-entity-lockup a[href*="/in/"], a.msg-thread__link-to-profile, header a[href*="/in/"]') || root.querySelector('a[href*="/in/"]')
-    const name = text(root.querySelector('.msg-entity-lockup__entity-title, h2.msg-entity-lockup__entity-title, .msg-thread__link-to-profile')) || text(link)
-    // Selected text wins; otherwise the newest message bubble
-    const selection = String(window.getSelection() || '').trim()
-    let body = selection, sender = ''
-    if (!body) {
-      const bodies = root.querySelectorAll('.msg-s-event-listitem__body')
-      const last = bodies[bodies.length - 1]
-      body = text(last)
-      // Sender name sits on the first bubble of a group → walk back to the nearest one
-      let ev = last?.closest('.msg-s-message-list__event')
+    const root = document.querySelector('.msg-convo-wrapper, .msg-thread, main') || document.body
+
+    // Partner name + header element
+    let nameEl = [...root.querySelectorAll('.msg-entity-lockup__entity-title, #thread-detail-jump-target, .msg-title-bar h2, .msg-thread__link-to-profile, h2')]
+      .find(el => looksLikeName(firstLine(el)))
+    if (!nameEl) nameEl = [...root.querySelectorAll('a[href*="/in/"]')].find(a => looksLikeName(firstLine(a)))
+    const name = firstLine(nameEl).replace(/\s*\(.*?\)\s*$/, '')
+
+    // Profile link: one whose text / label carries the name, else the header's link
+    const links = [...root.querySelectorAll('a[href*="/in/"]')]
+    const first = name.split(' ')[0]
+    const link = links.find(a => first && (text(a).includes(name) || (a.getAttribute('aria-label') || '').includes(name)))
+      || nameEl?.closest('a[href*="/in/"]') || nameEl?.parentElement?.querySelector('a[href*="/in/"]') || links[0]
+
+    // Headline: the line under the name in the header
+    let headline = ''
+    let box = nameEl
+    for (let i = 0; box && i < 4 && !headline; i++) {
+      box = box.parentElement
+      const lines = String(box?.innerText || '').split('\n').map(l => l.trim()).filter(Boolean)
+      const at = lines.findIndex(l => l.startsWith(name))
+      if (at >= 0) headline = lines.slice(at + 1).find(l => l.length >= 10 && !l.startsWith(name) && !GENERIC.test(l) && !/^(active|aktiv|online|·)/i.test(l)) || ''
+    }
+
+    // Messages with sender (sender name sits on the first bubble of a group)
+    const bodies = [...root.querySelectorAll('.msg-s-event-listitem__body, [class*="event-listitem__body"], [class*="msg-s-event-listitem__message-bubble"]')]
+      .filter((el, i, all) => !all.some((o, j) => j !== i && o.contains(el) && o !== el))
+    const messages = []
+    for (const b of bodies) {
+      const t = String(b.innerText || '').trim()
+      if (!t) continue
+      let sender = '', ev = b.closest('li, .msg-s-message-list__event')
       while (ev && !sender) {
-        sender = text(ev.querySelector('.msg-s-message-group__name'))
+        sender = firstLine(ev.querySelector('.msg-s-message-group__name, [class*="message-group__name"], [class*="message-group__profile-link"]'))
         ev = ev.previousElementSibling
       }
+      messages.push({ text: t, inbound: sender ? !!first && sender.includes(first) : true })
     }
-    const first = name.split(' ')[0]
-    const inbound = sender ? !!first && sender.includes(first) : true
-    return { slug: slugFrom(link?.getAttribute('href')), name, body, inbound }
+    const selection = String(window.getSelection() || '').trim()
+    const last = messages[messages.length - 1]
+    return {
+      kind: 'thread', slug: slugFrom(link?.getAttribute('href')), name, headline, ...splitHeadline(headline),
+      firstName: name.split(' ').slice(0, -1).join(' ') || name, lastName: name.split(' ').length > 1 ? name.split(' ').pop() : '',
+      body: selection || last?.text || '', inbound: selection ? true : last ? last.inbound : true, messages,
+    }
+  }
+
+  function diagnosis() {
+    const root = kind() === 'thread' ? (document.querySelector('.msg-convo-wrapper, .msg-thread, main') || document.body) : (document.querySelector('main') || document.body)
+    const out = [`${location.pathname.replace(/thread\/[^/]+/, 'thread/…')} | title: ${document.title}`, 'gelesen: ' + JSON.stringify({ ...ctx, messages: ctx?.messages?.length, body: ctx?.body?.slice(0, 40) })]
+    const walk = (el, depth) => {
+      if (out.length > 400 || depth > 14) return
+      const own = [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent.trim()).join(' ').slice(0, 50)
+      const cls = typeof el.className === 'string' ? el.className.split(/\s+/).filter(c => c && !/^(t-|ember|pv|ph|pt|pb|mt|mb|ml|mr|p\d|m\d)/.test(c)).slice(0, 3).join('.') : ''
+      const href = el.getAttribute?.('href')?.replace(/\?.*/, '') || ''
+      if (own || href || /^H\d$/.test(el.tagName) || cls) out.push(`${'  '.repeat(depth)}${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${cls ? '.' + cls : ''}${href ? ' →' + href : ''}${own ? ' "' + own + '"' : ''}`)
+      for (const c of el.children) if (!['SCRIPT', 'STYLE', 'SVG', 'svg', 'IMG'].includes(c.tagName)) walk(c, depth + 1)
+    }
+    walk(root, 0)
+    return out.join('\n')
   }
 
   // ---------- panel (shadow DOM so LinkedIn styles don't leak in) ----------
@@ -128,6 +180,7 @@
     .link{background:none;border:none;color:#1a56db;font-size:14px;cursor:pointer;padding:0;display:flex;align-items:center;gap:6px}
     .msg{margin-top:10px;font-size:13px}.err{color:#d93025}.okm{color:#137333}
     .muted{color:#5f6368;font-size:13px}
+    .diag{display:block;margin:0 auto 10px;background:none;border:none;color:#9aa0a6;font-size:11px;cursor:pointer}
   </style><div id="root"></div>`
   const root = shadow.getElementById('root')
 
@@ -146,18 +199,14 @@
   }
 
   function resetForm() {
-    const k = kind()
-    if (k === 'profile') {
-      const match = crm?.company ? { id: crm.company.id } : matchCompany(ctx.company)
-      form = {
-        first: ctx.firstName, last: ctx.lastName, title: crm?.person?.jobTitle || ctx.jobTitle, email: crm?.person?.email || '',
-        companyId: match ? match.id : 'new', companyName: ctx.company,
-        lead: true, stage: 'outreach', fu: true, days: 5,
-      }
-    } else {
-      form = { text: ctx.body, direction: ctx.inbound ? 'inbound' : 'outbound' }
+    const match = crm?.company ? { id: crm.company.id } : matchCompany(ctx.company)
+    form = {
+      first: ctx.firstName, last: ctx.lastName, title: crm?.person?.jobTitle || ctx.jobTitle, email: crm?.person?.email || '',
+      companyId: match ? match.id : 'new', companyName: ctx.company,
+      lead: true, stage: ctx.kind === 'thread' && ctx.messages?.some(m => m.inbound) && ctx.messages?.some(m => !m.inbound) ? 'contacted' : 'outreach', fu: true, days: 5,
+      text: ctx.body || '', direction: ctx.inbound ? 'inbound' : 'outbound', all: false,
+      taskTitle: 'LinkedIn Follow-up', taskDate: addDays(3),
     }
-    form.taskTitle = 'LinkedIn Follow-up'; form.taskDate = addDays(3)
   }
 
   function statusHtml() {
@@ -177,13 +226,11 @@
 
   const field = (id, label, value, attrs = '') => `<div class="f"><label>${label}</label><input id="${id}" value="${esc(value)}" autocomplete="off" data-lpignore="true" ${attrs}></div>`
 
-  function profileForm() {
-    const known = crm?.known, hasOpen = known && (crm.leads?.length || crm.deals?.length)
+  function contactFields() {
+    const hasOpen = crm?.known && (crm.leads?.length || crm.deals?.length)
     const opts = (crm?.companies || []).map(c => `<option value="${esc(c.id)}" ${form.companyId === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')
     const picked = form.companyId !== 'new' && (crm?.companies || []).find(c => c.id === form.companyId)
-    return `<div class="sec">
-      <div class="h">${known ? 'Kontakt aktualisieren' : 'Kontakt anlegen'}</div>
-      <div class="row">${field('first', 'Vorname', form.first)}${field('last', 'Nachname', form.last)}</div>
+    return `<div class="row">${field('first', 'Vorname', form.first)}${field('last', 'Nachname', form.last)}</div>
       ${field('title', 'Position', form.title)}
       ${field('email', 'E-Mail (optional)', form.email, 'type="email" placeholder="für den Gmail-Abgleich"')}
       <div class="f"><label>Company</label><select id="companyId"><option value="new" ${form.companyId === 'new' ? 'selected' : ''}>+ Neue Company${form.companyName ? ': ' + esc(form.companyName) : ''}</option>${opts}</select></div>
@@ -193,20 +240,31 @@
       ${form.lead ? `<div class="ind">
         <div class="seg"><button id="st-outreach" class="${form.stage === 'outreach' ? 'on' : ''}">Outreach</button><button id="st-contacted" class="${form.stage === 'contacted' ? 'on' : ''}">Im Gespräch</button></div>
         <label class="chk"><input type="checkbox" id="fu" ${form.fu ? 'checked' : ''}> Follow-up in <input class="n" id="days" value="${esc(form.days)}" autocomplete="off"> Tagen</label>
-      </div>` : ''}`}
+      </div>` : ''}`}`
+  }
+
+  function profileForm() {
+    const known = crm?.known, hasOpen = known && (crm.leads?.length || crm.deals?.length)
+    return `<div class="sec">
+      <div class="h">${known ? 'Kontakt aktualisieren' : 'Kontakt anlegen'}</div>
+      ${contactFields()}
       <button class="btn" id="save" ${busy ? 'disabled' : ''}>${busy ? 'Speichern …' : known ? 'Aktualisieren' : form.lead && !hasOpen ? 'Kontakt & Lead anlegen' : 'Kontakt anlegen'}</button>
       ${msg ? `<div class="msg">${msg}</div>` : ''}
     </div>`
   }
 
   function threadForm() {
-    const first = (ctx.name || 'Kontakt').split(' ')[0]
-    return `<div class="sec">
+    const first = (ctx.name || 'Kontakt').split(' ')[0], known = crm?.known
+    const n = ctx.messages?.length || 0
+    const nothing = !form.all && !String(form.text || '').trim()
+    return `${known ? '' : `<div class="sec"><div class="h">Kontakt anlegen</div>${contactFields()}</div>`}
+    <div class="sec">
       <div class="h">Nachricht loggen</div>
+      ${n > 1 ? `<label class="chk"><input type="checkbox" id="all" ${form.all ? 'checked' : ''}> Ganzen Verlauf loggen (${n} Nachrichten)</label>` : ''}
+      ${form.all ? '<div class="hint">Absender wird pro Nachricht erkannt, Doppeltes wird übersprungen.</div>' : `
       <div class="seg"><button id="in" class="${form.direction === 'inbound' ? 'on' : ''}">Antwort von ${esc(first)}</button><button id="out" class="${form.direction === 'outbound' ? 'on' : ''}">Von uns</button></div>
-      <div class="f"><label>Nachricht (letzte oder markierter Text)</label><textarea id="text">${esc(form.text)}</textarea></div>
-      <button class="btn" id="log" ${busy || !crm?.known ? 'disabled' : ''}>${busy ? 'Speichern …' : 'Nachricht loggen'}</button>
-      ${crm && !crm.known && !crm.error ? '<div class="msg muted">Erst das Profil der Person öffnen und dort speichern.</div>' : ''}
+      <div class="f"><label>Nachricht (letzte oder markierter Text)</label><textarea id="text" placeholder="Nachricht markieren oder hier einfügen">${esc(form.text)}</textarea></div>`}
+      <button class="btn" id="log" ${busy || nothing ? 'disabled' : ''}>${busy ? 'Speichern …' : known ? 'Nachricht loggen' : 'Kontakt anlegen & loggen'}</button>
       ${msg ? `<div class="msg">${msg}</div>` : ''}
     </div>`
   }
@@ -234,17 +292,20 @@
     if (!k) return
     if (!open) {
       root.innerHTML = `<button class="tab" id="open">${tabLabel()}</button>`
-      shadow.getElementById('open').onclick = () => { open = true; if (!ctx?.name) refresh(true); else render() }
+      shadow.getElementById('open').onclick = () => { open = true; refresh(true) }
       return
     }
     const ready = ctx && crm && !crm.error
     root.innerHTML = `<div class="card">
       <div class="head"><span class="t">Revenue OS</span><button id="reload" title="Seite neu einlesen">↻</button><button id="close" title="Schließen">✕</button></div>
-      <div class="scroll">${statusHtml()}${ready ? (k === 'profile' ? profileForm() : threadForm()) + taskForm() : ''}</div>
+      <div class="scroll">${statusHtml()}${ready ? (k === 'profile' ? profileForm() : threadForm()) + taskForm() : ''}<button class="diag" id="diag">Etwas falsch erkannt? Diagnose kopieren</button></div>
     </div>`
     const $ = id => shadow.getElementById(id)
     $('close').onclick = () => { open = false; render() }
     $('reload').onclick = () => refresh(true)
+    $('diag').onclick = async () => {
+      try { await navigator.clipboard.writeText(diagnosis()); $('diag').textContent = 'Kopiert ✓ – bitte an Claude schicken' } catch { $('diag').textContent = 'Kopieren nicht möglich' }
+    }
     // Keep typed values across re-renders
     for (const id of ['first', 'last', 'title', 'email', 'companyName', 'days', 'text', 'taskTitle', 'taskDate']) {
       if ($(id)) $(id).oninput = e => { form[id] = e.target.value }
@@ -255,6 +316,8 @@
     for (const st of ['outreach', 'contacted']) if ($('st-' + st)) $('st-' + st).onclick = () => { form.stage = st; render() }
     if ($('in')) $('in').onclick = () => { form.direction = 'inbound'; render() }
     if ($('out')) $('out').onclick = () => { form.direction = 'outbound'; render() }
+    if ($('all')) $('all').onchange = e => { form.all = e.target.checked; render() }
+    if ($('text')) $('text').oninput = e => { form.text = e.target.value; const b = $('log'); if (b && !busy) b.disabled = !e.target.value.trim() }
     if ($('task-open')) $('task-open').onclick = () => { taskOpen = true; render() }
     if ($('task-save')) $('task-save').onclick = addTask
     if ($('save')) $('save').onclick = save
@@ -270,7 +333,7 @@
       // The page may still be loading → retry a few times until the name shows up
       for (let i = 0; i < 8; i++) {
         ctx = k === 'profile' ? readProfile() : readThread()
-        if (ctx.name || kind() !== k) break
+        if ((ctx.name && (k === 'profile' || ctx.messages.length)) || kind() !== k) break
         await new Promise(r => setTimeout(r, 1000))
       }
     }
@@ -290,21 +353,39 @@
     return res
   }
 
-  async function save() {
-    if (!String(form.first || '').trim() && !String(form.last || '').trim()) { msg = '<span class="err">Bitte einen Namen eingeben.</span>'; return render() }
+  function contactPayload() {
     const hasOpen = crm?.known && (crm.leads?.length || crm.deals?.length)
-    const res = await run({
+    return {
       action: 'saveProfile', profileUrl: profileUrl(),
       firstName: form.first, lastName: form.last, jobTitle: form.title, email: form.email,
       companyId: form.companyId === 'new' ? null : form.companyId, companyName: form.companyId === 'new' ? form.companyName : '',
       createLead: !hasOpen && form.lead, leadStage: form.stage, followUpDays: form.lead && form.fu ? Number(form.days) || 5 : 0,
-    }, r => r.leads?.length ? 'Gespeichert ✓ – Lead ist in der Pipeline.' : 'Gespeichert ✓')
+    }
+  }
+
+  async function save() {
+    if (!String(form.first || '').trim() && !String(form.last || '').trim()) { msg = '<span class="err">Bitte einen Namen eingeben.</span>'; return render() }
+    const res = await run(contactPayload(), r => r.leads?.length ? 'Gespeichert ✓ – Lead ist in der Pipeline.' : 'Gespeichert ✓')
     if (!res.error && form.companyId === 'new' && res.company) form.companyId = res.company.id
   }
 
-  function log() {
-    return run({ action: 'logMessage', profileUrl: profileUrl(), name: ctx.name, text: form.text, direction: form.direction },
-      r => r.duplicate ? 'War schon geloggt.' : form.direction === 'inbound' ? 'Antwort geloggt ✓ – Outreach-Lead steht jetzt auf „Im Gespräch“.' : 'Nachricht geloggt ✓')
+  async function log() {
+    const created = !crm?.known
+    if (created) {
+      if (!String(form.first || '').trim() && !String(form.last || '').trim()) { msg = '<span class="err">Bitte einen Namen eingeben.</span>'; return render() }
+      if (!ctx.slug) { msg = '<span class="err">Profil-Link nicht gefunden – bitte einmal das Profil öffnen und dort speichern.</span>'; return render() }
+      busy = true; msg = ''; render()
+      const res = await api(contactPayload())
+      busy = false
+      if (res.error) { msg = `<span class="err">${esc(res.error)}</span>`; return render() }
+      crm = { ...res, companies: crm?.companies }
+    }
+    const messages = form.all
+      ? ctx.messages.map(m => ({ text: m.text, direction: m.inbound ? 'inbound' : 'outbound' }))
+      : [{ text: form.text, direction: form.direction }]
+    const name = [form.first, form.last].filter(Boolean).join(' ') || ctx.name
+    await run({ action: 'logMessage', profileUrl: profileUrl(), name, messages },
+      r => `${created ? 'Kontakt angelegt ✓ · ' : ''}${r.logged ? `${r.logged} Nachricht${r.logged > 1 ? 'en' : ''} geloggt ✓` : 'War schon geloggt.'}${r.advanced ? ' – Lead steht jetzt auf „Im Gespräch“.' : ''}`)
   }
 
   async function addTask() {
