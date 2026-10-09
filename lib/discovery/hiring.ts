@@ -1,8 +1,10 @@
 // Hiring discovery — "Heiße Firmen": employers in DACH with many open roles right now.
-// Sources: BA Jobbörse (DE, free), Google Jobs via SerpApi (DE/AT/CH, optional: SERPAPI_KEY).
+// Sources: BA Jobbörse (DE, free), Google Jobs via SerpApi (DE/AT/CH, optional: SERPAPI_KEY),
+// public job feeds of applicant tracking systems (Personio, Greenhouse, … — exact counts).
 // Postings are stored in job_postings, grouped per employer, scored and written to
 // candidate_companies (source_type 'hiring'). Known CRM companies also get a signal.
 // Server-only, service role client.
+import { feedOf, fetchAtsJobs } from './ats'
 
 const BA_URL = process.env.BA_JOBS_URL || 'https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4/jobs'
 const BA_KEY = 'jobboerse-jobsuche' // public key of the BA job search
@@ -17,16 +19,24 @@ const BA_QUERIES: { was: string; angebotsart?: number }[] = [
   { was: 'Softwareentwickler' }, { was: 'Pflegefachkraft' }, { was: 'Erzieher' }, { was: 'Elektroniker' },
   { was: 'Mechatroniker' }, { was: 'Logistik' }, { was: 'Assistenz' }, { was: 'Consultant' }, { was: 'Ingenieur' },
 ]
-const GOOGLE_QUERIES: { q: string; location: string; gl: string }[] = [
-  { q: 'Werkstudent', location: 'Austria', gl: 'at' }, { q: 'Werkstudent', location: 'Switzerland', gl: 'ch' },
-  { q: 'Vertrieb', location: 'Austria', gl: 'at' }, { q: 'Vertrieb', location: 'Switzerland', gl: 'ch' },
-  { q: 'Trainee', location: 'Austria', gl: 'at' }, { q: 'Kundenservice', location: 'Switzerland', gl: 'ch' },
-  { q: 'Sachbearbeiter', location: 'Austria', gl: 'at' }, { q: 'Marketing', location: 'Switzerland', gl: 'ch' },
+// Google Jobs: role × city across DACH (AT/CH first — the BA only covers Germany)
+const GOOGLE_ROLES = ['Werkstudent', 'Trainee', 'Lehrling', 'Vertrieb', 'Kundenservice', 'Sachbearbeiter', 'Marketing', 'Personal', 'Buchhaltung', 'Projektmanager', 'Softwareentwickler', 'Pflege']
+const GOOGLE_CITIES: { city: string; gl: string }[] = [
+  { city: 'Wien, Austria', gl: 'at' }, { city: 'Zürich, Switzerland', gl: 'ch' }, { city: 'Graz, Austria', gl: 'at' },
+  { city: 'Basel, Switzerland', gl: 'ch' }, { city: 'Linz, Austria', gl: 'at' }, { city: 'Bern, Switzerland', gl: 'ch' },
+  { city: 'Salzburg, Austria', gl: 'at' }, { city: 'Luzern, Switzerland', gl: 'ch' }, { city: 'Innsbruck, Austria', gl: 'at' },
+  { city: 'St. Gallen, Switzerland', gl: 'ch' },
+  { city: 'Berlin, Germany', gl: 'de' }, { city: 'Hamburg, Germany', gl: 'de' }, { city: 'München, Germany', gl: 'de' },
+  { city: 'Köln, Germany', gl: 'de' }, { city: 'Frankfurt, Germany', gl: 'de' }, { city: 'Stuttgart, Germany', gl: 'de' },
 ]
+const GOOGLE_QUERIES = GOOGLE_CITIES.flatMap(c => GOOGLE_ROLES.map(q => ({ q, location: c.city, gl: c.gl })))
 const BA_QUERIES_PER_RUN = 5
 const BA_PAGES = 2               // × 100 postings
 const EMPLOYER_LOOKUPS = 12      // full posting count for the most promising employers
-const GOOGLE_QUERIES_PER_RUN = 2 // ≈ 60 SerpApi searches / month
+// SerpApi searches per day (each = 10 postings). 2 ≈ 60/month; Starter plan (1,000/month) → 30
+const GOOGLE_QUERIES_PER_RUN = Math.max(0, Number(process.env.SERPAPI_SEARCHES_PER_DAY) || 2)
+const ATS_FEEDS_PER_RUN = 10      // exact counts from applicant tracking systems
+const ATS_REFRESH_DAYS = 3
 const WINDOW_DAYS = 30
 const MIN_OPEN = 4               // below this an employer is not "hot"
 const MAX_OPEN = 80              // above this it is a large company, outside the ICP (10–200 employees)
@@ -56,7 +66,7 @@ const PUBLIC = /^(stadt|landeshauptstadt|landkreis|kreis|gemeinde|markt|bundes|b
 const LARGE = /^(deutsche bahn|db |lidl|aldi|edeka|rewe|kaufland|netto|penny|dm-drogerie|rossmann|amazon|dhl|deutsche post|siemens|bosch|robert bosch|bmw|mercedes|volkswagen|audi|porsche|sap|telekom|deutsche telekom|vodafone|allianz|ergo|axa|sparkasse|volksbank|commerzbank|deutsche bank|mcdonald|burger king|ikea|obi|bauhaus|hornbach|decathlon|h&m|zalando|otto|tui|lufthansa|basf|bayer|henkel|thyssenkrupp|continental|schaeffler|zf |würth|helios|asklepios|sana|fresenius|vivantes|charité|ameos|johanniter|malteser|drk|deutsches rotes kreuz|caritas|diakonie|awo|arbeiterwohlfahrt)/i
 export const excluded = (name: string) => AGENCY.test(name) || PUBLIC.test(name.trim()) || LARGE.test(name.trim())
 
-const VOLUME = /werkstudent|trainee|ausbildung|azubi|duales studium|dual|praktik|aushilfe|minijob|kundenservice|kundenberat|call ?center|vertrieb|sales|verkäuf|sachbearbeit|kaufm|empfang|assistenz|lager|logistik|fahrer|pflege|erzieh|service/i
+const VOLUME = /werkstudent|trainee|ausbildung|azubi|lehrling|lehrstelle|duales studium|dual|praktik|aushilfe|minijob|kundenservice|kundenberat|call ?center|vertrieb|sales|verkäuf|sachbearbeit|kaufm|empfang|assistenz|lager|logistik|fahrer|pflege|erzieh|service/i
 
 const ATS: [RegExp, string][] = [
   [/personio\./, 'Personio'], [/softgarden\./, 'softgarden'], [/greenhouse\.io/, 'Greenhouse'], [/lever\.co/, 'Lever'],
@@ -118,9 +128,25 @@ export async function fetchGoogleJobs(q: string, location: string, gl: string): 
 
 // ---------- scoring ----------
 
-type Row = { employer_name: string; title: string; role_key: string | null; location: string | null; country: string | null; url: string | null; ats: string | null; published_at: string | null; first_seen_at: string; source: string }
+type Row = { employer_name: string; title: string; role_key: string | null; location: string | null; country: string | null; url: string | null; ats: string | null; published_at: string | null; first_seen_at: string; last_seen_at?: string; source: string }
 
-export function scoreEmployer(rows: Row[]) {
+const BOARDS = ['ba', 'google_jobs']
+
+// The applicant tracking system's feed is the complete list; otherwise merge the job boards
+// and drop the same job listed on several of them
+function openRoles(all: Row[]) {
+  const fresh = new Date(Date.now() - 2 * ATS_REFRESH_DAYS * 86400000).toISOString()
+  const feed = all.filter(r => !BOARDS.includes(r.source) && (r.last_seen_at ?? r.first_seen_at) >= fresh)
+  if (feed.length) return feed
+  // Same title + place on another board = the same job; several postings on one board are separate openings
+  const key = (r: Row) => `${r.title.toLowerCase().replace(/[^a-z0-9äöüß]+/g, ' ').trim()}|${(r.location || '').toLowerCase()}`
+  const ba = new Set(all.filter(r => r.source === 'ba').map(key))
+  return all.filter(r => r.source === 'ba' || !ba.has(key(r)))
+}
+
+export function scoreEmployer(all: Row[]) {
+  const rows = openRoles(all)
+  const feed = all.map(r => feedOf(r.url)).find(Boolean) ?? null
   const open = rows.length
   const since14 = Date.now() - 14 * 86400000
   const new14 = rows.filter(r => Date.parse(r.published_at || r.first_seen_at) >= since14).length
@@ -146,7 +172,7 @@ export function scoreEmployer(rows: Row[]) {
     hiring: {
       open, new14, repeated: repeated.slice(0, 5), volumeRoles: volume, ats,
       locations: count(rows.map(r => r.location)).slice(0, 4), countries: count(rows.map(r => r.country)),
-      sources: count(rows.map(r => r.source)), updatedAt: new Date().toISOString(),
+      sources: count(all.map(r => r.source)), feed, updatedAt: new Date().toISOString(),
     },
     evidence: rows.slice().sort((a, b) => Date.parse(b.published_at || b.first_seen_at) - Date.parse(a.published_at || a.first_seen_at))
       .slice(0, 6).map(r => ({ title: r.title, link: r.url, source: r.location || r.country || '' })),
@@ -163,7 +189,8 @@ function toRows(projectId: string, postings: Posting[]) {
     .map(p => ({
       project_id: projectId, source: p.source, external_id: p.externalId, employer_key: employerKey(p.employer),
       employer_name: p.employer, title: p.title.slice(0, 300), role_key: roleKey(p.title) || null, location: p.location,
-      country: p.country, url: p.url, ats: atsOf(p.url), published_at: p.publishedAt, last_seen_at: now,
+      country: p.country, url: p.url, ats: atsOf(p.url) ?? (BOARDS.includes(p.source) ? null : p.source),
+      published_at: p.publishedAt && !isNaN(Date.parse(p.publishedAt)) ? new Date(p.publishedAt).toISOString() : null, last_seen_at: now,
     }))
 }
 
@@ -189,7 +216,8 @@ export async function runHiringDiscovery(svc: any, projectId: string, opts: { bu
     }
   }
   for (let i = 0; i < GOOGLE_QUERIES_PER_RUN && SERPAPI_KEY && left() > 20_000; i++) {
-    const q = GOOGLE_QUERIES[(day * GOOGLE_QUERIES_PER_RUN + i) % GOOGLE_QUERIES.length]
+    // Step through the list with a stride so consecutive searches hit different cities and roles
+    const q = GOOGLE_QUERIES[((day * GOOGLE_QUERIES_PER_RUN + i) * 7) % GOOGLE_QUERIES.length]
     try { fetched.push(...await fetchGoogleJobs(q.q, q.location, q.gl)) } catch (e: any) { stats.errors.push(`Google ${q.q}: ${e.message}`) }
   }
   let rows = toRows(projectId, fetched)
@@ -215,16 +243,34 @@ export async function runHiringDiscovery(svc: any, projectId: string, opts: { bu
   const byEmployer = new Map<string, Row[]>()
   for (let i = 0; i < keys.length; i += 100) {
     const { data } = await svc.from('job_postings')
-      .select('employer_key, employer_name, title, role_key, location, country, url, ats, published_at, first_seen_at, source')
+      .select('employer_key, employer_name, title, role_key, location, country, url, ats, published_at, first_seen_at, last_seen_at, source')
       .eq('project_id', projectId).in('employer_key', keys.slice(i, i + 100)).gte('last_seen_at', since).limit(5000)
     for (const r of data || []) byEmployer.set(r.employer_key, [...(byEmployer.get(r.employer_key) || []), r])
+  }
+
+  // 4) Exact counts from applicant tracking systems for the biggest employers (refreshed every few days)
+  const fresh = new Date(Date.now() - ATS_REFRESH_DAYS * 86400000).toISOString()
+  const withFeed = Array.from(byEmployer.entries())
+    .map(([key, list]) => ({ key, list, feed: list.map(r => feedOf(r.url)).find(Boolean) ?? null }))
+    .filter(e => e.feed && e.list.length >= 2 && !e.list.some(r => r.source === e.feed!.ats && (r.last_seen_at ?? '') >= fresh))
+    .sort((a, b) => b.list.length - a.list.length).slice(0, ATS_FEEDS_PER_RUN)
+  for (const e of withFeed) {
+    if (left() < 6_000) break
+    try {
+      const jobs = toRows(projectId, await fetchAtsJobs(e.feed!, e.list[0].employer_name, e.list[0].country || 'DE'))
+      if (!jobs.length) continue
+      await save(svc, jobs)
+      stats.postings += jobs.length
+      byEmployer.set(e.key, [...e.list, ...jobs.map(j => ({ ...j, first_seen_at: new Date().toISOString() }))])
+    } catch (err: any) { stats.errors.push(`${e.feed!.ats} ${e.feed!.slug}: ${err.message}`) }
   }
 
   const { data: companies } = await svc.from('companies').select('id, name').eq('project_id', projectId)
   const companyByKey = new Map<string, string>((companies || []).map((c: any) => [employerKey(c.name), c.id]))
 
   for (const [key, list] of Array.from(byEmployer.entries())) {
-    if (list.length < MIN_OPEN || list.length > MAX_OPEN) continue
+    const n = openRoles(list).length
+    if (n < MIN_OPEN || n > MAX_OPEN) continue
     stats.employers++
     const s = scoreEmployer(list)
     const name = list[0].employer_name

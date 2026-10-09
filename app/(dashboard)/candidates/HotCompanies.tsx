@@ -12,7 +12,9 @@ type Hiring = {
 type Candidate = {
   id: string; name: string; source_type: string; signal_hint: string | null; confidence: number | null; score: number | null
   hiring: Hiring | null; evidence: Evidence[] | null; existing_company_id: string | null; updated_at: string | null; created_at: string
+  enrichment_data?: { northdata?: { employees?: number | null; signals?: string[] } } | null
 }
+export type SourceStatus = { name: string; area: string; active: boolean; note: string; postings: number | null; lastAt: string | null }
 
 const NEWS_LABEL: Record<string, string> = { news_funding: 'Funding', news_expansion: 'Expansion', news_leadership: 'Leadership' }
 const SOURCE_LABEL: Record<string, string> = { ba: 'BA-Jobbörse', google_jobs: 'Google Jobs' }
@@ -28,7 +30,26 @@ function scoreColor(s: number) {
   return s >= 70 ? { bg: '#fee2e2', color: '#b91c1c' } : s >= 45 ? { bg: '#ffedd5', color: '#c2410c' } : { bg: '#f3f4f6', color: '#4b5563' }
 }
 
-export default function HotCompanies({ hiring, news }: { hiring: Candidate[]; news: Candidate[] }) {
+function Sources({ sources }: { sources: SourceStatus[] }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 8, marginBottom: 18 }}>
+      {sources.map(s => (
+        <div key={s.name} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#111827' }}>
+            <span style={{ width: 8, height: 8, borderRadius: 4, background: s.active ? '#22c55e' : '#d1d5db' }} />{s.name}
+          </div>
+          <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 2 }}>{s.area}</div>
+          <div style={{ fontSize: 11.5, color: s.active ? '#374151' : '#b45309', marginTop: 4 }}>
+            {s.postings != null && s.active ? `${s.postings.toLocaleString('de-DE')} Stellen · ` : ''}{s.note}
+            {s.lastAt ? ` · ${new Date(s.lastAt).toLocaleDateString('de-DE')}` : ''}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export default function HotCompanies({ hiring, news, sources }: { hiring: Candidate[]; news: Candidate[]; sources: SourceStatus[] }) {
   const router = useRouter()
   const [tab, setTab] = useState<'hiring' | 'news'>('hiring')
   const [country, setCountry] = useState('all')
@@ -75,6 +96,8 @@ export default function HotCompanies({ hiring, news }: { hiring: Candidate[]; ne
         </button>
       </div>
 
+      <Sources sources={sources} />
+
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         {([['hiring', `Einstellungsdruck (${hiring.length})`], ['news', `News (${news.length})`]] as const).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)} style={{ padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 500, cursor: 'pointer', border: tab === key ? '1.5px solid #2563eb' : '1.5px solid #e5e7eb', background: tab === key ? '#eff6ff' : '#fff', color: tab === key ? '#1d4ed8' : '#6b7280' }}>{label}</button>
@@ -106,6 +129,11 @@ export default function HotCompanies({ hiring, news }: { hiring: Candidate[]; ne
                   <span style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>{c.name}</span>
                   {h ? <span style={chip(sc.bg, sc.color)}>Score {s}</span> : <span style={chip('#eff6ff', '#1d4ed8')}>{NEWS_LABEL[c.signal_hint || ''] ?? 'News'}</span>}
                   {c.existing_company_id && <span style={chip('#e0e7ff', '#4338ca')}>Schon im CRM</span>}
+                  {c.enrichment_data?.northdata?.employees != null && (
+                    <span style={c.enrichment_data.northdata.employees > 250 ? chip('#fef2f2', '#b91c1c') : chip('#f0fdf4', '#15803d')}>
+                      ~{c.enrichment_data.northdata.employees} Mitarbeitende{c.enrichment_data.northdata.employees > 250 ? ' – größer als Zielgruppe' : ''}
+                    </span>
+                  )}
                 </div>
 
                 {h && (

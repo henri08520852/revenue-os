@@ -9,7 +9,7 @@
 
 const NORTHDATA_API_KEY = process.env.NORTHDATA_API_KEY
 
-const MIN_CONFIDENCE  = 75   // Only enrich pre-selected candidates
+const MIN_CONFIDENCE  = 60   // Only enrich pre-selected candidates (hiring score ≥ 60)
 const MAX_PER_DAY     = 20   // Hard limit: 20 enrichments/day = €2/day max
 
 interface NorthdataEvent {
