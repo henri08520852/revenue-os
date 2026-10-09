@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Revenue OS für LinkedIn",
+  "version": "1.0.0",
+  "description": "LinkedIn-Profile und -Nachrichten mit einem Klick in Revenue OS speichern.",
+  "permissions": [],
+  "host_permissions": ["https://revenue-os-chi.vercel.app/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    { "matches": ["https://www.linkedin.com/*"], "js": ["content.js"], "run_at": "document_idle" }
+  ]
+}
