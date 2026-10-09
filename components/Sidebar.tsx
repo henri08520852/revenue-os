@@ -23,7 +23,7 @@ const nav = [
   { href: '/companies',  label: 'Companies',  icon: BuildingOffice2Icon },
   { href: '/contacts',   label: 'Contacts',   icon: UserGroupIcon },
   { href: '/pipeline',   label: 'Pipeline',   icon: FunnelIcon },
-  { href: '/candidates', label: 'Candidates', icon: SparklesIcon },
+  { href: '/candidates', label: 'Heiße Firmen', icon: SparklesIcon },
 ]
 
 const iconStyle = { width: 16, height: 16, flexShrink: 0 }
