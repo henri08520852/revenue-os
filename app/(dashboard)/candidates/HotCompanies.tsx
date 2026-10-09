@@ -7,6 +7,9 @@ import { enrichMissing, rejectCandidate, searchNow, takeCandidate } from './acti
 type Evidence = { title?: string; link?: string | null; source?: string }
 type Hiring = {
   hrRoles?: string[]
+  industry?: { key: string; label: string } | null
+  officeShare?: number | null
+  sourceCount?: number
   open: number; new14: number; repeated: { role: string; count: number }[]; volumeRoles: number
   ats: string[]; locations: string[]; countries: string[]; sources: string[]; updatedAt: string
 }
@@ -60,6 +63,8 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
   const router = useRouter()
   const [tab, setTab] = useState<'hiring' | 'news'>('hiring')
   const [country, setCountry] = useState('all')
+  const [industry, setIndustry] = useState('all')
+  const [officeOnly, setOfficeOnly] = useState(false)
   const [gone, setGone] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
@@ -86,7 +91,14 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
   const list = (tab === 'hiring' ? hiring : news)
     .filter(c => !gone.has(c.id))
     .filter(c => tab !== 'hiring' || country === 'all' || c.hiring?.countries?.includes(country))
+    .filter(c => tab !== 'hiring' || industry === 'all' || (industry === 'none' ? !c.hiring?.industry : c.hiring?.industry?.key === industry))
+    .filter(c => tab !== 'hiring' || !officeOnly || (c.hiring?.officeShare ?? 0) >= 50)
   const countries = Array.from(new Set(hiring.flatMap(c => c.hiring?.countries || [])))
+  const industries = Array.from(hiring.reduce((m, c) => {
+    const ind = c.hiring?.industry
+    if (ind) m.set(ind.key, { label: ind.label, n: (m.get(ind.key)?.n || 0) + 1 })
+    return m
+  }, new Map<string, { label: string; n: number }>()).entries()).sort((a, b) => b[1].n - a[1].n)
 
   async function act(c: Candidate, what: 'lead' | 'company' | 'reject') {
     setBusy(c.id); setMsg(null)
@@ -127,8 +139,20 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
         {([['hiring', `Einstellungsdruck (${hiring.length})`], ['news', `News (${news.length})`]] as const).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)} style={{ padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 500, cursor: 'pointer', border: tab === key ? '1.5px solid #2563eb' : '1.5px solid #e5e7eb', background: tab === key ? '#eff6ff' : '#fff', color: tab === key ? '#1d4ed8' : '#6b7280' }}>{label}</button>
         ))}
+        {tab === 'hiring' && industries.length > 0 && (
+          <>
+            <select value={industry} onChange={e => setIndustry(e.target.value)} style={{ marginLeft: 'auto', padding: '6px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13 }}>
+              <option value="all">Alle Branchen</option>
+              {industries.map(([key, v]) => <option key={key} value={key}>{v.label} ({v.n})</option>)}
+              <option value="none">Branche unklar</option>
+            </select>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: '#374151', cursor: 'pointer' }}>
+              <input type="checkbox" checked={officeOnly} onChange={e => setOfficeOnly(e.target.checked)} /> vor allem Bürojobs
+            </label>
+          </>
+        )}
         {tab === 'hiring' && countries.length > 1 && (
-          <select value={country} onChange={e => setCountry(e.target.value)} style={{ marginLeft: 'auto', padding: '6px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13 }}>
+          <select value={country} onChange={e => setCountry(e.target.value)} style={{ marginLeft: industries.length ? 0 : 'auto', padding: '6px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13 }}>
             <option value="all">Alle Länder</option>
             {countries.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
@@ -174,6 +198,9 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
                       {h.volumeRoles > 0 && <> · {h.volumeRoles} bewerberstarke Rollen</>}
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                      {h.industry && <span style={chip('#e0f2fe', '#0369a1')}>{h.industry.label}</span>}
+                      {h.officeShare != null && <span title="Anteil Büro-/Wissensjobs an den offenen Stellen" style={h.officeShare >= 60 ? chip('#dcfce7', '#15803d') : h.officeShare <= 25 ? chip('#fef2f2', '#b91c1c') : chip('#f3f4f6', '#4b5563')}>{h.officeShare} % Bürojobs</span>}
+                      {(h.sourceCount ?? 0) >= 2 && <span title={h.sources.join(', ')} style={chip('#ecfdf5', '#047857')}>✓ in {h.sourceCount} Quellen</span>}
                       {!!h.hrRoles?.length && <span title={h.hrRoles.join(' · ')} style={chip('#ede9fe', '#6d28d9')}>👥 baut Recruiting auf ({h.hrRoles.length} HR-Stelle{h.hrRoles.length > 1 ? 'n' : ''})</span>}
                       {h.repeated.slice(0, 3).map(r => <span key={r.role} style={chip('#fef3c7', '#92400e')}>{r.count}× {r.role}</span>)}
                       <span style={h.ats.length ? chip('#f3f4f6', '#374151') : chip('#dcfce7', '#15803d')}>{h.ats.length ? `ATS: ${h.ats.join(', ')}` : 'Kein ATS erkannt'}</span>

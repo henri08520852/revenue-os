@@ -5,6 +5,7 @@
 // candidate_companies (source_type 'hiring'). Known CRM companies also get a signal.
 // Server-only, service role client.
 import { feedOf, fetchAtsJobs } from './ats'
+import { classify, icpAdjust } from './industry'
 
 const BA_URL = process.env.BA_JOBS_URL || 'https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4/jobs'
 const BA_KEY = 'jobboerse-jobsuche' // public key of the BA job search
@@ -300,6 +301,12 @@ export function scoreEmployer(all: Row[]) {
   if (new14 >= 3) score += 10
   if (!ats.length) score += 5 // no known applicant system → screening likely by hand
   if (hrRoles.length) score += 15 // hiring recruiters/HR → recruiting is a priority right now
+  // ICP fit: industry + share of office/knowledge roles
+  const { industry, officeShare } = classify(rows[0]?.employer_name || '', null, rows.map(r => r.title))
+  score += icpAdjust(industry?.key ?? null, officeShare)
+  // Confirmed by several sources (e.g. BA + Personio) → more reliable signal
+  const sourceCount = new Set(all.map(r => BOARDS.includes(r.source) ? r.source : 'ats')).size
+  if (sourceCount >= 2) score += 5
   score = Math.max(0, Math.min(100, score))
 
   const parts = [`${open} offene Stellen`]
@@ -309,7 +316,7 @@ export function scoreEmployer(all: Row[]) {
   return {
     score, reason: parts.join(' · '),
     hiring: {
-      open, new14, repeated: repeated.slice(0, 5), volumeRoles: volume, ats, hrRoles,
+      open, new14, repeated: repeated.slice(0, 5), volumeRoles: volume, ats, hrRoles, industry, officeShare, sourceCount,
       locations: count(rows.map(r => r.location)).slice(0, 4), countries: count(rows.map(r => r.country)),
       sources: count(all.map(r => r.source)), feed, updatedAt: new Date().toISOString(),
     },
@@ -350,6 +357,11 @@ export async function runHiringDiscovery(svc: any, projectId: string, opts: { bu
   const { data: pending } = await svc.from('candidate_companies').select('id, name').eq('project_id', projectId).eq('source_type', 'hiring').eq('status', 'pending')
   const drop = (pending || []).filter((c: any) => excluded(c.name)).map((c: any) => c.id)
   if (drop.length) await svc.from('candidate_companies').update({ status: 'rejected', notes: 'Automatisch aussortiert (Agentur/Konzern/Behörde)', reviewed_at: new Date().toISOString() }).in('id', drop)
+  // Candidates scored before industry/ICP fit existed → score again from the stored postings
+  const { data: old } = await svc.from('candidate_companies').select('hiring').eq('project_id', projectId).eq('source_type', 'hiring')
+    .eq('status', 'pending').is('hiring->sourceCount', null).limit(100)
+  const oldKeys = (old || []).map((c: any) => c.hiring?.key).filter(Boolean)
+  if (oldKeys.length) await storeScores(svc, projectId, await loadEmployers(svc, projectId, oldKeys), { employers: 0, candidates: 0, signals: 0 })
 
   // 1) Broad search: role keywords across Germany (+ AT/CH via Google Jobs)
   const fetched: Posting[] = []
