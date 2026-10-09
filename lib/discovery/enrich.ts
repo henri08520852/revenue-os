@@ -75,7 +75,7 @@ export function managersOf(text: string): string[] {
     for (const part of seg.split(/,|;|\bund\b|&|\/|\bsowie\b/)) {
       const n = part.replace(/^[\s:–-]+|[\s.:–-]+$/g, '').trim()
       const words = n.split(/\s+/)
-      if (words.length >= 2 && words.length <= 4 && words.every(w => /^[A-ZÄÖÜ][\wäöüßéèáàç'.-]+$/.test(w)) && !/gmbh|ag\b|kg\b|holding|verwaltung/i.test(n)) out.add(n)
+      if (words.length >= 2 && words.length <= 4 && words.every(w => /^[A-ZÄÖÜ][\wäöüßéèáàç'.-]+$/.test(w)) && !/gmbh|ag\b|kg\b|holding|verwaltung|officer|executive|director|chief|managing|president|vorstand|geschäftsführ|gesellschaft/i.test(n)) out.add(n)
     }
     if (out.size >= 4) break
   }
