@@ -16,8 +16,8 @@ export async function GET(request: NextRequest) {
   }
   const svc = createServiceClient()
   const projectId = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID!
-  const discovery = await discoverAtsAccounts(svc, projectId, 12_000)
-  const poll = await pollAtsAccounts(svc, projectId, 40_000)
+  const discovery = await discoverAtsAccounts(svc, projectId, 20_000)
+  const poll = await pollAtsAccounts(svc, projectId, 34_000)
   await logRun(svc, projectId, 'ats-feeds', { discovery, poll })
   return NextResponse.json({ ok: true, discovery, poll })
 }

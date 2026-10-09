@@ -1,6 +1,6 @@
 // Career sites on applicant tracking systems → "Heiße Firmen", free and DACH-wide.
-// 1) discoverAtsAccounts: the Common Crawl index (public web archive) lists every known
-//    career site like acme.jobs.personio.de → ats_accounts (a few index pages per run).
+// 1) discoverAtsAccounts: the public web archives (Internet Archive / Common Crawl) list every
+//    known career site like acme.jobs.personio.de → ats_accounts (a few index pages per run).
 // 2) pollAtsAccounts: checks the public job feed of due accounts in rotation; busy employers
 //    are re-checked every 3 days, quiet ones every 2 weeks, non-DACH ones rarely.
 // Server-only, service role client.
@@ -9,11 +9,22 @@ import { employerKey, excluded, loadEmployers, save, storeScores, toRows } from 
 
 const CC_INDEX = process.env.CC_INDEX_URL || 'https://index.commoncrawl.org'
 
-export const PATTERNS = [
-  '*.jobs.personio.de', '*.jobs.personio.com', '*.recruitee.com',
-  'boards.greenhouse.io/*', 'job-boards.greenhouse.io/*', 'job-boards.eu.greenhouse.io/*',
-  'jobs.lever.co/*', 'jobs.eu.lever.co/*', 'apply.workable.com/*', 'jobs.smartrecruiters.com/*',
+// Career-site addresses per system. Wayback (Internet Archive CDX) is asked for the start pages
+// only (one hit per company); Common Crawl is the fallback when the Wayback index fails.
+export const PATTERNS: { key: string; url: string; match: 'domain' | 'prefix'; root: string }[] = [
+  { key: '*.jobs.personio.de', url: 'jobs.personio.de', match: 'domain', root: '^https?://[^/]+\\.jobs\\.personio\\.de(/(de|en)?/?)?(\\?.*)?$' },
+  { key: '*.jobs.personio.com', url: 'jobs.personio.com', match: 'domain', root: '^https?://[^/]+\\.jobs\\.personio\\.com(/(de|en)?/?)?(\\?.*)?$' },
+  { key: '*.recruitee.com', url: 'recruitee.com', match: 'domain', root: '^https?://[^/]+\\.recruitee\\.com/?(\\?.*)?$' },
+  { key: 'boards.greenhouse.io/*', url: 'boards.greenhouse.io/', match: 'prefix', root: '^https?://boards\\.greenhouse\\.io/[^/?]+/?(\\?.*)?$' },
+  { key: 'job-boards.greenhouse.io/*', url: 'job-boards.greenhouse.io/', match: 'prefix', root: '^https?://job-boards\\.greenhouse\\.io/[^/?]+/?(\\?.*)?$' },
+  { key: 'job-boards.eu.greenhouse.io/*', url: 'job-boards.eu.greenhouse.io/', match: 'prefix', root: '^https?://job-boards\\.eu\\.greenhouse\\.io/[^/?]+/?(\\?.*)?$' },
+  { key: 'jobs.lever.co/*', url: 'jobs.lever.co/', match: 'prefix', root: '^https?://jobs\\.lever\\.co/[^/?]+/?(\\?.*)?$' },
+  { key: 'jobs.eu.lever.co/*', url: 'jobs.eu.lever.co/', match: 'prefix', root: '^https?://jobs\\.eu\\.lever\\.co/[^/?]+/?(\\?.*)?$' },
+  { key: 'apply.workable.com/*', url: 'apply.workable.com/', match: 'prefix', root: '^https?://apply\\.workable\\.com/[^/?]+/?(\\?.*)?$' },
+  { key: 'jobs.smartrecruiters.com/*', url: 'jobs.smartrecruiters.com/', match: 'prefix', root: '^https?://jobs\\.smartrecruiters\\.com/[^/?]+/?(\\?.*)?$' },
 ]
+const WAYBACK = process.env.WAYBACK_CDX_URL || 'https://web.archive.org/cdx/search/cdx'
+const REDISCOVER_DAYS = 30
 
 const POLL_CONCURRENCY = 10
 const POLL_BATCH = 400
@@ -24,56 +35,93 @@ const HOT_MIN = 4
 const later = (days: number) => new Date(Date.now() + days * DAY).toISOString()
 const prettify = (slug: string) => slug.split(/[-_]+/).filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
 
-async function getJson(url: string) {
-  const res = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'RevenueOS-JobSignals/1.0' }, signal: AbortSignal.timeout(20_000) })
+async function getJson(url: string, timeoutMs = 20_000) {
+  const res = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'RevenueOS-JobSignals/1.0' }, signal: AbortSignal.timeout(timeoutMs) })
   if (!res.ok) throw new Error(`${res.status} ${url.split('?')[0]}`)
   return res
 }
 
-// ---------- 1) find career sites in the crawl index ----------
+async function storeFeeds(svc: any, projectId: string, urls: string[]) {
+  const feeds = new Map<string, AtsFeed>()
+  for (const u of urls) { const f = feedOf(u); if (f) feeds.set(`${f.ats}:${f.slug}`, f) }
+  const rows = Array.from(feeds.values()).map(f => ({ project_id: projectId, ats: f.ats, slug: f.slug }))
+  for (let i = 0; i < rows.length; i += 500) {
+    const { error } = await svc.from('ats_accounts').upsert(rows.slice(i, i + 500), { onConflict: 'project_id,ats,slug', ignoreDuplicates: true })
+    if (error) throw new Error(error.message)
+  }
+  return rows.length
+}
+
+// ---------- 1) find career sites in the web archives ----------
+
+// One page of the Wayback index (start pages only); returns the key for the next page, null at the end
+async function waybackPage(p: typeof PATTERNS[number], resumeKey: string | null, timeoutMs: number) {
+  const q = new URLSearchParams({ url: p.url, matchType: p.match, fl: 'original', collapse: 'urlkey', output: 'json', limit: '5000', showResumeKey: 'true', filter: `original:${p.root}` })
+  if (resumeKey) q.set('resumeKey', resumeKey)
+  const rows: string[][] = await (await getJson(`${WAYBACK}?${q}`, timeoutMs)).json()
+  const gap = rows.findIndex(r => !r.length)
+  const urls = rows.slice(1, gap === -1 ? undefined : gap).map(r => r[0])
+  return { urls, next: gap !== -1 ? rows[gap + 1]?.[0] ?? null : null }
+}
+
+// Fallback: Common Crawl, one index page
+async function commonCrawlPage(p: typeof PATTERNS[number], page: number, timeoutMs: number) {
+  const collection: string = (await (await getJson(`${CC_INDEX}/collinfo.json`, timeoutMs)).json())[0].id
+  const base = `${CC_INDEX}/${collection}-index?url=${encodeURIComponent(p.key)}&output=json`
+  const pages = (await (await getJson(`${base}&showNumPages=true`, timeoutMs)).json()).pages ?? 0
+  if (page >= pages) return { urls: [] as string[], pages }
+  const text = await (await getJson(`${base}&fl=url&page=${page}`, timeoutMs)).text()
+  const urls = text.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l).url as string } catch { return '' } })
+  return { urls, pages }
+}
 
 export async function discoverAtsAccounts(svc: any, projectId: string, budgetMs = 15_000) {
   const started = Date.now()
-  const out = { found: 0, pattern: null as string | null, page: 0, pages: 0, error: null as string | null }
+  const left = () => budgetMs - (Date.now() - started)
+  const out = { found: 0, pattern: null as string | null, page: 0, source: null as string | null, done: false, error: null as string | null }
+  const { data: states } = await svc.from('ats_discovery_state').select('*').eq('project_id', projectId)
+  const byKey = new Map<string, any>((states || []).map((s: any) => [s.pattern, s]))
+  // Next pattern: never started → unfinished → finished more than a month ago (start over)
+  const stale = new Date(Date.now() - REDISCOVER_DAYS * DAY).toISOString()
+  const pick = PATTERNS.map(p => ({ p, s: byKey.get(p.key) ?? { pattern: p.key, collection: null, page: 0, finished_at: null, updated_at: '1970-01-01' } }))
+    .filter(({ s }) => !s.finished_at || s.finished_at < stale)
+    .sort((a, b) => String(a.s.updated_at).localeCompare(String(b.s.updated_at)))[0]
+  if (!pick) return out
+  const { p } = pick
+  let state = pick.s.finished_at ? { ...pick.s, collection: null, page: 0, finished_at: null } : { ...pick.s }
+  out.pattern = p.key
+
   try {
-    const collection: string = (await (await getJson(`${CC_INDEX}/collinfo.json`)).json())[0].id
-    const { data: states } = await svc.from('ats_discovery_state').select('*').eq('project_id', projectId)
-    const byPattern = new Map<string, any>((states || []).map((s: any) => [s.pattern, s]))
-    // Next pattern: never started → unfinished → (new crawl collection) start over
-    const pick = PATTERNS.map(pattern => byPattern.get(pattern) ?? { project_id: projectId, pattern, collection: null, page: 0, num_pages: null, finished_at: null, updated_at: '1970-01-01' })
-      .filter(s => s.collection !== collection || !s.finished_at)
-      .sort((a, b) => String(a.updated_at).localeCompare(String(b.updated_at)))[0]
-    if (!pick) return out
-    let state = pick.collection === collection ? pick : { ...pick, collection, page: 0, num_pages: null, finished_at: null }
-    out.pattern = state.pattern
-
-    const base = `${CC_INDEX}/${collection}-index?url=${encodeURIComponent(state.pattern)}&output=json`
-    if (state.num_pages == null) state.num_pages = (await (await getJson(`${base}&showNumPages=true`)).json()).pages ?? 0
-
-    while (state.page < state.num_pages && Date.now() - started < budgetMs) {
-      const text = await (await getJson(`${base}&fl=url&page=${state.page}`)).text()
-      const feeds = new Map<string, AtsFeed>()
-      for (const line of text.split('\n')) {
-        if (!line.trim()) continue
-        try { const f = feedOf(JSON.parse(line).url); if (f) feeds.set(`${f.ats}:${f.slug}`, f) } catch { /* skip bad line */ }
-      }
-      const rows = Array.from(feeds.values()).map(f => ({ project_id: projectId, ats: f.ats, slug: f.slug }))
-      for (let i = 0; i < rows.length; i += 500) {
-        const { error } = await svc.from('ats_accounts').upsert(rows.slice(i, i + 500), { onConflict: 'project_id,ats,slug', ignoreDuplicates: true })
-        if (error) throw new Error(error.message)
-      }
-      out.found += rows.length
+    // state.collection holds the Wayback resume key ("wb:<key>"), state.page the pages done
+    let resume: string | null = String(state.collection || '').startsWith('wb:') ? state.collection.slice(3) : null
+    do {
+      const r = await waybackPage(p, resume, Math.max(5_000, Math.min(25_000, left())))
+      out.found += await storeFeeds(svc, projectId, r.urls)
       state.page++
-    }
-    if (state.page >= state.num_pages) state.finished_at = new Date().toISOString()
-    out.page = state.page; out.pages = state.num_pages
-    await svc.from('ats_discovery_state').upsert({
-      project_id: projectId, pattern: state.pattern, collection: state.collection, page: state.page,
-      num_pages: state.num_pages, finished_at: state.finished_at, updated_at: new Date().toISOString(),
-    }, { onConflict: 'project_id,pattern' })
+      resume = r.next
+      out.source = 'wayback'
+    } while (resume && left() > 8_000)
+    state.collection = resume ? `wb:${resume}` : null
+    if (!resume) state.finished_at = new Date().toISOString()
   } catch (e: any) {
-    out.error = e?.message || String(e)
+    out.error = `Wayback: ${e?.message || e}`
+    if (left() > 6_000) {
+      try {
+        const r = await commonCrawlPage(p, 0, Math.min(20_000, left()))
+        out.found += await storeFeeds(svc, projectId, r.urls)
+        out.source = 'commoncrawl'
+        out.error += ' (Common Crawl als Ersatz genutzt)'
+      } catch (e2: any) {
+        out.error += ` · Common Crawl: ${e2?.message || e2}`
+      }
+    }
   }
+  out.page = state.page
+  out.done = !!state.finished_at
+  await svc.from('ats_discovery_state').upsert({
+    project_id: projectId, pattern: p.key, collection: state.collection ?? null, page: state.page,
+    num_pages: null, finished_at: state.finished_at ?? null, updated_at: new Date().toISOString(),
+  }, { onConflict: 'project_id,pattern' })
   return out
 }
 

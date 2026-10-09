@@ -85,7 +85,7 @@ export async function searchNow(): Promise<{ error: string | null; summary?: str
     const a = await pollAtsAccounts(svc, PROJECT_ID, 14_000)
     await logRun(svc, PROJECT_ID, 'manual', { discovery: d, hiring: { ...s, errors: s.errors.slice(0, 5) }, poll: a, baSample })
     revalidatePath('/candidates')
-    const crawl = d.error ? `Web-Archiv: Fehler ${d.error}` : `Web-Archiv: ${d.found} Karriereseiten gefunden${d.pattern ? ` (${d.pattern}, Seite ${d.page}/${d.pages})` : ''}`
+    const crawl = `Web-Archiv: ${d.found} Karriereseiten gefunden${d.pattern ? ` (${d.pattern}${d.done ? ', fertig' : `, Seite ${d.page}`})` : ''}${d.error ? ` – ${d.error}` : ''}`
     const summary = `${s.postings} Stellen aus Jobbörsen · ${crawl} · ${a.checked} Karriereseiten geprüft · ${s.employers + a.employers} Firmen bewertet · ${s.candidates + a.candidates} neu`
     const errors = Array.from(new Set(s.errors.map(e => e.replace(/^BA [^:]+: /, '')))).slice(0, 2).join(' · ')
     return { error: s.postings || a.checked ? null : errors || `Keine Stellen gefunden (BA-Zugang: ${s.baAccess ?? 'unbekannt'})`, summary: errors && (s.postings || a.checked) ? `${summary} · Hinweis: ${errors}` : summary }
