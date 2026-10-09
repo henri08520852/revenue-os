@@ -2,8 +2,8 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getTeamContext } from '@/lib/team'
-import { runHiringDiscovery } from '@/lib/discovery/hiring'
-import { pollAtsAccounts } from '@/lib/discovery/ats-feeds'
+import { baSample, logRun, runHiringDiscovery } from '@/lib/discovery/hiring'
+import { discoverAtsAccounts, pollAtsAccounts } from '@/lib/discovery/ats-feeds'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID!
 type Result = { error: string | null; href?: string }
@@ -80,10 +80,13 @@ export async function searchNow(): Promise<{ error: string | null; summary?: str
   if (!me || denied) return { error: 'Nicht berechtigt' }
   try {
     const svc = createServiceClient()
-    const s = await runHiringDiscovery(svc, PROJECT_ID, { budgetMs: 30_000 })
-    const a = await pollAtsAccounts(svc, PROJECT_ID, 20_000)
+    const d = await discoverAtsAccounts(svc, PROJECT_ID, 8_000)
+    const s = await runHiringDiscovery(svc, PROJECT_ID, { budgetMs: 26_000 })
+    const a = await pollAtsAccounts(svc, PROJECT_ID, 14_000)
+    await logRun(svc, PROJECT_ID, 'manual', { discovery: d, hiring: { ...s, errors: s.errors.slice(0, 5) }, poll: a, baSample })
     revalidatePath('/candidates')
-    const summary = `${s.postings} Stellen aus Jobbörsen · ${a.checked} Karriereseiten geprüft · ${s.employers + a.employers} Firmen bewertet · ${s.candidates + a.candidates} neu`
+    const crawl = d.error ? `Web-Archiv: Fehler ${d.error}` : `Web-Archiv: ${d.found} Karriereseiten gefunden${d.pattern ? ` (${d.pattern}, Seite ${d.page}/${d.pages})` : ''}`
+    const summary = `${s.postings} Stellen aus Jobbörsen · ${crawl} · ${a.checked} Karriereseiten geprüft · ${s.employers + a.employers} Firmen bewertet · ${s.candidates + a.candidates} neu`
     const errors = Array.from(new Set(s.errors.map(e => e.replace(/^BA [^:]+: /, '')))).slice(0, 2).join(' · ')
     return { error: s.postings || a.checked ? null : errors || `Keine Stellen gefunden (BA-Zugang: ${s.baAccess ?? 'unbekannt'})`, summary: errors && (s.postings || a.checked) ? `${summary} · Hinweis: ${errors}` : summary }
   } catch (e: any) {

@@ -61,11 +61,13 @@ export const roleKey = (title: string) =>
     .replace(/[^a-z0-9äöüß ]+/g, ' ').replace(/\s+/g, ' ').trim().split(' ').slice(0, 6).join(' ')
 
 // Staffing agencies and the public sector post for others or are not the ICP
-const AGENCY = /(personal(dienst|service|vermittl|leasing|partner|management)|zeitarbeit|arbeitnehmerüberlassung|staffing|recruit|headhunt|jobs? ?(service|agentur)|randstad|adecco|manpower|hays\b|amadeus fire|orizon|persona service|tempton|brunel|dekra arbeit|gi group|jobactive|piening|ferchau|trenkwalder|avantgarde experts|robert half|page personnel|michael page)/i
+const AGENCY = /(personal(dienst|service|vermittl|leasing|partner|management)|zeitarbeit|arbeitnehmerüberlassung|staffing|recruit|headhunt|jobs? ?(service|agentur)|randstad|adecco|manpower|hays\b|amadeus fire|orizon|persona service|tempton|brunel|dekra arbeit|gi group|jobactive|piening|ferchau|trenkwalder|avantgarde experts|robert half|page personnel|michael page|\bpersonal\b|synergie|engineering people|bertrandt|akkodis|\balten\b|expleo|ingenieurdienst|personalberatung|jobcenter)/i
 const PUBLIC = /^(stadt|landeshauptstadt|landkreis|kreis|gemeinde|markt|bundes|bundesagentur|land |freistaat|universität|hochschule|technische universität|max-planck|fraunhofer|helmholtz|bundeswehr|polizei|deutsche rentenversicherung|aok|landratsamt|bezirksamt)/i
 const LARGE = /^(deutsche bahn|db |lidl|aldi|edeka|rewe|kaufland|netto|penny|dm-drogerie|rossmann|amazon|dhl|deutsche post|siemens|bosch|robert bosch|bmw|mercedes|volkswagen|audi|porsche|sap|telekom|deutsche telekom|vodafone|allianz|ergo|axa|sparkasse|volksbank|commerzbank|deutsche bank|mcdonald|burger king|ikea|obi|bauhaus|hornbach|decathlon|h&m|zalando|otto|tui|lufthansa|basf|bayer|henkel|thyssenkrupp|continental|schaeffler|zf |würth|helios|asklepios|sana|fresenius|vivantes|charité|ameos|johanniter|malteser|drk|deutsches rotes kreuz|caritas|diakonie|awo|arbeiterwohlfahrt)/i
 const PUBLIC_ANY = /(landesbetrieb|\baör\b|anstalt des öffentlichen rechts|körperschaft des öffentlichen|des bundes\b|des landes\b|landesamt|bundesamt|kreisverwaltung|stadtverwaltung|stadtwerke)/i
-export const excluded = (name: string) => AGENCY.test(name) || PUBLIC.test(name.trim()) || PUBLIC_ANY.test(name) || LARGE.test(name.trim())
+// Group brands that show up with only a handful of BA postings per legal entity
+const LARGE_ANY = /(nestl[eé]|infineon|bechtle|knorr-bremse|media-?saturn|mediamarkt|\bdpd\b|\btüv\b|\bdekra\b|lkw walter|\badesso\b|nagel-group|autobahn gmbh|deutsche bahn|siemens|\bbosch\b|\bbmw\b|\bsap\b|\bdhl\b|\bups\b|hermes|fedex|accenture|deloitte|\bpwc\b|\bkpmg\b|ernst & young|\bey\b|capgemini|\bibm\b|t-systems|telekom)/i
+export const excluded = (name: string) => LARGE_ANY.test(name) || AGENCY.test(name) || PUBLIC.test(name.trim()) || PUBLIC_ANY.test(name) || LARGE.test(name.trim())
 
 const VOLUME = /werkstudent|trainee|ausbildung|azubi|lehrling|lehrstelle|duales studium|dual|praktik|aushilfe|minijob|kundenservice|kundenberat|call ?center|vertrieb|sales|verkäuf|sachbearbeit|kaufm|empfang|assistenz|lager|logistik|fahrer|pflege|erzieh|service/i
 
@@ -101,6 +103,7 @@ const BA_VARIANTS: { path: string; auth: 'key' | 'oauth' }[] = [
   ...BA_PATHS.slice(0, 2).map(path => ({ path, auth: 'oauth' as const })),
 ]
 let baVariant: number | null = null
+export let baSample: string | null = null // shape of one BA job, to see which fields the API offers
 let baToken: { value: string; until: number } | null = null
 
 async function baBearer() {
@@ -147,6 +150,7 @@ export async function fetchBA(params: { was?: string; angebotsart?: number; arbe
     baVariant = null
     throw new Error(`BA-Antwort (${v}) ohne Stellenliste – {${shapeOf(data)}}`)
   }
+  if (list[0] && !baSample) baSample = shapeOf(list[0], 2).slice(0, 600)
   const postings: Posting[] = list.map(baPosting).filter(Boolean) as Posting[]
   if (list.length && !postings.length) throw new Error(`BA-Stelle unbekannt aufgebaut – {${shapeOf(list[0], 2)}}`)
   return postings
@@ -228,11 +232,13 @@ export function scoreEmployer(all: Row[]) {
   const count = (xs: (string | null)[]) => Array.from(xs.reduce((m, x) => x ? m.set(x, (m.get(x) || 0) + 1) : m, new Map<string, number>()).entries()).sort((a, b) => b[1] - a[1]).map(([x]) => x)
 
   let score = Math.min(50, open * 3)
+  // Legal form / branch wording of a large group → likely outside 10–200 employees
+  if (/\b(ag|se|kgaa)\b|zentrale|depot|niederlassung|filiale/i.test(rows[0]?.employer_name || '')) score -= 20
   score += Math.min(20, repeated.length * 7)
   if (volume / open >= 0.3) score += 10
   if (new14 >= 3) score += 10
   if (!ats.length) score += 5 // no known applicant system → screening likely by hand
-  score = Math.min(100, score)
+  score = Math.max(0, Math.min(100, score))
 
   const parts = [`${open} offene Stellen`]
   if (new14) parts.push(`${new14} neu in 14 Tagen`)
@@ -276,6 +282,11 @@ export async function runHiringDiscovery(svc: any, projectId: string, opts: { bu
   const left = () => budget - (Date.now() - started)
   const day = opts.day ?? Math.floor(Date.now() / 86400000)
   const stats = { postings: 0, employers: 0, candidates: 0, signals: 0, errors: [] as string[], baAccess: null as string | null }
+
+  // 0) Candidates that today's filters would drop (agencies, groups, public bodies) leave the list
+  const { data: pending } = await svc.from('candidate_companies').select('id, name').eq('project_id', projectId).eq('source_type', 'hiring').eq('status', 'pending')
+  const drop = (pending || []).filter((c: any) => excluded(c.name)).map((c: any) => c.id)
+  if (drop.length) await svc.from('candidate_companies').update({ status: 'rejected', notes: 'Automatisch aussortiert (Agentur/Konzern/Behörde)', reviewed_at: new Date().toISOString() }).in('id', drop)
 
   // 1) Broad search: role keywords across Germany (+ AT/CH via Google Jobs)
   const fetched: Posting[] = []
@@ -396,4 +407,12 @@ export async function storeScores(svc: any, projectId: string, byEmployer: Map<s
       }
     }
   }
+}
+
+// Last run of a discovery job, kept as a row of ats_discovery_state so it can be checked later
+export async function logRun(svc: any, projectId: string, kind: string, result: unknown) {
+  await svc.from('ats_discovery_state').upsert({
+    project_id: projectId, pattern: `_status:${kind}`, collection: JSON.stringify({ at: new Date().toISOString(), result }).slice(0, 4000),
+    page: 0, updated_at: new Date().toISOString(),
+  }, { onConflict: 'project_id,pattern' })
 }

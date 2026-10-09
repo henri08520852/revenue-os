@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { discoverAtsAccounts, pollAtsAccounts } from '@/lib/discovery/ats-feeds'
+import { logRun } from '@/lib/discovery/hiring'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -17,5 +18,6 @@ export async function GET(request: NextRequest) {
   const projectId = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID!
   const discovery = await discoverAtsAccounts(svc, projectId, 12_000)
   const poll = await pollAtsAccounts(svc, projectId, 40_000)
+  await logRun(svc, projectId, 'ats-feeds', { discovery, poll })
   return NextResponse.json({ ok: true, discovery, poll })
 }
