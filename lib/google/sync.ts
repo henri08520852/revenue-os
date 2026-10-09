@@ -2,6 +2,7 @@
 import { getAccessToken, googleGet, GoogleConnection } from './oauth'
 import { CrmIndex, domainOf, loadCrmIndex, matchParticipants } from './matching'
 import { EmailRow, Target, logActivities, matchEmail, parseMessage, rematchInbox, touchPeople } from './emails'
+import { createFromCalendly } from './calendly'
 
 const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/me'
 const CAL = 'https://www.googleapis.com/calendar/v3/calendars/primary'
@@ -141,6 +142,10 @@ export async function syncCalendar(svc: any, conn: GoogleConnection, token: stri
     pageToken = res.nextPageToken
   } while (pageToken && events.length < 1000)
 
+  // Calendly invitees not in the CRM yet → contact, company, lead (updates the index in place)
+  const contacts = await createFromCalendly(svc, conn, events, index)
+  if (contacts) await rematchInbox(svc, conn.project_id, index).catch(() => {})
+
   const now = Date.now()
   const rows: any[] = []
   const meetings: any[] = []
@@ -212,7 +217,7 @@ export async function syncCalendar(svc: any, conn: GoogleConnection, token: stri
 
   const inserted = await insertActivities(svc, conn.project_id, 'calendar', meetings)
   await touchPeopleAt(svc, latestByPerson)
-  return { events: rows.length, meetings: inserted }
+  return { events: rows.length, meetings: inserted, contacts }
 }
 
 export async function syncConnection(svc: any, conn: GoogleConnection): Promise<SyncResult> {
