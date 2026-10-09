@@ -69,17 +69,42 @@
   const firstLine = el => String(el?.innerText || el?.textContent || '').split('\n').map(l => l.trim()).find(Boolean) || ''
   const looksLikeName = t => !!t && t.length <= 60 && !GENERIC.test(t) && t.split(/\s+/).length >= 2 && t.split(/\s+/).length <= 6 && !/\d{2}|[@:]/.test(t)
 
+  // Screen-reader-only text ("Conversation List", "Attention screen reader users …") must never be read
+  const HIDDEN = '.visually-hidden, .a11y-text, [class*="visually-hidden"], .sr-only'
+  const visible = el => !!el && !el.closest(HIDDEN) && (el.checkVisibility ? el.checkVisibility() : el.getClientRects().length > 0)
+  const inList = el => !!el.closest('[class*="conversation-listitem"], [class*="conversations-container"], [class*="conversation-list"]')
+  function visibleLines(el) {
+    const out = [], walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const t = n.textContent.replace(/\s+/g, ' ').trim()
+      if (t && visible(n.parentElement)) out.push(t)
+    }
+    return out
+  }
+
+  // The open conversation = the compose box's ancestors up to (not including) the conversation list
+  function threadRoot() {
+    const list = document.querySelector('.msg-conversations-container, [class*="conversations-container"], [class*="conversation-list"]')
+    const box = document.querySelector('.msg-form__contenteditable, [contenteditable="true"][role="textbox"]')
+    if (box) {
+      let el = box
+      while (el.parentElement && el.parentElement !== document.body && !(list && el.parentElement.contains(list))) el = el.parentElement
+      return el
+    }
+    return document.querySelector('.msg-thread') || document.querySelector('main') || document.body
+  }
+
   function readThread() {
-    const root = document.querySelector('.msg-convo-wrapper, .msg-thread, main') || document.body
+    const root = threadRoot()
 
     // Partner name + header element
-    let nameEl = [...root.querySelectorAll('.msg-entity-lockup__entity-title, #thread-detail-jump-target, .msg-title-bar h2, .msg-thread__link-to-profile, h2')]
-      .find(el => looksLikeName(firstLine(el)))
-    if (!nameEl) nameEl = [...root.querySelectorAll('a[href*="/in/"]')].find(a => looksLikeName(firstLine(a)))
+    let nameEl = [...root.querySelectorAll('.msg-entity-lockup__entity-title, #thread-detail-jump-target, .msg-title-bar h2, .msg-thread__link-to-profile, h1, h2, h3')]
+      .find(el => visible(el) && !inList(el) && looksLikeName(firstLine(el)))
+    if (!nameEl) nameEl = [...root.querySelectorAll('a[href*="/in/"]')].find(a => visible(a) && !inList(a) && looksLikeName(firstLine(a)))
     const name = firstLine(nameEl).replace(/\s*\(.*?\)\s*$/, '')
 
     // Profile link: one whose text / label carries the name, else the header's link
-    const links = [...root.querySelectorAll('a[href*="/in/"]')]
+    const links = [...root.querySelectorAll('a[href*="/in/"]')].filter(a => !inList(a))
     const first = name.split(' ')[0]
     const link = links.find(a => first && (text(a).includes(name) || (a.getAttribute('aria-label') || '').includes(name)))
       || nameEl?.closest('a[href*="/in/"]') || nameEl?.parentElement?.querySelector('a[href*="/in/"]') || links[0]
@@ -89,7 +114,7 @@
     let box = nameEl
     for (let i = 0; box && i < 4 && !headline; i++) {
       box = box.parentElement
-      const lines = String(box?.innerText || '').split('\n').map(l => l.trim()).filter(Boolean)
+      const lines = box ? visibleLines(box) : []
       const at = lines.findIndex(l => l.startsWith(name))
       if (at >= 0) headline = lines.slice(at + 1).find(l => l.length >= 10 && !l.startsWith(name) && !GENERIC.test(l) && !/^(active|aktiv|online|·)/i.test(l)) || ''
     }
@@ -100,7 +125,7 @@
     const messages = []
     for (const b of bodies) {
       const t = String(b.innerText || '').trim()
-      if (!t) continue
+      if (!t || !visible(b)) continue
       let sender = '', ev = b.closest('li, .msg-s-message-list__event')
       while (ev && !sender) {
         sender = firstLine(ev.querySelector('.msg-s-message-group__name, [class*="message-group__name"], [class*="message-group__profile-link"]'))
@@ -118,7 +143,7 @@
   }
 
   function diagnosis() {
-    const root = kind() === 'thread' ? (document.querySelector('.msg-convo-wrapper, .msg-thread, main') || document.body) : (document.querySelector('main') || document.body)
+    const root = kind() === 'thread' ? threadRoot() : (document.querySelector('main') || document.body)
     const out = [`${location.pathname.replace(/thread\/[^/]+/, 'thread/…')} | title: ${document.title}`, 'gelesen: ' + JSON.stringify({ ...ctx, messages: ctx?.messages?.length, body: ctx?.body?.slice(0, 40) })]
     const walk = (el, depth) => {
       if (out.length > 400 || depth > 14) return
