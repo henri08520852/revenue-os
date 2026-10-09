@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { rejectCandidate, searchNow, takeCandidate } from './actions'
+import { enrichCandidate, rejectCandidate, searchNow, takeCandidate } from './actions'
 
 type Evidence = { title?: string; link?: string | null; source?: string }
 type Hiring = {
@@ -12,7 +12,10 @@ type Hiring = {
 type Candidate = {
   id: string; name: string; source_type: string; signal_hint: string | null; confidence: number | null; score: number | null
   hiring: Hiring | null; evidence: Evidence[] | null; existing_company_id: string | null; updated_at: string | null; created_at: string
-  enrichment_data?: { northdata?: { employees?: number | null; signals?: string[] } } | null
+  enrichment_data?: {
+    northdata?: { employees?: number | null; signals?: string[] }
+    impressum?: { website: string | null; domain: string | null; managers: string[]; register: string | null; email: string | null; phone: string | null; employees: number | null; checkedAt: string; note?: string }
+  } | null
 }
 export type SourceStatus = { name: string; area: string; active: boolean; note: string; postings: number | null; lastAt: string | null }
 
@@ -57,6 +60,15 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [searching, startSearch] = useTransition()
+  const [enriching, setEnriching] = useState<string | null>(null)
+
+  async function enrich(c: Candidate) {
+    setEnriching(c.id); setMsg(null)
+    const res = await enrichCandidate(c.id)
+    setEnriching(null)
+    if (res.error) setMsg(`Fehler: ${res.error}`)
+    router.refresh()
+  }
 
   const list = (tab === 'hiring' ? hiring : news)
     .filter(c => !gone.has(c.id))
@@ -129,6 +141,11 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
                   <span style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>{c.name}</span>
                   {h ? <span style={chip(sc.bg, sc.color)}>Score {s}</span> : <span style={chip('#eff6ff', '#1d4ed8')}>{NEWS_LABEL[c.signal_hint || ''] ?? 'News'}</span>}
                   {c.existing_company_id && <span style={chip('#e0e7ff', '#4338ca')}>Schon im CRM</span>}
+                  {c.enrichment_data?.impressum?.employees != null && (
+                    <span style={c.enrichment_data.impressum.employees > 250 ? chip('#fef2f2', '#b91c1c') : chip('#f0fdf4', '#15803d')}>
+                      ~{c.enrichment_data.impressum.employees.toLocaleString('de-DE')} Mitarbeitende{c.enrichment_data.impressum.employees > 250 ? ' – größer als Zielgruppe' : ''}
+                    </span>
+                  )}
                   {c.enrichment_data?.northdata?.employees != null && (
                     <span style={c.enrichment_data.northdata.employees > 250 ? chip('#fef2f2', '#b91c1c') : chip('#f0fdf4', '#15803d')}>
                       ~{c.enrichment_data.northdata.employees} Mitarbeitende{c.enrichment_data.northdata.employees > 250 ? ' – größer als Zielgruppe' : ''}
@@ -150,6 +167,24 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
                     </div>
                   </>
                 )}
+
+                {h && (() => {
+                  const imp = c.enrichment_data?.impressum
+                  if (!imp) return (
+                    <button onClick={() => enrich(c)} disabled={enriching === c.id} style={{ ...btn(), fontSize: 12, padding: '5px 10px', marginBottom: 10 }}>
+                      {enriching === c.id ? 'Liest Website & Impressum …' : '🔎 Website & Impressum lesen'}
+                    </button>
+                  )
+                  return (
+                    <div style={{ fontSize: 12.5, color: '#374151', background: '#f9fafb', border: '1px solid #f3f4f6', borderRadius: 8, padding: '8px 10px', marginBottom: 10, lineHeight: 1.6 }}>
+                      {imp.website ? <a href={imp.website} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 500 }}>🌐 {imp.domain}</a> : <span style={{ color: '#9ca3af' }}>{imp.note || 'Keine Website gefunden'}</span>}
+                      {imp.managers.length > 0 && <> · <b>Geschäftsführung:</b> {imp.managers.join(', ')}</>}
+                      {imp.register && <> · {imp.register}</>}
+                      {(imp.email || imp.phone) && <div style={{ color: '#6b7280' }}>{[imp.email, imp.phone].filter(Boolean).join(' · ')}</div>}
+                      {imp.website && imp.note && <div style={{ color: '#9ca3af' }}>{imp.note}</div>}
+                    </div>
+                  )
+                })()}
 
                 {jobs.length > 0 && (
                   <div style={{ marginBottom: 12 }}>

@@ -366,6 +366,9 @@ export async function loadEmployers(svc: any, projectId: string, keys: string[])
   return byEmployer
 }
 
+// Impressum/website says "über 300 Mitarbeitende" → most likely outside the ICP (10–200)
+const sized = (score: number, c?: any) => (c?.enrichment_data?.impressum?.employees ?? 0) > 300 ? Math.max(0, score - 30) : score
+
 // Score employers → candidate_companies ("Heiße Firmen") + signal on known CRM companies
 export async function storeScores(svc: any, projectId: string, byEmployer: Map<string, Row[]>, stats: { employers: number; candidates: number; signals: number }) {
   const { data: companies } = await svc.from('companies').select('id, name').eq('project_id', projectId)
@@ -379,10 +382,10 @@ export async function storeScores(svc: any, projectId: string, byEmployer: Map<s
     const name = list[0].employer_name
     const companyId = companyByKey.get(key) ?? null
 
-    const { data: existing } = await svc.from('candidate_companies').select('id, status')
+    const { data: existing } = await svc.from('candidate_companies').select('id, status, enrichment_data')
       .eq('project_id', projectId).eq('hiring->>key', key).limit(1)
     const patch = {
-      hiring: { ...s.hiring, key }, score: s.score, confidence: s.score, signal_hint: 'hiring_pressure', evidence: s.evidence,
+      hiring: { ...s.hiring, key }, score: sized(s.score, existing?.[0]), confidence: sized(s.score, existing?.[0]), signal_hint: 'hiring_pressure', evidence: s.evidence,
       existing_company_id: companyId, updated_at: new Date().toISOString(),
     }
     if (existing?.length) {

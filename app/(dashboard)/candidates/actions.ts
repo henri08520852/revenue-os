@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getTeamContext } from '@/lib/team'
 import { baSample, logRun, runHiringDiscovery } from '@/lib/discovery/hiring'
 import { discoverAtsAccounts, pollAtsAccounts } from '@/lib/discovery/ats-feeds'
+import { enrichCandidates } from '@/lib/discovery/enrich'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID!
 type Result = { error: string | null; href?: string }
@@ -12,14 +13,45 @@ const tomorrow = () => new Date(Date.now() + 86400000).toISOString().slice(0, 10
 
 async function companyFor(supabase: any, c: any): Promise<string> {
   if (c.existing_company_id) return c.existing_company_id
+  const imp = c.enrichment_data?.impressum
+  if (imp?.domain) {
+    const { data: byDomain } = await supabase.from('companies').select('id').eq('project_id', PROJECT_ID).eq('domain', imp.domain).limit(1)
+    if (byDomain?.length) return byDomain[0].id
+  }
   const { data: found } = await supabase.from('companies').select('id').eq('project_id', PROJECT_ID).ilike('name', c.name).limit(1)
   if (found?.length) return found[0].id
   const { data, error } = await supabase.from('companies')
-    .insert({ project_id: PROJECT_ID, name: c.name, account_status: 'target', source: c.source_type === 'hiring' ? 'hiring_signal' : 'news_signal' })
+    .insert({
+      project_id: PROJECT_ID, name: c.name, account_status: 'target', source: c.source_type === 'hiring' ? 'hiring_signal' : 'news_signal',
+      domain: imp?.domain ?? null, website_url: imp?.website ?? null,
+    })
     .select('id').single()
   if (error) throw new Error(error.message)
   return data.id
 }
+
+// Managing directors from the Impressum → contacts (decision makers), skipping existing names
+async function managersAsContacts(supabase: any, companyId: string, c: any): Promise<string | null> {
+  const imp = c.enrichment_data?.impressum
+  if (!imp?.managers?.length) return null
+  const { data: existing } = await supabase.from('people').select('id, full_name').eq('company_id', companyId)
+  const known = new Map<string, string>((existing || []).map((p: any) => [String(p.full_name).toLowerCase(), p.id]))
+  let first: string | null = null
+  for (const name of imp.managers as string[]) {
+    let id = known.get(name.toLowerCase()) ?? null
+    if (!id) {
+      const words = name.split(' ')
+      const { data } = await supabase.from('people').insert({
+        project_id: PROJECT_ID, company_id: companyId, first_name: words.slice(0, -1).join(' '), last_name: words[words.length - 1], full_name: name,
+        job_title: 'Geschäftsführung', buyer_role: 'economic_buyer', is_decision_maker: true, source: 'impressum',
+      }).select('id').single()
+      id = data?.id ?? null
+    }
+    first = first ?? id
+  }
+  return first
+}
+
 
 // Candidate → company (+ optional lead in Outreach with a first task)
 export async function takeCandidate(id: string, asLead: boolean): Promise<Result> {
@@ -30,6 +62,7 @@ export async function takeCandidate(id: string, asLead: boolean): Promise<Result
   if (!c) return { error: 'Nicht gefunden' }
   try {
     const companyId = await companyFor(supabase, c)
+    const managerId = await managersAsContacts(supabase, companyId, c)
     const reason = c.hiring ? `${c.hiring.open} offene Stellen${c.hiring.new14 ? `, ${c.hiring.new14} neu in 14 Tagen` : ''}${c.hiring.repeated?.[0] ? `, ${c.hiring.repeated[0].count}× ${c.hiring.repeated[0].role}` : ''}` : (c.evidence?.[0]?.title ?? null)
     let href = `/companies/${companyId}`
     if (asLead) {
@@ -39,13 +72,13 @@ export async function takeCandidate(id: string, asLead: boolean): Promise<Result
       ])
       if (!openLead?.length && !openDeal?.length) {
         const { data: lead, error } = await supabase.from('leads').insert({
-          project_id: PROJECT_ID, company_id: companyId, owner_id: user.id, stage: 'outreach', source: 'signal',
+          project_id: PROJECT_ID, company_id: companyId, person_id: managerId, owner_id: user.id, stage: 'outreach', source: 'signal',
           notes: reason ? `Signal: ${reason}` : null,
         }).select('id').single()
         if (error) return { error: error.message }
         await supabase.from('tasks').insert({
           project_id: PROJECT_ID, title: `Erstansprache ${c.name}${reason ? ` (${reason})` : ''}`.slice(0, 200), task_type: 'todo',
-          due_at: `${tomorrow()}T10:00:00.000Z`, has_time: false, owner_id: user.id, created_by: user.id, company_id: companyId, lead_id: lead.id,
+          due_at: `${tomorrow()}T10:00:00.000Z`, has_time: false, owner_id: user.id, created_by: user.id, company_id: companyId, person_id: managerId, lead_id: lead.id,
         })
         href = `/pipeline?focus=${lead.id}`
       } else href = openDeal?.length ? `/opportunities/${openDeal[0].id}` : `/pipeline?focus=${openLead![0].id}`
@@ -92,4 +125,13 @@ export async function searchNow(): Promise<{ error: string | null; summary?: str
   } catch (e: any) {
     return { error: e?.message || 'Fehler' }
   }
+}
+
+// "Website & Impressum" for one candidate, on demand
+export async function enrichCandidate(id: string): Promise<{ error: string | null }> {
+  const { me, denied } = await getTeamContext()
+  if (!me || denied) return { error: 'Nicht berechtigt' }
+  await enrichCandidates(createServiceClient(), PROJECT_ID, { ids: [id], budgetMs: 45_000 })
+  revalidatePath('/candidates')
+  return { error: null }
 }

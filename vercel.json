@@ -27,6 +27,22 @@
     {
       "path": "/api/cron/ats-feeds",
       "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/cron/enrich",
+      "schedule": "30 8 * * *"
+    },
+    {
+      "path": "/api/cron/enrich",
+      "schedule": "30 12 * * *"
+    },
+    {
+      "path": "/api/cron/enrich",
+      "schedule": "30 16 * * *"
+    },
+    {
+      "path": "/api/cron/enrich",
+      "schedule": "30 20 * * *"
     }
   ]
 }
