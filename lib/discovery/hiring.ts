@@ -139,6 +139,13 @@ export async function fetchBA(params: { was?: string; angebotsart?: number; arbe
   if (params.angebotsart) q.set('angebotsart', String(params.angebotsart))
   if (params.arbeitgeber) q.set('arbeitgeber', params.arbeitgeber)
   const data = await baGet(q)
+  if (!Array.isArray(data?.stellenangebote)) {
+    // Answer without the expected list → report its shape so the parser can be adjusted
+    const v = baVariant != null ? `${BA_VARIANTS[baVariant].path}+${BA_VARIANTS[baVariant].auth}` : '?'
+    const shape = data && typeof data === 'object' ? Object.entries(data).slice(0, 8).map(([k, x]) => `${k}:${Array.isArray(x) ? `[${x.length}]` : typeof x}`).join(', ') : typeof data
+    baVariant = null
+    throw new Error(`BA-Antwort (${v}) ohne Stellenliste – {${shape}}`)
+  }
   return (data.stellenangebote || []).filter((s: any) => s.refnr && s.arbeitgeber && s.titel).map((s: any) => ({
     source: 'ba', externalId: String(s.refnr), employer: String(s.arbeitgeber).trim(), title: String(s.titel).trim(),
     location: [s.arbeitsort?.ort, s.arbeitsort?.region].filter(Boolean)[0] ?? null, country: 'DE',
@@ -249,7 +256,7 @@ export async function runHiringDiscovery(svc: any, projectId: string, opts: { bu
   const started = Date.now(), budget = opts.budgetMs ?? 45_000
   const left = () => budget - (Date.now() - started)
   const day = opts.day ?? Math.floor(Date.now() / 86400000)
-  const stats = { postings: 0, employers: 0, candidates: 0, signals: 0, errors: [] as string[] }
+  const stats = { postings: 0, employers: 0, candidates: 0, signals: 0, errors: [] as string[], baAccess: null as string | null }
 
   // 1) Broad search: role keywords across Germany (+ AT/CH via Google Jobs)
   const fetched: Posting[] = []
@@ -265,6 +272,7 @@ export async function runHiringDiscovery(svc: any, projectId: string, opts: { bu
     const q = GOOGLE_QUERIES[((day * GOOGLE_QUERIES_PER_RUN + i) * 7) % GOOGLE_QUERIES.length]
     try { fetched.push(...await fetchGoogleJobs(q.q, q.location, q.gl)) } catch (e: any) { stats.errors.push(`Google ${q.q}: ${e.message}`) }
   }
+  stats.baAccess = baVariant != null ? `${BA_VARIANTS[baVariant].path}+${BA_VARIANTS[baVariant].auth}, ${fetched.length} Stellen roh` : null
   let rows = toRows(projectId, fetched)
   await save(svc, rows)
   stats.postings += rows.length

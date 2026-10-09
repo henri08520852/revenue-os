@@ -85,7 +85,7 @@ export async function searchNow(): Promise<{ error: string | null; summary?: str
     revalidatePath('/candidates')
     const summary = `${s.postings} Stellen aus Jobbörsen · ${a.checked} Karriereseiten geprüft · ${s.employers + a.employers} Firmen bewertet · ${s.candidates + a.candidates} neu`
     const errors = Array.from(new Set(s.errors.map(e => e.replace(/^BA [^:]+: /, '')))).slice(0, 2).join(' · ')
-    return { error: s.postings || a.checked ? null : errors || 'Keine Stellen gefunden', summary: errors && (s.postings || a.checked) ? `${summary} · Hinweis: ${errors}` : summary }
+    return { error: s.postings || a.checked ? null : errors || `Keine Stellen gefunden (BA-Zugang: ${s.baAccess ?? 'unbekannt'})`, summary: errors && (s.postings || a.checked) ? `${summary} · Hinweis: ${errors}` : summary }
   } catch (e: any) {
     return { error: e?.message || 'Fehler' }
   }
