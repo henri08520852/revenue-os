@@ -148,8 +148,13 @@ export async function POST(req: Request) {
 
     if (body.action === 'logMessage') {
       // One message ({ text, direction }) or the whole visible conversation ({ messages: [...] })
-      const list: { text: string; direction: 'inbound' | 'outbound' }[] = (Array.isArray(body.messages) ? body.messages : [{ text: body.text, direction: body.direction }])
-        .slice(0, 100).map((m: any) => ({ text: str(m?.text, 8000), direction: m?.direction === 'inbound' ? 'inbound' : 'outbound' }))
+      // Send time read from the chat; ignored when missing, in the future or implausibly old
+      const validAt = (v: unknown) => {
+        const t = typeof v === 'string' ? Date.parse(v) : NaN
+        return Number.isFinite(t) && t <= Date.now() + 5 * 60000 && t > Date.now() - 5 * 365 * 86400000 ? new Date(t).toISOString() : null
+      }
+      const list: { text: string; direction: 'inbound' | 'outbound'; at: string | null }[] = (Array.isArray(body.messages) ? body.messages : [{ text: body.text, direction: body.direction, at: body.at }])
+        .slice(0, 100).map((m: any) => ({ text: str(m?.text, 8000), direction: m?.direction === 'inbound' ? 'inbound' : 'outbound', at: validAt(m?.at) }))
         .filter((m: { text: string }) => m.text)
       if (!list.length) return NextResponse.json({ error: 'Kein Nachrichtentext' }, { status: 400 })
       const person = await findPerson(supabase, slug, name)
@@ -162,10 +167,15 @@ export async function POST(req: Request) {
 
       // Same text twice → log once
       const refs = list.map(m => `li:${person.id}:${m.direction}:${m.text.slice(0, 200)}`)
-      const { data: existing } = await supabase.from('activities').select('raw_reference').eq('person_id', person.id).in('raw_reference', refs)
+      const { data: existing } = await supabase.from('activities').select('id, raw_reference, occurred_at').eq('person_id', person.id).in('raw_reference', refs)
       const seen = new Set((existing || []).map((a: any) => a.raw_reference))
+      // Already logged without the real time → correct its date now
+      for (const a of existing || []) {
+        const at = list[refs.indexOf(a.raw_reference)]?.at
+        if (at && Date.parse(at) !== Date.parse(a.occurred_at)) await supabase.from('activities').update({ occurred_at: at }).eq('id', a.id)
+      }
       const now = Date.now()
-      const rows = list.map((m, i) => ({ m, ref: refs[i], at: new Date(now - (list.length - 1 - i) * 1000).toISOString() }))
+      const rows = list.map((m, i) => ({ m, ref: refs[i], at: m.at ?? new Date(now - (list.length - 1 - i) * 1000).toISOString() }))
         .filter(r => !seen.has(r.ref) && (seen.add(r.ref), true))
         .map(({ m, ref, at }) => ({
           project_id: PROJECT_ID, company_id: person.company_id, person_id: person.id, opportunity_id: deal?.[0]?.id ?? null,
@@ -179,7 +189,10 @@ export async function POST(req: Request) {
         if (error) throw new Error(error.message)
       }
       const inbound = rows.some(r => r.direction === 'inbound')
-      if (inbound) await supabase.from('people').update({ last_interaction_at: new Date().toISOString() }).eq('id', person.id)
+      if (inbound) {
+        const latest = rows.filter(r => r.direction === 'inbound').map(r => r.occurred_at).sort().pop()
+        await supabase.from('people').update({ last_interaction_at: latest }).eq('id', person.id)
+      }
       return NextResponse.json({ ...(await status(supabase, person)), logged: rows.length, duplicate: !rows.length, advanced: inbound && !!outreachLead?.length })
     }
 

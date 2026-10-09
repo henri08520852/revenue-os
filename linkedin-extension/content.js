@@ -94,6 +94,53 @@
     return document.querySelector('.msg-thread') || document.querySelector('main') || document.body
   }
 
+  // ---------- message timestamps ("WEDNESDAY" / "Oct 2" / "Heute" headings + "10:00 AM" per group) ----------
+  const MONTHS = { jan: 0, feb: 1, mar: 2, 'mär': 2, apr: 3, may: 4, mai: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, okt: 9, nov: 10, dec: 11, dez: 11 }
+  const DAYS = { sunday: 0, sonntag: 0, monday: 1, montag: 1, tuesday: 2, dienstag: 2, wednesday: 3, mittwoch: 3, thursday: 4, donnerstag: 4, friday: 5, freitag: 5, saturday: 6, samstag: 6 }
+  const TIME_RE = /^(?:.*[·•]\s*)?(\d{1,2}):(\d{2})\s*(am|pm|uhr)?$/i
+
+  function parseDay(t) {
+    const s = t.toLowerCase().replace(/[.,]/g, ' ').replace(/\s+/g, ' ').trim()
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const back = n => new Date(today.getTime() - n * 86400000)
+    if (/^(today|heute)$/.test(s)) return back(0)
+    if (/^(yesterday|gestern)$/.test(s)) return back(1)
+    if (s in DAYS) return back(((today.getDay() - DAYS[s] + 7) % 7) || 7)
+    let m = s.match(/^(\d{1,2}) (\d{1,2}) (\d{4})$/) // 02.10.2025
+    if (m) return new Date(+m[3], +m[2] - 1, +m[1])
+    m = s.match(/^([a-zä]{3})[a-zä]* (\d{1,2})(?: (\d{4}))?$/) || s.match(/^(\d{1,2}) ([a-zä]{3})[a-zä]*(?: (\d{4}))?$/)
+    if (!m) return null
+    const [mon, day] = /^\d/.test(m[1]) ? [m[2], m[1]] : [m[1], m[2]]
+    if (!(mon in MONTHS)) return null
+    let d = new Date(m[3] ? +m[3] : today.getFullYear(), MONTHS[mon], +day)
+    if (!m[3] && d > today) d = new Date(d.getFullYear() - 1, d.getMonth(), d.getDate())
+    return d
+  }
+
+  // Walks the visible text in page order and remembers the last date heading + time for each message body
+  function stampMessages(root, bodies) {
+    const stamps = new Map()
+    let day = null, time = null
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const el = n.parentElement
+      const t = n.textContent.replace(/\s+/g, ' ').trim()
+      if (!t || !visible(el)) continue
+      const body = bodies.find(b => b.contains(el))
+      if (body) { if (!stamps.has(body)) stamps.set(body, { day, time }); continue }
+      if (t.length > 40) continue
+      const d = parseDay(t)
+      if (d) { day = d; time = null; continue }
+      const m = t.match(TIME_RE)
+      if (m) {
+        let h = +m[1] % 12 === 0 && /am|pm/i.test(m[3] || '') ? 0 : +m[1]
+        if (/pm/i.test(m[3] || '')) h += 12
+        time = [h, +m[2]]
+      }
+    }
+    return stamps
+  }
+
   function readThread() {
     const root = threadRoot()
 
@@ -122,7 +169,8 @@
     // Messages with sender (sender name sits on the first bubble of a group)
     const bodies = [...root.querySelectorAll('.msg-s-event-listitem__body, [class*="event-listitem__body"], [class*="msg-s-event-listitem__message-bubble"]')]
       .filter((el, i, all) => !all.some((o, j) => j !== i && o.contains(el) && o !== el))
-    const messages = []
+    const messages = [], stamps = stampMessages(root, bodies)
+    let prev = 0
     for (const b of bodies) {
       const t = String(b.innerText || '').trim()
       if (!t || !visible(b)) continue
@@ -131,14 +179,25 @@
         sender = firstLine(ev.querySelector('.msg-s-message-group__name, [class*="message-group__name"], [class*="message-group__profile-link"]'))
         ev = ev.previousElementSibling
       }
-      messages.push({ text: t, inbound: sender ? !!first && sender.includes(first) : true })
+      // Real send time when the chat shows it; equal minutes keep their order (+1 s)
+      let at = null
+      const st = stamps.get(b)
+      if (st?.day) {
+        const d = new Date(st.day)
+        if (st.time) d.setHours(st.time[0], st.time[1], 0, 0); else d.setHours(12, 0, 0, 0)
+        let ms = Math.min(d.getTime(), Date.now())
+        if (ms <= prev) ms = prev + 1000
+        prev = ms
+        at = new Date(ms).toISOString()
+      }
+      messages.push({ text: t, inbound: sender ? !!first && sender.includes(first) : true, at })
     }
     const selection = String(window.getSelection() || '').trim()
     const last = messages[messages.length - 1]
     return {
       kind: 'thread', slug: slugFrom(link?.getAttribute('href')), name, headline, ...splitHeadline(headline),
       firstName: name.split(' ').slice(0, -1).join(' ') || name, lastName: name.split(' ').length > 1 ? name.split(' ').pop() : '',
-      body: selection || last?.text || '', inbound: selection ? true : last ? last.inbound : true, messages,
+      body: selection || last?.text || '', inbound: selection ? true : last ? last.inbound : true, at: selection ? null : last?.at ?? null, messages,
     }
   }
 
@@ -406,8 +465,8 @@
       crm = { ...res, companies: crm?.companies }
     }
     const messages = form.all
-      ? ctx.messages.map(m => ({ text: m.text, direction: m.inbound ? 'inbound' : 'outbound' }))
-      : [{ text: form.text, direction: form.direction }]
+      ? ctx.messages.map(m => ({ text: m.text, direction: m.inbound ? 'inbound' : 'outbound', at: m.at }))
+      : [{ text: form.text, direction: form.direction, at: form.text === ctx.body ? ctx.at : null }]
     const name = [form.first, form.last].filter(Boolean).join(' ') || ctx.name
     await run({ action: 'logMessage', profileUrl: profileUrl(), name, messages },
       r => `${created ? 'Kontakt angelegt ✓ · ' : ''}${r.logged ? `${r.logged} Nachricht${r.logged > 1 ? 'en' : ''} geloggt ✓` : 'War schon geloggt.'}${r.advanced ? ' – Lead steht jetzt auf „Im Gespräch“.' : ''}`)
