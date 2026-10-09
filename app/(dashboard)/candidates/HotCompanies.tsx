@@ -64,7 +64,6 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
   const [tab, setTab] = useState<'hiring' | 'news'>('hiring')
   const [country, setCountry] = useState('all')
   const [industry, setIndustry] = useState('all')
-  const [officeOnly, setOfficeOnly] = useState(false)
   const [gone, setGone] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
@@ -92,7 +91,6 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
     .filter(c => !gone.has(c.id))
     .filter(c => tab !== 'hiring' || country === 'all' || c.hiring?.countries?.includes(country))
     .filter(c => tab !== 'hiring' || industry === 'all' || (industry === 'none' ? !c.hiring?.industry : c.hiring?.industry?.key === industry))
-    .filter(c => tab !== 'hiring' || !officeOnly || (c.hiring?.officeShare ?? 0) >= 50)
   const countries = Array.from(new Set(hiring.flatMap(c => c.hiring?.countries || [])))
   const industries = Array.from(hiring.reduce((m, c) => {
     const ind = c.hiring?.industry
@@ -146,9 +144,6 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
               {industries.map(([key, v]) => <option key={key} value={key}>{v.label} ({v.n})</option>)}
               <option value="none">Branche unklar</option>
             </select>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: '#374151', cursor: 'pointer' }}>
-              <input type="checkbox" checked={officeOnly} onChange={e => setOfficeOnly(e.target.checked)} /> vor allem Bürojobs
-            </label>
           </>
         )}
         {tab === 'hiring' && countries.length > 1 && (
@@ -199,7 +194,7 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
                       {h.industry && <span style={chip('#e0f2fe', '#0369a1')}>{h.industry.label}</span>}
-                      {h.officeShare != null && <span title="Anteil Büro-/Wissensjobs an den offenen Stellen" style={h.officeShare >= 60 ? chip('#dcfce7', '#15803d') : h.officeShare <= 25 ? chip('#fef2f2', '#b91c1c') : chip('#f3f4f6', '#4b5563')}>{h.officeShare} % Bürojobs</span>}
+                      {h.officeShare != null && <span title="Anteil kaufmännischer, IT- und Fachrollen an den offenen Stellen" style={h.officeShare >= 60 ? chip('#dcfce7', '#15803d') : h.officeShare <= 25 ? chip('#fef2f2', '#b91c1c') : chip('#f3f4f6', '#4b5563')}>Office-Anteil {h.officeShare} %</span>}
                       {(h.sourceCount ?? 0) >= 2 && <span title={h.sources.join(', ')} style={chip('#ecfdf5', '#047857')}>✓ in {h.sourceCount} Quellen</span>}
                       {!!h.hrRoles?.length && <span title={h.hrRoles.join(' · ')} style={chip('#ede9fe', '#6d28d9')}>👥 baut Recruiting auf ({h.hrRoles.length} HR-Stelle{h.hrRoles.length > 1 ? 'n' : ''})</span>}
                       {h.repeated.slice(0, 3).map(r => <span key={r.role} style={chip('#fef3c7', '#92400e')}>{r.count}× {r.role}</span>)}

@@ -276,6 +276,9 @@ function openRoles(all: Row[]) {
   return all.filter(r => r.source === 'ba' || !ba.has(key(r)))
 }
 
+// Bump when scoring changes → pending candidates are scored again from their stored postings
+const SCORE_VERSION = 2
+
 // Roles that build up recruiting itself — the strongest trigger for HireFlow
 export const HR_ROLE = /recruit|talent acquisition|talent ?(manager|partner|scout)|personal ?(referent|leit|sachbearbeit|manager|berater|entwickl|koordinat)|personalwesen|hr[- ]?(manager|business ?partner|generalist|leitung|lead|specialist|spezialist|referent|assistenz|coordinator|koordinator)|head of (people|hr|talent)|people ?(&|and|und) ?culture|people (partner|manager|lead)|employer branding|human resources/i
 
@@ -316,7 +319,7 @@ export function scoreEmployer(all: Row[]) {
   return {
     score, reason: parts.join(' · '),
     hiring: {
-      open, new14, repeated: repeated.slice(0, 5), volumeRoles: volume, ats, hrRoles, industry, officeShare, sourceCount,
+      open, new14, repeated: repeated.slice(0, 5), volumeRoles: volume, ats, hrRoles, industry, officeShare, sourceCount, scoredV: SCORE_VERSION,
       locations: count(rows.map(r => r.location)).slice(0, 4), countries: count(rows.map(r => r.country)),
       sources: count(all.map(r => r.source)), feed, updatedAt: new Date().toISOString(),
     },
@@ -359,7 +362,7 @@ export async function runHiringDiscovery(svc: any, projectId: string, opts: { bu
   if (drop.length) await svc.from('candidate_companies').update({ status: 'rejected', notes: 'Automatisch aussortiert (Agentur/Konzern/Behörde)', reviewed_at: new Date().toISOString() }).in('id', drop)
   // Candidates scored before industry/ICP fit existed → score again from the stored postings
   const { data: old } = await svc.from('candidate_companies').select('hiring').eq('project_id', projectId).eq('source_type', 'hiring')
-    .eq('status', 'pending').is('hiring->sourceCount', null).limit(100)
+    .eq('status', 'pending').or(`hiring->>scoredV.is.null,hiring->>scoredV.lt.${SCORE_VERSION}`).limit(150)
   const oldKeys = (old || []).map((c: any) => c.hiring?.key).filter(Boolean)
   if (oldKeys.length) await storeScores(svc, projectId, await loadEmployers(svc, projectId, oldKeys), { employers: 0, candidates: 0, signals: 0 })
 

@@ -21,6 +21,9 @@ export const INDUSTRIES: { key: string; label: string; name: RegExp; titles: Reg
 const OFFICE = /entwickler|developer|engineer(?!ing)|berater|consultant|manager|referent|sachbearbeit|kaufm|controller|controlling|buchhalt|accountant|account|marketing|vertrieb|sales|projekt|analyst|designer|administrator|support|assistenz|personal|recruit|jurist|steuer|redakt|produkt|einkauf|data|\bit\b|it-|software|finanz|business|product|office|backoffice|key account|customer success|scrum|ux|hr\b|operations/i
 const SHOPFLOOR = /mechaniker|mechatroniker|monteur|fahrer|lager|kommission|helfer|elektriker|elektroniker|schweiß|zerspan|maler|maurer|koch|köchin|servicekraft|service ?kraft|reinigung|pflegefach|pflegekraft|altenpfleg|produktionsmitarbeiter|maschinenbediener|schlosser|tischler|installateur|kfz|anlagenfahrer|staplerfahrer|bäcker|verkäufer|kassierer|zusteller|hausmeister|gärtner|dachdecker|zimmerer|bauhelfer|fachkraft für lager|metallbau/i
 
+// Care, education and social roles are neither office nor shop floor (Schulbegleitung, Erzieher, Pflege …)
+const CARE = /erzieh|pädagog|paedagog|schulbegleit|integrationsassist|integrationshelf|sozial|heilerzieh|pflege|betreu|kinder|therapeut|hauswirtschaft|alltagsbegleit|assistenz(?:kraft)? (?:in|für) (?:der )?(?:pflege|betreuung)/i
+
 export function classify(name: string, domain: string | null, titles: string[]) {
   const scores = INDUSTRIES.map(ind => {
     let s = ind.name.test(name) ? 4 : 0
@@ -31,12 +34,13 @@ export function classify(name: string, domain: string | null, titles: string[]) 
   const top = scores[0]
   const industry = top.s >= 2 ? { key: top.key, label: top.label } : null
 
-  let office = 0, floor = 0
+  let office = 0, other = 0
   for (const t of titles) {
-    if (SHOPFLOOR.test(t)) floor++
+    if (CARE.test(t) || SHOPFLOOR.test(t)) other++
     else if (OFFICE.test(t)) office++
   }
-  const officeShare = office + floor ? Math.round((office / (office + floor)) * 100) : null
+  // Share among the roles we could place; too few placed roles → no statement
+  const officeShare = office + other >= 3 ? Math.round((office / (office + other)) * 100) : null
   return { industry, officeShare }
 }
 
