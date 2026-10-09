@@ -9,7 +9,7 @@ import { convertLeadToOpportunity, updateLeadFollowUp, updateLeadOwner, updateLe
 
 export const LEAD_STAGES = [
   { key: 'outreach',     label: 'Outreach',     color: '#94a3b8' },
-  { key: 'contacted',    label: 'Kontaktiert',  color: '#60a5fa' },
+  { key: 'contacted',    label: 'Im Gespräch',  color: '#60a5fa' },
   { key: 'qualified',    label: 'Qualifiziert', color: '#8b5cf6' },
   { key: 'converted',    label: 'Umgewandelt',  color: '#16a34a' },
   { key: 'disqualified', label: 'Disqualifiziert', color: '#9ca3af' },

@@ -10,10 +10,10 @@ const FLOW = [
 ]
 
 const LEAD_STAGES = [
-  ['Outreach',        'Wir sprechen die Company an (LinkedIn, E-Mail, Intro) – noch keine Reaktion.'],
-  ['Kontaktiert',     'Es gibt eine Reaktion oder ein Gespräch ist angebahnt.'],
-  ['Qualifiziert',    'Bedarf ist bestätigt, Ansprechpartner bekannt, Timing passt → jetzt in einen Deal umwandeln.'],
-  ['Disqualifiziert', 'Kein Bedarf / passt nicht. Bleibt zur Dokumentation erhalten.'],
+  ['Outreach',        'Passt zu uns und wir haben angeschrieben (LinkedIn, E-Mail, Intro) – noch keine Antwort. Follow-up-Aufgabe setzen.'],
+  ['Im Gespräch',     'Der Kontakt hat geantwortet und ist offen. Antwortet er per E-Mail, springt der Lead automatisch hierher; LinkedIn-Antworten als eingehende LinkedIn-Aktivität loggen.'],
+  ['Qualifiziert',    'Alle 5 Kriterien geklärt (Bedarf, Budget, Entscheider, Timing, Champion) → in einen Deal umwandeln. Bei 5/5 wird der Lead automatisch qualifiziert.'],
+  ['Disqualifiziert', 'Antwort negativ oder passt nicht. Bleibt zur Dokumentation erhalten.'],
 ]
 
 const DEAL_STAGES = [

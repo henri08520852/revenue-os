@@ -28,7 +28,7 @@ const STAGE_COLORS: Record<Stage, { bg: string; fg: string }> = {
   won:           { bg: '#dcfce7', fg: '#15803d' },
   lost:          { bg: '#f3f4f6', fg: '#6b7280' },
 }
-const LEAD_STAGES: Record<string, string> = { outreach: 'Outreach', contacted: 'Kontaktiert', qualified: 'Qualifiziert', converted: 'Umgewandelt', disqualified: 'Disqualifiziert' }
+const LEAD_STAGES: Record<string, string> = { outreach: 'Outreach', contacted: 'Im Gespräch', qualified: 'Qualifiziert', converted: 'Umgewandelt', disqualified: 'Disqualifiziert' }
 const fmtDate = (iso: string, o: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: '2-digit' }) => new Date(iso).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', ...o })
 
 export default async function DealPage({ params }: { params: { id: string } }) {

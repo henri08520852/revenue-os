@@ -22,7 +22,7 @@ const DEAL_STAGES = [
   { key: 'proposal', label: 'Proposal' }, { key: 'negotiation', label: 'Verhandlung' },
 ]
 const LEAD_STAGES = [
-  { key: 'outreach', label: 'Outreach' }, { key: 'contacted', label: 'Kontaktiert' }, { key: 'qualified', label: 'Qualifiziert' },
+  { key: 'outreach', label: 'Outreach' }, { key: 'contacted', label: 'Im Gespräch' }, { key: 'qualified', label: 'Qualifiziert' },
 ]
 const DEAL_ROLES = [
   { key: 'champion', label: '⭐ Champion' }, { key: 'decision_maker', label: '🎯 Decision Maker' },

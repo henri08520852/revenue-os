@@ -21,7 +21,7 @@ const BUYER_ROLES = [
   { value: 'blocker', label: '🚧 Blocker' },
 ]
 const DEAL_ROLES: Record<string, string> = { champion: '⭐ Champion', decision_maker: '🎯 Decision Maker', economic_buyer: '💰 Economic Buyer', stakeholder: '👥 Stakeholder', primary: 'Primary', blocker: '🚧 Blocker' }
-const LEAD_STAGES: Record<string, string> = { outreach: 'Outreach', contacted: 'Kontaktiert', qualified: 'Qualifiziert', converted: 'Umgewandelt', disqualified: 'Disqualifiziert' }
+const LEAD_STAGES: Record<string, string> = { outreach: 'Outreach', contacted: 'Im Gespräch', qualified: 'Qualifiziert', converted: 'Umgewandelt', disqualified: 'Disqualifiziert' }
 
 export default async function ContactPage({ params }: { params: { id: string } }) {
   const supabase = createClient() as any
