@@ -139,19 +139,37 @@ export async function fetchBA(params: { was?: string; angebotsart?: number; arbe
   if (params.angebotsart) q.set('angebotsart', String(params.angebotsart))
   if (params.arbeitgeber) q.set('arbeitgeber', params.arbeitgeber)
   const data = await baGet(q)
-  if (!Array.isArray(data?.stellenangebote)) {
-    // Answer without the expected list → report its shape so the parser can be adjusted
+  // v4 calls the list "stellenangebote", v6 "ergebnisliste"; field names differ between versions
+  const list = Array.isArray(data?.stellenangebote) ? data.stellenangebote : Array.isArray(data?.ergebnisliste) ? data.ergebnisliste : null
+  if (!list) {
     const v = baVariant != null ? `${BA_VARIANTS[baVariant].path}+${BA_VARIANTS[baVariant].auth}` : '?'
-    const shape = data && typeof data === 'object' ? Object.entries(data).slice(0, 8).map(([k, x]) => `${k}:${Array.isArray(x) ? `[${x.length}]` : typeof x}`).join(', ') : typeof data
     baVariant = null
-    throw new Error(`BA-Antwort (${v}) ohne Stellenliste – {${shape}}`)
+    throw new Error(`BA-Antwort (${v}) ohne Stellenliste – {${shapeOf(data)}}`)
   }
-  return (data.stellenangebote || []).filter((s: any) => s.refnr && s.arbeitgeber && s.titel).map((s: any) => ({
-    source: 'ba', externalId: String(s.refnr), employer: String(s.arbeitgeber).trim(), title: String(s.titel).trim(),
-    location: [s.arbeitsort?.ort, s.arbeitsort?.region].filter(Boolean)[0] ?? null, country: 'DE',
-    url: s.externeUrl || `https://www.arbeitsagentur.de/jobsuche/jobdetail/${encodeURIComponent(s.refnr)}`,
-    publishedAt: s.aktuelleVeroeffentlichungsdatum ? new Date(s.aktuelleVeroeffentlichungsdatum).toISOString() : null,
-  }))
+  const postings: Posting[] = list.map(baPosting).filter(Boolean) as Posting[]
+  if (list.length && !postings.length) throw new Error(`BA-Stelle unbekannt aufgebaut – {${shapeOf(list[0], 2)}}`)
+  return postings
+}
+
+const shapeOf = (x: any, depth = 1): string => x && typeof x === 'object' && !Array.isArray(x)
+  ? Object.entries(x).slice(0, 14).map(([k, v]) => `${k}:${Array.isArray(v) ? `[${v.length}]` : v && typeof v === 'object' ? (depth > 1 ? `{${shapeOf(v, depth - 1)}}` : 'object') : typeof v}`).join(', ')
+  : Array.isArray(x) ? `[${x.length}]` : typeof x
+
+const str = (...xs: any[]) => { for (const x of xs) if (typeof x === 'string' && x.trim()) return x.trim(); return null }
+
+function baPosting(s: any): Posting | null {
+  const ort = s.arbeitsort ?? s.arbeitsorte?.[0] ?? s.stellenlokationen?.[0]?.adresse ?? s.stellenlokationen?.[0] ?? null
+  const refnr = str(s.refnr, s.referenznummer, s.refNr, s.id, s.hashId)
+  const employer = str(s.arbeitgeber, s.arbeitgeber?.name, s.arbeitgeberName, s.arbeitgeberdarstellung?.name, s.firma)
+  const title = str(s.titel, s.stellenangebotsTitel, s.stellentitel, s.beruf, s.hauptberuf)
+  if (!refnr || !employer || !title) return null
+  const published = str(s.aktuelleVeroeffentlichungsdatum, s.veroeffentlichungsdatum, s.datumErsteVeroeffentlichung, s.modifikationsTimestamp)
+  return {
+    source: 'ba', externalId: refnr, employer, title,
+    location: str(ort?.ort, ort?.ortsname, ort?.stadt, ort?.region, typeof ort === 'string' ? ort : null), country: 'DE',
+    url: str(s.externeUrl, s.allianzpartnerUrl, s.externeURL) ?? `https://www.arbeitsagentur.de/jobsuche/jobdetail/${encodeURIComponent(refnr)}`,
+    publishedAt: published && !isNaN(Date.parse(published)) ? new Date(published).toISOString() : null,
+  }
 }
 
 // "vor 3 Tagen" / "3 days ago" → ISO date
