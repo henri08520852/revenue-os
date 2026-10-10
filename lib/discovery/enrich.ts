@@ -7,7 +7,9 @@ import { employerKey, fetchBADetails, shapeOf } from './hiring'
 export type Impressum = {
   website: string | null; domain: string | null; managers: string[]; register: string | null
   email: string | null; hrEmail?: string | null; phone: string | null; employees: number | null; checkedAt: string; note?: string
+  address?: PostalAddress | null
 }
+export type PostalAddress = { street: string; zip: string; city: string; country: string | null }
 export type HrContact = { name: string | null; title: string | null; email: string | null; phone: string | null; job: string | null; source: string }
 
 const UA = { 'User-Agent': 'Mozilla/5.0 (compatible; RevenueOS-CompanyInfo/1.0)', 'Accept-Language': 'de-DE,de;q=0.9,en;q=0.5' }
@@ -109,6 +111,22 @@ const pickEmail = (text: string, domain: string | null) => {
   const list = own.length ? own : all
   return list.find(e => /^(info|kontakt|contact|office|hello|hallo|mail|hr|jobs|karriere|bewerbung)@/.test(e)) ?? list[0] ?? null
 }
+// Postal address from the Impressum: a street line ("Musterstraße 12a") followed by "12345 Stadt"
+const ZIP_LINE = /^(?:(D|A|CH)[-–]\s?)?(\d{4,5})\s+([A-ZÄÖÜ][\wÄÖÜäöüß.()\- ]{1,40})$/
+const STREET_LINE = /^[A-ZÄÖÜ][\wÄÖÜäöüß.\- ]{2,50}\s\d{1,4}\s?[a-zA-Z]?(?:\s?[-–/]\s?\d{1,4}[a-zA-Z]?)?$/
+export function addressOf(text: string): PostalAddress | null {
+  const lines = text.split('\n').flatMap(l => l.split(/\s*[|·•,]\s*/)).map(l => l.trim()).filter(Boolean)
+  for (let i = 1; i < lines.length; i++) {
+    const z = lines[i].match(ZIP_LINE)
+    if (!z) continue
+    const street = lines[i - 1]
+    if (!STREET_LINE.test(street) || /tel|fax|mail|hrb|ust|registergericht/i.test(street)) continue
+    const country = z[1] === 'A' || z[2].length === 4 && /wien|graz|linz|salzburg|innsbruck|klagenfurt/i.test(z[3]) ? 'AT' : z[1] === 'CH' ? 'CH' : z[2].length === 5 ? 'DE' : null
+    return { street, zip: z[2], city: z[3].trim(), country }
+  }
+  return null
+}
+
 const pickPhone = (text: string) => (text.match(/(?:tel(?:efon)?\.?|phone|fon|t)\s*[:.]?\s*(\+?\(?\d[\d\s/().-]{6,20}\d)/i) || [])[1]?.replace(/\s+/g, ' ').trim() ?? null
 
 export async function readCompany(name: string, country: string | null, personioSlug: string | null, websiteHint: string | null = null): Promise<Impressum> {
@@ -129,6 +147,7 @@ export async function readCompany(name: string, country: string | null, personio
     website, domain, managers: managersOf(impText || homeText), register: registerOf(impText || all),
     email: pickEmail(impText || all, domain), phone: pickPhone(impText || all), employees: employeesOf(all),
     hrEmail: (all.match(/\b(?:hr|jobs|karriere|career|careers|bewerbung|bewerbungen|recruiting|personal|people)@[a-z0-9.-]+\.[a-z]{2,}/i) || [])[0]?.toLowerCase() ?? null,
+    address: addressOf(impText) ?? addressOf(homeText),
     checkedAt, note: impPage ? undefined : 'Kein Impressum gefunden',
   }
 }
@@ -229,7 +248,7 @@ async function personioContact(c: any): Promise<HrContact | null> {
 // ---------- batch for the cron / page ----------
 
 // Bump when the reading logic improves → older entries are read again automatically
-export const ENRICH_VERSION = 2
+export const ENRICH_VERSION = 3 // 3: postal address
 
 export async function enrichCandidates(svc: any, projectId: string, opts: { budgetMs?: number; ids?: string[]; limit?: number } = {}) {
   const started = Date.now(), budget = opts.budgetMs ?? 40_000

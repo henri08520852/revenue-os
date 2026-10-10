@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
   Bot, Workflow, Play, Settings2, Loader2, Copy, Check, RefreshCw, X, Send, Sparkles, ExternalLink,
-  CheckCircle2, AlertCircle, MinusCircle, Inbox, ListChecks, Activity, Coins, Plus, Trash2,
+  CheckCircle2, AlertCircle, MinusCircle, Inbox, ListChecks, Activity, Coins, Plus, Trash2, Printer, Mail,
 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { AGENTS, AgentKey, AgentSettings, SequenceStep } from '@/lib/agents/registry'
 import { cn } from '@/lib/utils'
-import { runAgent, setAgentEnabled, saveAgentConfig, saveItem, approveItem, dismissItem, redraftItem } from './actions'
+import { runAgent, setAgentEnabled, saveAgentConfig, saveItem, saveLetter, approveItem, dismissItem, redraftItem } from './actions'
 
 export type QueueItem = {
   id: string; agent_key: string; kind: string; channel: string | null; title: string; body: string | null; data: any; created_at: string
@@ -66,7 +66,7 @@ export default function AgentsBoard({ missing, settings, items, runs, lastRun, s
         <Kpi icon={Coins} label="KI-Kosten diesen Monat" value={usd(stats.costUsd)} tone="text-amber-600 bg-amber-50" />
       </div>
 
-      <div className="mb-8 grid gap-4 lg:grid-cols-3">
+      <div className="mb-8 grid gap-4 md:grid-cols-2">
         {AGENTS.map(a => (
           <AgentCard key={a.key} agent={a} enabled={settings[a.key].enabled} last={lastRun[a.key]} disabled={missing} onSettings={() => setEditing(a.key)} />
         ))}
@@ -84,7 +84,7 @@ export default function AgentsBoard({ missing, settings, items, runs, lastRun, s
               Keine offenen Entwürfe. Neue Leads aus LinkedIn oder den Heißen Firmen bekommen automatisch einen.
             </Card>
           ) : (
-            <div className="space-y-4">{items.map(i => <DraftCard key={i.id} item={i} />)}</div>
+            <div className="space-y-4">{items.map(i => i.kind === 'letter' ? <LetterCard key={i.id} item={i} /> : <DraftCard key={i.id} item={i} />)}</div>
           )}
         </section>
 
@@ -233,7 +233,7 @@ function DraftCard({ item }: { item: QueueItem }) {
         <div>
           <div className="mb-1 flex items-center justify-between text-xs font-medium text-muted-foreground">
             <span>Vernetzungsnotiz</span>
-            <span className={cn('tabular', note.length > 300 && 'text-red-600')}>{note.length}/300</span>
+            <span className={cn('tabular', note.length > 200 && 'text-red-600')}>{note.length}/200</span>
           </div>
           <Textarea rows={3} value={note} onChange={e => setNote(e.target.value)} onBlur={persist} />
           <Button size="sm" variant="ghost" className="mt-1 h-7 px-2" onClick={() => copy('note')}>
@@ -257,6 +257,89 @@ function DraftCard({ item }: { item: QueueItem }) {
           <Button size="sm" onClick={() => act('approve')} disabled={!!busy || !body.trim()}>
             {busy === 'approve' ? <Loader2 className="animate-spin" /> : <Send />} Als gesendet markieren
           </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function LetterCard({ item }: { item: QueueItem }) {
+  const router = useRouter()
+  const d = item.data || {}
+  const [body, setBody] = useState<string>(item.body ?? '')
+  const [subject, setSubject] = useState<string>(d.subject ?? '')
+  const [rcp, setRcp] = useState({ name: d.recipient?.name ?? '', street: d.recipient?.street ?? '', zip: d.recipient?.zip ?? '', city: d.recipient?.city ?? '' })
+  const [busy, setBusy] = useState<string | null>(null)
+  const missing = !rcp.street || !rcp.zip || !rcp.city
+
+  const persist = async () => {
+    const r = await saveLetter(item.id, body, { subject, recipient: { ...d.recipient, name: rcp.name || null, street: rcp.street || null, zip: rcp.zip || null, city: rcp.city || null } })
+    if (r.error) toast.error(r.error)
+    return !r.error
+  }
+  const print = async () => { if (await persist()) window.open(`/letters/${item.id}`, '_blank') }
+  const act = async (kind: 'approve' | 'dismiss' | 'redraft') => {
+    setBusy(kind)
+    if (kind === 'approve') await persist()
+    const r = kind === 'approve' ? await approveItem(item.id, body, null) : kind === 'dismiss' ? await dismissItem(item.id) : await redraftItem(item.id)
+    setBusy(null)
+    if (r.error) return toast.error(r.error)
+    toast.success(kind === 'approve' ? 'Als verschickt markiert – im Verlauf geloggt' : kind === 'dismiss' ? 'Brief verworfen' : 'Neu geschrieben')
+    router.refresh()
+  }
+  const f = (k: keyof typeof rcp, placeholder: string, cls = '') => (
+    <Input value={rcp[k]} placeholder={placeholder} onChange={e => setRcp(v => ({ ...v, [k]: e.target.value }))} onBlur={persist} className={cn('h-8', cls)} />
+  )
+
+  return (
+    <Card>
+      <CardHeader className="items-start pb-2">
+        <div className="min-w-0">
+          <CardTitle className="truncate">{item.title}</CardTitle>
+          <div className="mt-0.5 text-[13px] text-muted-foreground">
+            {item.companies && item.company_id && <Link href={`/companies/${item.company_id}`} className="hover:underline">{item.companies.name}</Link>} · {ago(item.created_at)}
+          </div>
+        </div>
+        <Badge tone="warning"><Mail /> Brief</Badge>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {d.anlass && (
+          <div className="flex items-start gap-2 rounded-md bg-violet-50 px-3 py-2 text-[13px] text-violet-900">
+            <Sparkles className="mt-0.5 size-3.5 shrink-0" /><span><span className="font-medium">Anlass:</span> {d.anlass}</span>
+          </div>
+        )}
+        <div>
+          <div className="mb-1 flex items-center justify-between text-xs font-medium text-muted-foreground">
+            <span>Empfänger</span>{missing && <span className="text-amber-700">Anschrift unvollständig</span>}
+          </div>
+          <div className="grid gap-2 rounded-md border border-border p-2.5">
+            <div className="text-sm font-medium">{d.recipient?.company}</div>
+            {f('name', 'Ansprechpartner (leer = Geschäftsführung)')}
+            {f('street', 'Straße Hausnummer')}
+            <div className="flex gap-2">{f('zip', 'PLZ', 'w-24')}{f('city', 'Ort', 'flex-1')}</div>
+          </div>
+        </div>
+        <div>
+          <div className="mb-1 text-xs font-medium text-muted-foreground">Betreff</div>
+          <Input value={subject} onChange={e => setSubject(e.target.value)} onBlur={persist} />
+        </div>
+        <div>
+          <div className="mb-1 text-xs font-medium text-muted-foreground">Brieftext</div>
+          <Textarea rows={12} value={body} onChange={e => setBody(e.target.value)} onBlur={persist} />
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+          <div className="flex gap-1">
+            <Button size="sm" variant="ghost" onClick={() => act('redraft')} disabled={!!busy}>
+              {busy === 'redraft' ? <Loader2 className="animate-spin" /> : <RefreshCw />} Neu schreiben
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => act('dismiss')} disabled={!!busy}><X /> Verwerfen</Button>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={print}><Printer /> Drucken / PDF</Button>
+            <Button size="sm" onClick={() => act('approve')} disabled={!!busy || !body.trim()}>
+              {busy === 'approve' ? <Loader2 className="animate-spin" /> : <Send />} Als verschickt markieren
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -322,6 +405,9 @@ function SettingsSheet({ agentKey, settings, onClose }: { agentKey: AgentKey; se
                   <option value="Sie">Sie</option><option value="du">du</option>
                 </Select>
               </Field>
+              <Field label="Einstieg, den wir anbieten" hint="Wird in der Nachricht als leichter erster Schritt angeboten – statt direkt nach einer Demo zu fragen.">
+                <Textarea rows={2} value={cfg.offer} onChange={e => set({ offer: e.target.value })} />
+              </Field>
               <Field label="Tonalität (optional)" hint="z. B. „locker, kurz, ohne Fachbegriffe; wir sind ein junges Team aus …“">
                 <Textarea rows={3} value={cfg.style} onChange={e => set({ style: e.target.value })} />
               </Field>
@@ -332,6 +418,26 @@ function SettingsSheet({ agentKey, settings, onClose }: { agentKey: AgentKey; se
                 <span>Automatisch Entwürfe für neue Leads schreiben<span className="block text-xs text-muted-foreground">Sonst nur auf Knopfdruck</span></span>
                 <Switch checked={!!cfg.autoDraft} onChange={v => set({ autoDraft: v })} />
               </label>
+            </>
+          )}
+          {agentKey === 'letter' && (
+            <>
+              <Field label="Absender (Briefkopf, eine Angabe pro Zeile)" hint="Erste Zeile = Firmenname, darunter Anschrift.">
+                <Textarea rows={4} value={cfg.sender} onChange={e => set({ sender: e.target.value })} />
+              </Field>
+              <Field label="Betreff">
+                <Input value={cfg.subject} onChange={e => set({ subject: e.target.value })} />
+              </Field>
+              <Field label="Vorlage für den Brieftext"
+                hint="Platzhalter: {{anrede}} {{firma}} {{anlass}} {{absatz}} {{stellen}} {{rollen}} {{ort}} {{name}} – {{anlass}} und {{absatz}} schreibt der Agent passend zur Firma, der Rest kommt wörtlich aus eurer Vorlage.">
+                <Textarea rows={12} value={cfg.template} onChange={e => set({ template: e.target.value })} className="font-mono text-[13px]" />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Grußformel"><Input value={cfg.closing} onChange={e => set({ closing: e.target.value })} /></Field>
+                <Field label="Unterschrift (Name)"><Input value={cfg.signer} onChange={e => set({ signer: e.target.value })} /></Field>
+                <Field label="Position"><Input value={cfg.signerTitle} onChange={e => set({ signerTitle: e.target.value })} /></Field>
+                <Field label="Kontakt unter der Unterschrift"><Input value={cfg.contact} placeholder="Tel. · E-Mail" onChange={e => set({ contact: e.target.value })} /></Field>
+              </div>
             </>
           )}
           {agentKey === 'sequence' && <StepsEditor steps={cfg.steps} onChange={steps => set({ steps })} />}
@@ -361,7 +467,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 }
 
 const STEP_TYPES: { value: SequenceStep['type']; label: string }[] = [
-  { value: 'todo', label: 'Aufgabe' }, { value: 'call', label: 'Anruf' }, { value: 'email', label: 'E-Mail' }, { value: 'follow_up', label: 'Follow-up' },
+  { value: 'todo', label: 'Aufgabe' }, { value: 'call', label: 'Anruf' }, { value: 'letter' as any, label: 'Brief' }, { value: 'email', label: 'E-Mail' }, { value: 'follow_up', label: 'Follow-up' },
 ]
 
 function StepsEditor({ steps, onChange }: { steps: SequenceStep[]; onChange: (s: SequenceStep[]) => void }) {
@@ -377,7 +483,7 @@ function StepsEditor({ steps, onChange }: { steps: SequenceStep[]; onChange: (s:
               Tag <Input type="number" min={0} max={90} value={s.day} onChange={e => update(i, { day: Number(e.target.value) })} className="h-8 w-14 px-2" />
             </div>
             <Input value={s.title} onChange={e => update(i, { title: e.target.value })} className="h-8 flex-1" />
-            <Select value={s.type} onChange={e => update(i, { type: e.target.value as SequenceStep['type'] })} className="h-8 w-[130px] shrink-0">
+            <Select value={s.letter ? 'letter' : s.type} onChange={e => update(i, e.target.value === 'letter' ? { type: 'todo', letter: true } : { type: e.target.value as SequenceStep['type'], letter: undefined })} className="h-8 w-[130px] shrink-0">
               {STEP_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </Select>
             <Button variant="ghost" size="icon" className="size-8" onClick={() => onChange(steps.filter((_, j) => j !== i))} disabled={steps.length <= 1} aria-label="Schritt entfernen">

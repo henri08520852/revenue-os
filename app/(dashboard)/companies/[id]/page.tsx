@@ -13,6 +13,7 @@ import QuickActions from '@/components/record/QuickActions'
 import Properties from '@/components/record/Properties'
 import TaskList from '@/components/TaskList'
 import { loadTasks } from '@/lib/tasks'
+import OutreachPanel from './OutreachPanel'
 
 const SIGNAL_LABELS: Record<string, { label: string; icon: string; color: string }> = {
   news_funding:    { label: 'Funding',            icon: '💰', color: '#10b981' },
@@ -159,6 +160,10 @@ export default async function CompanyPage({ params }: { params: { id: string } }
         )}
       </>}
       right={<>
+        <Card title="Ansprache">
+          <OutreachPanel companyId={company.id} companyName={company.name}
+            people={people.map((p: any) => ({ name: personLabel(p), title: p.job_title ?? null, linkedin: p.linkedin_url ?? null }))} />
+        </Card>
         <Card title="Kontakte" count={people.length} action={<CreateButton kind="contact" preset={{ companyId: company.id }} />}>
           {!people.length ? <Empty text="Noch keine Kontakte" /> : people.map((p: any) => (
             <AssocRow key={p.id} href={`/contacts/${p.id}`} title={`${personLabel(p)}${p.is_decision_maker ? ' ★' : ''}`} sub={[p.job_title, p.email].filter(Boolean).join(' · ') || null}

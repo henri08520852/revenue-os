@@ -11,7 +11,7 @@ async function createStepTask(supabase: any, e: Enroll, steps: SequenceStep[], i
   const s = steps[index]
   const { data, error } = await supabase.from('tasks').insert({
     project_id: e.projectId, title: `${s.title}: ${e.label}`.slice(0, 200), task_type: s.type,
-    notes: `Akquise-Abfolge · Schritt ${index + 1} von ${steps.length}${s.draft ? '\nEntwurf: Agents → Freigaben' : ''}`,
+    notes: `Akquise-Abfolge · Schritt ${index + 1} von ${steps.length}${s.draft ? '\nEntwurf: Agents → Freigaben' : s.letter ? '\nBrief zum Drucken: Agents → Freigaben' : ''}`,
     due_at: dueOn(dueMs), has_time: false, owner_id: e.ownerId, created_by: e.createdBy ?? e.ownerId,
     company_id: e.companyId, person_id: e.personId, lead_id: e.leadId,
   }).select('id').single()

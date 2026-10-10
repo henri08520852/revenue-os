@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Briefcase, Building2, Check, Globe, Loader2, MapPin, RefreshCw, UserRound, Users, X } from 'lucide-react'
+import { Briefcase, Building2, Check, ExternalLink, Globe, Loader2, MapPin, RefreshCw, Search, UserRound, Users, X } from 'lucide-react'
+import { contactSearchLinks } from '@/lib/outreach/linkedin'
 import { enrichMissing, rejectCandidate, searchNow, takeCandidate } from './actions'
 import { draftForLead } from '../agents/actions'
 import { Button } from '@/components/ui/button'
@@ -27,7 +28,7 @@ type Candidate = {
     v?: number
     northdata?: { employees?: number | null; signals?: string[] }
     hrContact?: { name: string | null; title: string | null; email: string | null; phone: string | null; job: string | null; source: string } | null
-    impressum?: { website: string | null; domain: string | null; managers: string[]; register: string | null; email: string | null; phone: string | null; employees: number | null; checkedAt: string; note?: string }
+    impressum?: { website: string | null; domain: string | null; managers: string[]; register: string | null; email: string | null; phone: string | null; employees: number | null; checkedAt: string; note?: string; address?: { street: string; zip: string; city: string } | null }
   } | null
 }
 export type SourceStatus = { name: string; area: string; active: boolean; note: string; postings: number | null; lastAt: string | null }
@@ -235,7 +236,16 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
                             {hr.phone && <span className="text-muted-foreground">{hr.phone}</span>}
                           </div>
                         )}
-                        {(imp.email || imp.phone) && <div className="truncate text-muted-foreground sm:col-span-2">{[imp.email, imp.phone].filter(Boolean).join(' · ')}</div>}
+                        {(imp.email || imp.phone || imp.address) && <div className="truncate text-muted-foreground sm:col-span-2">{[imp.address ? `${imp.address.street}, ${imp.address.zip} ${imp.address.city}` : null, imp.phone].filter(Boolean).join(' · ')}</div>}
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1 sm:col-span-2">
+                          <span className="inline-flex items-center gap-1 text-muted-foreground"><Search className="size-3.5" />LinkedIn:</span>
+                          {contactSearchLinks(c.name, [...(hr?.name ? [{ name: hr.name, title: hr.title }] : []), ...imp.managers.slice(0, 2).map((m: string) => ({ name: m, title: 'Geschäftsführung' }))]).map(l => (
+                            <a key={l.href} href={l.href} target="_blank" rel="noreferrer" title={l.hint}
+                              className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-xs hover:bg-accent">
+                              {l.label} <ExternalLink className="size-3 text-muted-foreground" />
+                            </a>
+                          ))}
+                        </div>
                       </div>
                     )}
 

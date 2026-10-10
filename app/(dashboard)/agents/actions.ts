@@ -6,6 +6,7 @@ import { AGENTS, AgentKey, DEFAULTS } from '@/lib/agents/registry'
 import { runFollowUpGuard } from '@/lib/agents/followUpGuard'
 import { advanceSequences, seqSummary } from '@/lib/agents/sequence'
 import { draftMissing, draftFirstMessage, draftOnEvent } from '@/lib/agents/firstMessage'
+import { draftLetter, draftLettersDue, letterNow, LetterData } from '@/lib/agents/letter'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID!
 type Result = { error: string | null; summary?: string }
@@ -31,6 +32,9 @@ export async function runAgent(key: string): Promise<Result> {
     } else if (key === 'first_message') {
       const r = await draftMissing(supabase, PROJECT_ID, 'manual', { limit: 4, budgetMs: 40_000 })
       summary = r.drafted ? `${r.drafted} Entw${r.drafted > 1 ? 'ürfe' : 'urf'} erstellt` : 'Keine Leads ohne Entwurf'
+    } else if (key === 'letter') {
+      const r = await draftLettersDue(supabase, PROJECT_ID, 'manual', { limit: 3, budgetMs: 40_000 })
+      summary = r.drafted ? `${r.drafted} Brief${r.drafted === 1 ? '' : 'e'} erstellt` : 'Kein Lead steht gerade beim Brief-Schritt – Briefe gibt es auch direkt auf der Company-Seite'
     } else return { error: 'Unbekannter Agent' }
     revalidatePath('/agents')
     return { error: null, summary }
@@ -61,12 +65,17 @@ export async function saveAgentConfig(key: string, config: Record<string, unknow
       const steps = Array.isArray(clean.steps) ? (clean.steps as any[]) : []
       clean.steps = steps.slice(0, 10).map(s => ({
         day: Math.min(90, Math.max(0, Math.round(Number(s.day) || 0))), title: String(s.title || '').trim().slice(0, 120) || 'Schritt',
-        type: ['todo', 'call', 'email', 'follow_up'].includes(s.type) ? s.type : 'todo', ...(s.draft ? { draft: true } : {}),
+        type: ['todo', 'call', 'email', 'follow_up'].includes(s.type) ? s.type : 'todo',
+        ...(s.draft ? { draft: true } : {}), ...(s.letter || s.type === 'letter' ? { letter: true } : {}),
       })).sort((a, b) => a.day - b.day)
       if (!(clean.steps as any[]).length) return { error: 'Mindestens ein Schritt' }
     }
+    if (key === 'letter') {
+      for (const f of Object.keys(clean)) clean[f] = String(clean[f] ?? '').slice(0, f === 'template' ? 8000 : 1000)
+      if (!String(clean.template || '').trim()) return { error: 'Die Vorlage darf nicht leer sein' }
+    }
     if (key === 'first_message') {
-      for (const f of ['pitch', 'style', 'examples']) if (f in clean) clean[f] = String(clean[f] ?? '').slice(0, 4000)
+      for (const f of ['pitch', 'style', 'examples', 'offer']) if (f in clean) clean[f] = String(clean[f] ?? '').slice(0, 4000)
       if ('address' in clean) clean.address = clean.address === 'du' ? 'du' : 'Sie'
       if ('autoDraft' in clean) clean.autoDraft = !!clean.autoDraft
     }
@@ -100,6 +109,12 @@ export async function approveItem(id: string, body: string, connectNote: string 
     const now = new Date().toISOString()
     const { error } = await supabase.from('automation_items').update({ status: 'approved', decided_at: now, decided_by: me.user_id }).eq('id', id)
     if (error) return { error: error.message }
+    if (item?.company_id && item.channel === 'post') {
+      await supabase.from('activities').insert({
+        project_id: PROJECT_ID, company_id: item.company_id, person_id: item.person_id, activity_type: 'note', direction: 'outbound',
+        channel: 'post', source: 'manual', occurred_at: now, created_by: me.email ?? null, summary: 'Brief verschickt', extracted_intel: { body: item.body },
+      })
+    }
     if (item?.person_id && item.channel === 'linkedin') {
       await supabase.from('activities').insert({
         project_id: PROJECT_ID, company_id: item.company_id, person_id: item.person_id, activity_type: 'linkedin_message', direction: 'outbound',
@@ -124,9 +139,11 @@ export async function dismissItem(id: string): Promise<Result> {
 export async function redraftItem(id: string): Promise<Result> {
   try {
     const { supabase } = await session()
-    const { data: item } = await supabase.from('automation_items').select('company_id, person_id, lead_id').eq('id', id).single()
+    const { data: item } = await supabase.from('automation_items').select('kind, company_id, person_id, lead_id').eq('id', id).single()
     if (!item?.company_id) return { error: 'Entwurf ohne Firma' }
-    await draftFirstMessage(supabase, { projectId: PROJECT_ID, companyId: item.company_id, personId: item.person_id, leadId: item.lead_id })
+    const target = { projectId: PROJECT_ID, companyId: item.company_id, personId: item.person_id, leadId: item.lead_id }
+    if (item.kind === 'letter') await draftLetter(supabase, target)
+    else await draftFirstMessage(supabase, target)
     revalidatePath('/agents')
     return { error: null }
   } catch (e) { return fail(e) }
@@ -140,5 +157,39 @@ export async function draftForLead(leadId: string): Promise<Result> {
     if (!lead?.company_id) return { error: null }
     const r = await draftOnEvent(supabase, { projectId: PROJECT_ID, companyId: lead.company_id, personId: lead.person_id, leadId })
     return { error: null, summary: r ? 'Entwurf erstellt' : undefined }
+  } catch (e) { return fail(e) }
+}
+
+// Letter edits: body + recipient/subject (the print view reads these)
+export async function saveLetter(id: string, body: string, data: Partial<LetterData>): Promise<Result> {
+  try {
+    const { supabase } = await session()
+    const { data: item } = await supabase.from('automation_items').select('data').eq('id', id).single()
+    if (!item) return { error: 'Brief nicht gefunden' }
+    const recipient = { ...item.data.recipient, ...(data.recipient || {}) }
+    const { error } = await supabase.from('automation_items').update({
+      body: body.slice(0, 8000), data: { ...item.data, ...data, recipient, edited: true },
+    }).eq('id', id)
+    return { error: error?.message ?? null }
+  } catch (e) { return fail(e) }
+}
+
+// Company page: first message / letter on demand
+export async function draftForCompany(companyId: string, kind: 'message' | 'letter'): Promise<Result & { itemId?: string }> {
+  try {
+    const { supabase } = await session()
+    const [{ data: lead }, { data: people }] = await Promise.all([
+      supabase.from('leads').select('id, person_id').eq('company_id', companyId).in('stage', ['outreach', 'contacted', 'qualified']).order('created_at', { ascending: false }).limit(1),
+      supabase.from('people').select('id').eq('company_id', companyId).order('created_at', { ascending: true }).limit(1),
+    ])
+    const target = { projectId: PROJECT_ID, companyId, personId: lead?.[0]?.person_id ?? people?.[0]?.id ?? null, leadId: lead?.[0]?.id ?? null }
+    if (kind === 'letter') {
+      const r = await letterNow(supabase, target)
+      revalidatePath('/agents')
+      return { error: null, itemId: r.itemId, summary: r.missingAddress ? 'Brief erstellt – Anschrift bitte ergänzen' : 'Brief erstellt' }
+    }
+    const r = await draftFirstMessage(supabase, target)
+    revalidatePath('/agents')
+    return { error: null, itemId: r.itemId, summary: 'Entwurf erstellt' }
   } catch (e) { return fail(e) }
 }

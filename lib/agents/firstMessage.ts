@@ -4,12 +4,12 @@ import Anthropic from '@anthropic-ai/sdk'
 import { fetchHtml, textOf } from '@/lib/discovery/enrich'
 import { loadSettings, startRun, finishRun, AgentConfig } from './registry'
 
-const MODEL = process.env.AI_MODEL || 'claude-haiku-5-5'
+export const MODEL = process.env.AI_MODEL || 'claude-haiku-5-5'
 // USD per million tokens (input, output) for the cost counter
 const PRICES: Record<string, [number, number]> = {
   'claude-haiku-5-5': [0.1, 0.5], 'claude-sonnet-5-5': [2, 10], 'claude-opus-5-5': [4, 20],
 }
-const costOf = (model: string, u: { input_tokens: number; output_tokens: number }) => {
+export const costOf = (model: string, u: { input_tokens: number; output_tokens: number }) => {
   const [i, o] = PRICES[model] ?? PRICES['claude-haiku-5-5']
   return (u.input_tokens * i + u.output_tokens * o) / 1_000_000
 }
@@ -27,11 +27,11 @@ const SCHEMA = {
 }
 
 export type Draft = { research: string[]; hook: string; connect_note: string; message: string }
-type Target = { projectId: string; companyId: string; personId?: string | null; leadId?: string | null }
+export type Target = { projectId: string; companyId: string; personId?: string | null; leadId?: string | null }
 
-const apiKey = () => process.env.ANTHROPIC_BRIEFING_API_KEY || process.env.ANTHROPIC_API_KEY
+export const apiKey = () => process.env.ANTHROPIC_BRIEFING_API_KEY || process.env.ANTHROPIC_API_KEY
 
-async function gather(supabase: any, t: Target) {
+export async function gather(supabase: any, t: Target) {
   const [{ data: company }, { data: person }, { data: cand }, { data: signals }, { data: acts }] = await Promise.all([
     supabase.from('companies').select('name, domain, website_url, industry, city, country, employee_estimate, employee_range').eq('id', t.companyId).single(),
     t.personId ? supabase.from('people').select('full_name, first_name, last_name, job_title').eq('id', t.personId).single() : { data: null },
@@ -79,8 +79,8 @@ Produkt: ${cfg.pitch}
 Regeln:
 - Deutsch, ${cfg.address === 'du' ? 'per Du' : 'per Sie'}, natürlich und konkret – wie ein Mensch, nicht wie Werbung. Keine Floskeln („Ich hoffe, es geht Ihnen gut“), keine Superlative, keine Emojis, keine Links.
 - Bezieh dich auf genau einen konkreten Anlass aus den Fakten (z. B. viele offene Stellen, eine Rolle wird mehrfach gesucht, Recruiting wird aufgebaut). Erfinde nichts, was nicht in den Fakten steht.
-- connect_note: Vernetzungsnotiz, höchstens 280 Zeichen, ohne Verkauf.
-- message: erste Nachricht nach der Vernetzung, 350–650 Zeichen: Anlass → vermutete Herausforderung im Recruiting → ein Satz, wie HireFlow hilft → eine leichte Frage zum Abschluss (kein Terminzwang).
+- connect_note: Vernetzungsnotiz, höchstens 200 Zeichen (LinkedIn-Limit), ohne Verkauf – nur ein persönlicher Grund für die Vernetzung.
+- message: erste Nachricht nach der Vernetzung, 350–650 Zeichen: Anlass (konkret, z. B. welche Rollen gesucht werden) → vermutete Herausforderung im Recruiting in einem Satz → ein Satz, wie HireFlow hilft → als leichter Einstieg anbieten: ${cfg.offer || 'ein kurzes Gespräch'} → eine kurze Frage zum Abschluss (kein Terminzwang).
 - hook: der gewählte Anlass in einem Satz.
 - research: 3–5 kurze Fakten über die Firma, die für das Gespräch nützlich sind (nur aus den Fakten).
 - Gibt es bereits Kontakt im Verlauf, knüpfe daran an statt dich neu vorzustellen.${cfg.style ? `\n\nTonalität des Teams:\n${cfg.style}` : ''}${cfg.examples ? `\n\nBeispiele für Nachrichten, die gut funktioniert haben (Stil übernehmen, nicht kopieren):\n${cfg.examples}` : ''}`
@@ -111,7 +111,7 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: { runId?
     project_id: t.projectId, agent_key: 'first_message', kind: 'message_draft', channel: 'linkedin', status: 'pending',
     title: `Erstnachricht an ${facts.personName || facts.companyName}${facts.personName ? ` (${facts.companyName})` : ''}`,
     body: draft.message, run_id: opts.runId ?? null,
-    data: { connect_note: draft.connect_note, hook: draft.hook, research: draft.research, model: MODEL, cost_usd: costUsd },
+    data: { connect_note: draft.connect_note?.slice(0, 300), hook: draft.hook, research: draft.research, model: MODEL, cost_usd: costUsd },
     company_id: t.companyId, person_id: t.personId ?? null, lead_id: t.leadId ?? null,
   }
   // One open draft per contact/lead: rewrite replaces it
