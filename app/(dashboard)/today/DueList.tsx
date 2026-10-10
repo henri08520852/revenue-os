@@ -6,35 +6,8 @@ import type { Task } from '@/lib/tasks'
 import { TaskRow } from '@/components/TaskList'
 import TaskDialog, { TaskPickData } from '@/components/TaskDialog'
 
-const TZ = 'Europe/Berlin'
-
-// YYYY-MM-DD of a date in Berlin time
-function dayKey(d: Date) {
-  return d.toLocaleDateString('en-CA', { timeZone: TZ })
-}
-
-export function dueBuckets(now = new Date()) {
-  const todayKey = dayKey(now)
-  const weekday = new Date(`${todayKey}T12:00:00Z`).getUTCDay() // 0 = Sunday
-  const daysToSunday = (7 - weekday) % 7
-  const sunday = new Date(`${todayKey}T12:00:00Z`)
-  sunday.setUTCDate(sunday.getUTCDate() + daysToSunday)
-  return { todayKey, weekEndKey: sunday.toISOString().slice(0, 10) }
-}
-
-export function groupTasks(tasks: Task[], now = new Date()) {
-  const { todayKey, weekEndKey } = dueBuckets(now)
-  const overdue: Task[] = [], today: Task[] = [], week: Task[] = [], later: Task[] = [], none: Task[] = []
-  for (const t of tasks) {
-    if (!t.due_at) { none.push(t); continue }
-    const key = dayKey(new Date(t.due_at))
-    if (key < todayKey) overdue.push(t)
-    else if (key === todayKey) today.push(t)
-    else if (key <= weekEndKey) week.push(t)
-    else later.push(t)
-  }
-  return { overdue, today, week, later, none }
-}
+import { groupTasks } from '@/lib/due'
+export { dueBuckets, groupTasks } from '@/lib/due'
 
 const GROUPS = [
   { key: 'overdue', label: 'Überfällig',  color: '#dc2626' },
@@ -51,9 +24,9 @@ export default function DueList({ tasks, data, mineOnly, showToggle }: { tasks: 
   const ownerName = (id: string | null) => data.team.find(m => m.user_id === id)?.display_name ?? null
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24, marginBottom: 24 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
-        <h2 style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>Fällige Aufgaben</h2>
+    <div className="rounded-lg border border-border bg-card p-5 shadow-card">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
+        <h2 className="text-[15px] font-semibold tracking-tight">Fällige Aufgaben</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Link href="/tasks" style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none' }}>Alle Aufgaben →</Link>
           {showToggle && (

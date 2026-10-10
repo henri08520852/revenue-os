@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import { Briefcase, Building2, Check, Globe, Loader2, MapPin, RefreshCw, UserRound, Users, X } from 'lucide-react'
 import { enrichMissing, rejectCandidate, searchNow, takeCandidate } from './actions'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Select } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
 
 type Evidence = { title?: string; link?: string | null; source?: string }
 type Hiring = {
@@ -29,30 +35,22 @@ const ENRICH_VERSION = 2 // keep in sync with lib/discovery/enrich.ts
 const NEWS_LABEL: Record<string, string> = { news_funding: 'Funding', news_expansion: 'Expansion', news_leadership: 'Leadership' }
 const SOURCE_LABEL: Record<string, string> = { ba: 'BA-Jobbörse', google_jobs: 'Google Jobs', eures: 'EURES', personio: 'Personio', softgarden: 'softgarden', join: 'JOIN', onlyfy: 'onlyfy', dvinci: 'd.vinci', rexx: 'rexx', concludis: 'concludis', recruitee: 'Recruitee', greenhouse: 'Greenhouse', lever: 'Lever', workable: 'Workable', smartrecruiters: 'SmartRecruiters' }
 
-const card = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '18px 22px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }
-const chip = (bg: string, color: string) => ({ fontSize: 11.5, fontWeight: 600, padding: '2px 9px', borderRadius: 12, background: bg, color } as const)
-const btn = (primary = false) => ({
-  padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer',
-  border: primary ? '1px solid #2563eb' : '1px solid #e5e7eb', background: primary ? '#2563eb' : '#fff', color: primary ? '#fff' : '#374151',
-} as const)
-
-function scoreColor(s: number) {
-  return s >= 70 ? { bg: '#fee2e2', color: '#b91c1c' } : s >= 45 ? { bg: '#ffedd5', color: '#c2410c' } : { bg: '#f3f4f6', color: '#4b5563' }
+function scoreTone(s: number) {
+  return s >= 70 ? 'bg-red-50 text-red-700 ring-red-200' : s >= 45 ? 'bg-orange-50 text-orange-700 ring-orange-200' : 'bg-muted text-muted-foreground ring-border'
 }
 
 function Sources({ sources }: { sources: SourceStatus[] }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 8, marginBottom: 18 }}>
+    <div className="mb-6 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
       {sources.map(s => (
-        <div key={s.name} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#111827' }}>
-            <span style={{ width: 8, height: 8, borderRadius: 4, background: s.active ? '#22c55e' : '#d1d5db' }} />{s.name}
+        <div key={s.name} className="rounded-lg border border-border bg-card px-3 py-2.5 shadow-card">
+          <div className="flex items-center gap-1.5 text-[13px] font-semibold">
+            <span className={cn('size-1.5 rounded-full', s.active ? 'bg-emerald-500' : 'bg-slate-300')} />{s.name}
           </div>
-          <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 2 }}>{s.area}</div>
-          <div style={{ fontSize: 11.5, color: s.active ? '#374151' : '#b45309', marginTop: 4 }}>
-            {s.postings != null && s.active ? `${s.postings.toLocaleString('de-DE')} Stellen · ` : ''}{s.note}
-            {s.lastAt ? ` · ${new Date(s.lastAt).toLocaleDateString('de-DE')}` : ''}
-          </div>
+          <p className="mt-0.5 truncate text-[11.5px] text-muted-foreground">{s.area}</p>
+          <p className={cn('mt-1 text-[11.5px]', s.active ? 'text-foreground/80' : 'text-amber-700')}>
+            {s.postings != null && s.active ? <span className="tabular font-medium">{s.postings.toLocaleString('de-DE')} Stellen · </span> : ''}{s.note}
+          </p>
         </div>
       ))}
     </div>
@@ -66,7 +64,6 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
   const [industry, setIndustry] = useState('all')
   const [gone, setGone] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState<string | null>(null)
-  const [msg, setMsg] = useState<string | null>(null)
   const [searching, startSearch] = useTransition()
   // Website & Impressum load by themselves: the top cards still missing them are read in small batches
   const [reading, setReading] = useState<Set<string>>(new Set())
@@ -99,156 +96,173 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
   }, new Map<string, { label: string; n: number }>()).entries()).sort((a, b) => b[1].n - a[1].n)
 
   async function act(c: Candidate, what: 'lead' | 'company' | 'reject') {
-    setBusy(c.id); setMsg(null)
+    setBusy(c.id)
     const res = what === 'reject' ? await rejectCandidate(c.id) : await takeCandidate(c.id, what === 'lead')
     setBusy(null)
-    if (res.error) { setMsg(`Fehler: ${res.error}`); return }
+    if (res.error) { toast.error(res.error); return }
     setGone(prev => new Set(prev).add(c.id))
-    if (what !== 'reject') setMsg(`${c.name} ${what === 'lead' ? 'ist als Lead in Outreach – Aufgabe „Erstansprache“ für morgen angelegt.' : 'ist jetzt als Company im CRM.'}`)
-    if ('href' in res && res.href && what === 'lead') router.prefetch(res.href)
+    const href = 'href' in res ? res.href : undefined
+    if (what === 'reject') toast(`${c.name} verworfen`)
+    else toast.success(what === 'lead' ? `${c.name} ist als Lead in Outreach` : `${c.name} ist jetzt im CRM`, {
+      description: what === 'lead' ? 'Aufgabe „Erstansprache“ für morgen angelegt.' : undefined,
+      action: href ? { label: 'Öffnen', onClick: () => router.push(href) } : undefined,
+    })
   }
 
   function runSearch() {
-    setMsg(null)
     startSearch(async () => {
       const res = await searchNow()
-      setMsg(res.error ? `Fehler bei der Suche: ${res.error}` : `Suche fertig – ${res.summary}`)
+      if (res.error) toast.error('Suche fehlgeschlagen', { description: res.error })
+      else toast.success('Suche fertig', { description: res.summary })
       router.refresh()
     })
   }
 
+  const tabs = [['hiring', 'Einstellungsdruck', hiring.length], ['news', 'News', news.length]] as const
+
   return (
-    <div style={{ padding: 32, maxWidth: 860 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20 }}>
+    <div className="mx-auto max-w-[1000px] px-8 py-8">
+      <div className="mb-6 flex items-start justify-between gap-6">
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#111827', margin: 0 }}>Heiße Firmen</h1>
-          <p style={{ fontSize: 14, color: '#6b7280', marginTop: 4 }}>
-            Firmen in DACH mit vielen offenen Stellen – täglich aus Jobbörsen gesammelt. Personaldienstleister, Behörden und Konzerne sind ausgefiltert.
+          <h1 className="text-2xl font-semibold tracking-tight">Heiße Firmen</h1>
+          <p className="mt-1 max-w-[620px] text-sm text-muted-foreground">
+            Firmen in DACH mit vielen offenen Stellen – täglich aus Jobbörsen und Karriereseiten gesammelt. Personaldienstleister, Behörden und Konzerne sind ausgefiltert.
           </p>
         </div>
-        <button onClick={runSearch} disabled={searching} style={{ ...btn(), whiteSpace: 'nowrap', opacity: searching ? 0.6 : 1 }}>
-          {searching ? 'Sucht … (bis 1 Min.)' : '↻ Jetzt suchen'}
-        </button>
+        <Button variant="outline" onClick={runSearch} disabled={searching}>
+          {searching ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+          {searching ? 'Sucht …' : 'Jetzt suchen'}
+        </Button>
       </div>
 
       <Sources sources={sources} />
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        {([['hiring', `Einstellungsdruck (${hiring.length})`], ['news', `News (${news.length})`]] as const).map(([key, label]) => (
-          <button key={key} onClick={() => setTab(key)} style={{ padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 500, cursor: 'pointer', border: tab === key ? '1.5px solid #2563eb' : '1.5px solid #e5e7eb', background: tab === key ? '#eff6ff' : '#fff', color: tab === key ? '#1d4ed8' : '#6b7280' }}>{label}</button>
-        ))}
-        {tab === 'hiring' && industries.length > 0 && (
-          <>
-            <select value={industry} onChange={e => setIndustry(e.target.value)} style={{ marginLeft: 'auto', padding: '6px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13 }}>
-              <option value="all">Alle Branchen</option>
-              {industries.map(([key, v]) => <option key={key} value={key}>{v.label} ({v.n})</option>)}
-              <option value="none">Branche unklar</option>
-            </select>
-          </>
-        )}
-        {tab === 'hiring' && countries.length > 1 && (
-          <select value={country} onChange={e => setCountry(e.target.value)} style={{ marginLeft: industries.length ? 0 : 'auto', padding: '6px 10px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13 }}>
-            <option value="all">Alle Länder</option>
-            {countries.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="inline-flex rounded-lg border border-border bg-muted p-0.5">
+          {tabs.map(([key, label, n]) => (
+            <button key={key} onClick={() => setTab(key)} className={cn('rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors', tab === key ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
+              {label} <span className="tabular ml-1 text-muted-foreground">{n}</span>
+            </button>
+          ))}
+        </div>
+        {tab === 'hiring' && (
+          <div className="ml-auto flex gap-2">
+            {industries.length > 0 && (
+              <Select value={industry} onChange={e => setIndustry(e.target.value)} className="h-8 text-[13px]">
+                <option value="all">Alle Branchen</option>
+                {industries.map(([key, v]) => <option key={key} value={key}>{v.label} ({v.n})</option>)}
+                <option value="none">Branche unklar</option>
+              </Select>
+            )}
+            {countries.length > 1 && (
+              <Select value={country} onChange={e => setCountry(e.target.value)} className="h-8 text-[13px]">
+                <option value="all">Alle Länder</option>
+                {countries.map(c => <option key={c} value={c}>{c}</option>)}
+              </Select>
+            )}
+          </div>
         )}
       </div>
 
-      {msg && <div style={{ background: msg.startsWith('Fehler') ? '#fef2f2' : '#f0fdf4', color: msg.startsWith('Fehler') ? '#b91c1c' : '#15803d', border: '1px solid #e5e7eb', borderRadius: 8, padding: '9px 12px', fontSize: 13, marginBottom: 16 }}>{msg}</div>}
-
       {!list.length ? (
-        <div style={{ ...card, textAlign: 'center', padding: 48, color: '#6b7280', fontSize: 14 }}>
-          {tab === 'hiring' ? 'Noch keine Firmen mit Einstellungsdruck. Die Suche läuft jeden Morgen automatisch – oder oben „Jetzt suchen“.' : 'Keine News-Kandidaten offen.'}
+        <div className="rounded-lg border border-dashed border-border bg-card px-6 py-16 text-center text-sm text-muted-foreground">
+          {tab === 'hiring' ? 'Keine Firmen für diese Auswahl. Die Suche läuft jeden Morgen automatisch – oder oben „Jetzt suchen“.' : 'Keine News-Kandidaten offen.'}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="space-y-3">
           {list.map(c => {
             const h = c.hiring
             const s = c.score ?? c.confidence ?? 0
-            const sc = scoreColor(s)
             const jobs = Array.isArray(c.evidence) ? c.evidence : []
+            const imp = c.enrichment_data?.impressum
+            const hr = c.enrichment_data?.hrContact?.name ? c.enrichment_data.hrContact : null
+            const employees = imp?.employees ?? c.enrichment_data?.northdata?.employees ?? null
             return (
-              <div key={c.id} style={{ ...card, opacity: busy === c.id ? 0.6 : 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-                  <span style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>{c.name}</span>
-                  {h ? <span style={chip(sc.bg, sc.color)}>Score {s}</span> : <span style={chip('#eff6ff', '#1d4ed8')}>{NEWS_LABEL[c.signal_hint || ''] ?? 'News'}</span>}
-                  {c.existing_company_id && <span style={chip('#e0e7ff', '#4338ca')}>Schon im CRM</span>}
-                  {c.enrichment_data?.impressum?.employees != null && (
-                    <span style={c.enrichment_data.impressum.employees > 250 ? chip('#fef2f2', '#b91c1c') : chip('#f0fdf4', '#15803d')}>
-                      ~{c.enrichment_data.impressum.employees.toLocaleString('de-DE')} Mitarbeitende{c.enrichment_data.impressum.employees > 250 ? ' – größer als Zielgruppe' : ''}
-                    </span>
-                  )}
-                  {c.enrichment_data?.northdata?.employees != null && (
-                    <span style={c.enrichment_data.northdata.employees > 250 ? chip('#fef2f2', '#b91c1c') : chip('#f0fdf4', '#15803d')}>
-                      ~{c.enrichment_data.northdata.employees} Mitarbeitende{c.enrichment_data.northdata.employees > 250 ? ' – größer als Zielgruppe' : ''}
-                    </span>
-                  )}
-                </div>
+              <article key={c.id} className={cn('rounded-lg border border-border bg-card shadow-card transition-opacity', busy === c.id && 'opacity-60')}>
+                <div className="flex gap-4 p-5">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-[16px] font-semibold tracking-tight">{c.name}</h3>
+                      {!h && <Badge tone="brand">{NEWS_LABEL[c.signal_hint || ''] ?? 'News'}</Badge>}
+                      {c.existing_company_id && <Badge tone="violet"><Building2 />Im CRM</Badge>}
+                      {employees != null && <Badge tone={employees > 250 ? 'danger' : 'success'}><Users />~{employees.toLocaleString('de-DE')}{employees > 250 ? ' · größer als Zielgruppe' : ''}</Badge>}
+                    </div>
 
-                {h && (
-                  <>
-                    <div style={{ fontSize: 14, color: '#111827', marginBottom: 8 }}>
-                      <b>{h.open} offene Stellen</b>
-                      {h.new14 > 0 && <> · {h.new14} neu in 14 Tagen</>}
-                      {h.volumeRoles > 0 && <> · {h.volumeRoles} bewerberstarke Rollen</>}
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                      {h.industry && <span style={chip('#e0f2fe', '#0369a1')}>{h.industry.label}</span>}
-                      {h.officeShare != null && <span title="Anteil kaufmännischer, IT- und Fachrollen an den offenen Stellen" style={h.officeShare >= 60 ? chip('#dcfce7', '#15803d') : h.officeShare <= 25 ? chip('#fef2f2', '#b91c1c') : chip('#f3f4f6', '#4b5563')}>Office-Anteil {h.officeShare} %</span>}
-                      {(h.sourceCount ?? 0) >= 2 && <span title={h.sources.join(', ')} style={chip('#ecfdf5', '#047857')}>✓ in {h.sourceCount} Quellen</span>}
-                      {!!h.hrRoles?.length && <span title={h.hrRoles.join(' · ')} style={chip('#ede9fe', '#6d28d9')}>👥 baut Recruiting auf ({h.hrRoles.length} HR-Stelle{h.hrRoles.length > 1 ? 'n' : ''})</span>}
-                      {h.repeated.slice(0, 3).map(r => <span key={r.role} style={chip('#fef3c7', '#92400e')}>{r.count}× {r.role}</span>)}
-                      <span style={h.ats.length ? chip('#f3f4f6', '#374151') : chip('#dcfce7', '#15803d')}>{h.ats.length ? `ATS: ${h.ats.join(', ')}` : 'Kein ATS erkannt'}</span>
-                      {h.locations.slice(0, 3).map(l => <span key={l} style={chip('#f9fafb', '#6b7280')}>📍 {l}</span>)}
-                    </div>
-                  </>
-                )}
+                    {h && (
+                      <>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          <span className="font-medium text-foreground">{h.open} offene Stellen</span>
+                          {h.new14 > 0 && <> · {h.new14} neu in 14 Tagen</>}
+                          {h.volumeRoles > 0 && <> · {h.volumeRoles} bewerberstarke Rollen</>}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {h.industry && <Badge tone="sky">{h.industry.label}</Badge>}
+                          {h.officeShare != null && <Badge title="Anteil kaufmännischer, IT- und Fachrollen an den offenen Stellen" tone={h.officeShare >= 60 ? 'success' : h.officeShare <= 25 ? 'danger' : 'neutral'}>Office-Anteil {h.officeShare} %</Badge>}
+                          {!!h.hrRoles?.length && <Badge tone="violet" title={h.hrRoles.join(' · ')}><UserRound />Baut Recruiting auf</Badge>}
+                          {(h.sourceCount ?? 0) >= 2 && <Badge tone="success" title={h.sources.join(', ')}><Check />{h.sourceCount} Quellen</Badge>}
+                          {h.repeated.slice(0, 3).map(r => <Badge key={r.role} tone="warning">{r.count}× {r.role}</Badge>)}
+                          <Badge tone={h.ats.length ? 'outline' : 'success'}>{h.ats.length ? `ATS: ${h.ats.join(', ')}` : 'Kein ATS erkannt'}</Badge>
+                          {h.locations.slice(0, 3).map(l => <Badge key={l} tone="outline"><MapPin />{l}</Badge>)}
+                        </div>
+                      </>
+                    )}
 
-                {h && (() => {
-                  const imp = c.enrichment_data?.impressum
-                  if (!imp || reading.has(c.id)) return (
-                    <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 10 }}>
-                      {reading.has(c.id) ? '⏳ Website, Impressum & Ansprechpartner werden gelesen …' : 'Website & Impressum folgen beim nächsten Abgleich.'}
-                    </div>
-                  )
-                  return (
-                    <div style={{ fontSize: 12.5, color: '#374151', background: '#f9fafb', border: '1px solid #f3f4f6', borderRadius: 8, padding: '8px 10px', marginBottom: 10, lineHeight: 1.6 }}>
-                      {imp.website ? <a href={imp.website} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 500 }}>🌐 {imp.domain}</a> : <span style={{ color: '#9ca3af' }}>{imp.note || 'Keine Website gefunden'}</span>}
-                      {imp.managers.length > 0 && <> · <b>Geschäftsführung:</b> {imp.managers.join(', ')}</>}
-                      {imp.register && <> · {imp.register}</>}
-                      {(imp.email || imp.phone) && <div style={{ color: '#6b7280' }}>{[imp.email, imp.phone].filter(Boolean).join(' · ')}</div>}
-                      {c.enrichment_data?.hrContact && (() => {
-                        const hr = c.enrichment_data!.hrContact!
-                        if (!hr.name) return null
-                        return <div><b>HR-Kontakt:</b> {[hr.name, hr.title].filter(Boolean).join(', ')}{hr.email ? <> · <a href={`mailto:${hr.email}`} style={{ color: '#2563eb', textDecoration: 'none' }}>{hr.email}</a></> : ''}{hr.phone ? ` · ${hr.phone}` : ''}<span style={{ color: '#9ca3af' }}> ({hr.source})</span></div>
-                      })()}
-                      {imp.website && imp.note && <div style={{ color: '#9ca3af' }}>{imp.note}</div>}
-                    </div>
-                  )
-                })()}
-
-                {jobs.length > 0 && (
-                  <div style={{ marginBottom: 12 }}>
-                    {jobs.slice(0, 4).map((j, i) => (
-                      <div key={i} style={{ fontSize: 12.5, color: '#6b7280', display: 'flex', gap: 6, marginBottom: 3 }}>
-                        <span style={{ color: '#d1d5db' }}>•</span>
-                        {j.link ? <a href={j.link} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', textDecoration: 'none' }}>{j.title || j.link}</a> : <span>{j.title}</span>}
-                        {j.source && <span style={{ color: '#9ca3af' }}>— {j.source}</span>}
+                    {h && (!imp || reading.has(c.id)) && (
+                      <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+                        {reading.has(c.id) ? <><Loader2 className="size-3.5 animate-spin" />Website, Impressum & Ansprechpartner werden gelesen …</> : 'Website & Impressum folgen beim nächsten Abgleich.'}
+                      </p>
+                    )}
+                    {h && imp && !reading.has(c.id) && (
+                      <div className="mt-3 grid gap-x-6 gap-y-1.5 rounded-md bg-muted/60 px-3 py-2.5 text-[13px] sm:grid-cols-2">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <Globe className="size-3.5 shrink-0 text-muted-foreground" />
+                          {imp.website ? <a href={imp.website} target="_blank" rel="noopener noreferrer" className="truncate font-medium text-brand hover:underline">{imp.domain}</a> : <span className="text-muted-foreground">{imp.note || 'Keine Website gefunden'}</span>}
+                          {imp.register && <span className="truncate text-muted-foreground">· {imp.register}</span>}
+                        </div>
+                        {imp.managers.length > 0 && <div className="truncate"><span className="text-muted-foreground">Geschäftsführung </span>{imp.managers.join(', ')}</div>}
+                        {hr && (
+                          <div className="flex min-w-0 items-center gap-1.5 sm:col-span-2">
+                            <UserRound className="size-3.5 shrink-0 text-violet-600" />
+                            <span className="truncate"><span className="font-medium">{hr.name}</span>{hr.title ? `, ${hr.title}` : ''}</span>
+                            {hr.email && <a href={`mailto:${hr.email}`} className="truncate text-brand hover:underline">{hr.email}</a>}
+                            {hr.phone && <span className="text-muted-foreground">{hr.phone}</span>}
+                          </div>
+                        )}
+                        {(imp.email || imp.phone) && <div className="truncate text-muted-foreground sm:col-span-2">{[imp.email, imp.phone].filter(Boolean).join(' · ')}</div>}
                       </div>
-                    ))}
-                    {h && h.open > jobs.length && <div style={{ fontSize: 12, color: '#9ca3af', marginLeft: 14 }}>+ {h.open - Math.min(jobs.length, 4)} weitere</div>}
-                  </div>
-                )}
+                    )}
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 11.5, color: '#9ca3af', marginRight: 'auto' }}>
-                    {h ? `Quelle: ${h.sources.map(x => SOURCE_LABEL[x] ?? x).join(', ')} · Stand ${new Date(h.updatedAt).toLocaleDateString('de-DE')}` : `Gefunden ${new Date(c.created_at).toLocaleDateString('de-DE')}`}
-                  </span>
-                  <button disabled={!!busy} onClick={() => act(c, 'reject')} style={btn()}>Verwerfen</button>
-                  <button disabled={!!busy} onClick={() => act(c, 'company')} style={btn()}>Nur als Company</button>
-                  <button disabled={!!busy} onClick={() => act(c, 'lead')} style={btn(true)}>Als Lead übernehmen</button>
+                    {jobs.length > 0 && (
+                      <ul className="mt-3 space-y-1">
+                        {jobs.slice(0, 4).map((j, i) => (
+                          <li key={i} className="flex min-w-0 items-center gap-2 text-[13px]">
+                            <Briefcase className="size-3.5 shrink-0 text-muted-foreground" />
+                            {j.link ? <a href={j.link} target="_blank" rel="noopener noreferrer" className="truncate text-foreground hover:text-brand hover:underline">{j.title || j.link}</a> : <span className="truncate">{j.title}</span>}
+                            {j.source && <span className="shrink-0 text-xs text-muted-foreground">{j.source}</span>}
+                          </li>
+                        ))}
+                        {h && h.open > jobs.length && <li className="pl-5 text-xs text-muted-foreground">+ {h.open - Math.min(jobs.length, 4)} weitere</li>}
+                      </ul>
+                    )}
+                  </div>
+
+                  {h && (
+                    <div className={cn('flex size-14 shrink-0 flex-col items-center justify-center rounded-xl ring-1 ring-inset', scoreTone(s))} title="Score: Stellen, Wiederholungen, neue Stellen, Recruiting-Aufbau, Branche & Office-Anteil">
+                      <span className="tabular text-xl font-semibold leading-none">{s}</span>
+                      <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wide opacity-70">Score</span>
+                    </div>
+                  )}
                 </div>
-              </div>
+
+                <div className="flex items-center gap-2 border-t border-border px-5 py-3">
+                  <span className="mr-auto truncate text-xs text-muted-foreground">
+                    {h ? `${h.sources.map(x => SOURCE_LABEL[x] ?? x).join(', ')} · Stand ${new Date(h.updatedAt).toLocaleDateString('de-DE')}` : `Gefunden ${new Date(c.created_at).toLocaleDateString('de-DE')}`}
+                  </span>
+                  <Button variant="ghost" size="sm" disabled={!!busy} onClick={() => act(c, 'reject')}><X />Verwerfen</Button>
+                  <Button variant="outline" size="sm" disabled={!!busy} onClick={() => act(c, 'company')}>Nur als Company</Button>
+                  <Button size="sm" disabled={!!busy} onClick={() => act(c, 'lead')}>Als Lead übernehmen</Button>
+                </div>
+              </article>
             )
           })}
         </div>

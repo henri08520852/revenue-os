@@ -1,52 +1,39 @@
 import Link from 'next/link'
+import { ArrowRight, CalendarDays, CheckSquare, Flame, Handshake, Radio, Video } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import TriggerQueueButton from './TriggerQueueButton'
-import ActionCard from './ActionCard'
 import DueList from './DueList'
+import { groupTasks } from '@/lib/due'
 import { getTeamContext } from '@/lib/team'
 import { loadTasks } from '@/lib/tasks'
 import { getMeetingData } from '@/lib/meetingData'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
+const eur = (n: number) => n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 
-const PRIORITY_LABELS: Record<number, { label: string; color: string }> = {
-  1: { label: 'Kritisch', color: 'bg-red-100 text-red-700' },
-  2: { label: 'Dringend', color: 'bg-orange-100 text-orange-700' },
-  3: { label: 'Wichtig',  color: 'bg-yellow-100 text-yellow-700' },
-  4: { label: 'Normal',   color: 'bg-blue-100 text-blue-700' },
-  5: { label: 'Optional', color: 'bg-gray-100 text-gray-500' },
+function Kpi({ label, value, hint, Icon, tone, href }: { label: string; value: string | number; hint?: string; Icon: any; tone: string; href: string }) {
+  return (
+    <Link href={href} className="group rounded-lg border border-border bg-card p-4 shadow-card transition-shadow hover:shadow-pop">
+      <div className="flex items-center justify-between">
+        <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
+        <span className={`flex size-7 items-center justify-center rounded-md ${tone}`}><Icon className="size-4" /></span>
+      </div>
+      <p className="tabular mt-2 text-[26px] font-semibold tracking-tight">{value}</p>
+      {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
+    </Link>
+  )
 }
 
 export default async function TodayPage({ searchParams }: { searchParams: { mine?: string } }) {
-  const supabase = createClient()
+  const supabase = createClient() as any
   const { me, team } = await getTeamContext()
   const mineOnly = searchParams.mine === '1' && !!me
 
-  const { data: actions } = await supabase
-    .from('actions')
-    .select('*, company:companies(name)')
-    .eq('project_id', PROJECT_ID)
-    .eq('status', 'pending')
-    .order('priority', { ascending: true })
-    .limit(20)
-
-  const { data: signals } = await supabase
-    .from('signals')
-    .select('*, company:companies(name)')
-    .eq('project_id', PROJECT_ID)
-    .order('created_at', { ascending: false })
-    .limit(10)
-
   // Due tasks: everything up to the end of this week (incl. overdue); DueList buckets by Berlin day
   const dueUntil = new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString()
-  const [dueTasks, taskData] = await Promise.all([
-    loadTasks({ dueBefore: dueUntil, ownerId: mineOnly ? me!.user_id : null }),
-    getMeetingData(),
-  ])
-
-  // Today's meetings from the synced team calendars (Berlin day)
-  const berlinToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' })
-  let meetingsQuery = (supabase as any)
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+  let meetingsQuery = supabase
     .from('calendar_events')
     .select('id, user_id, title, start_at, end_at, all_day, meet_link, company:companies(id, name)')
     .eq('project_id', PROJECT_ID)
@@ -54,7 +41,21 @@ export default async function TodayPage({ searchParams }: { searchParams: { mine
     .lte('start_at', new Date(Date.now() + 86400000).toISOString())
     .order('start_at', { ascending: true })
   if (mineOnly) meetingsQuery = meetingsQuery.eq('user_id', me!.user_id)
-  const { data: rawMeetings } = await meetingsQuery
+
+  const [dueTasks, taskData, { data: rawMeetings }, { data: deals }, { data: hot }, { count: newHot }, { data: signals }] = await Promise.all([
+    loadTasks({ dueBefore: dueUntil, ownerId: mineOnly ? me!.user_id : null }),
+    getMeetingData(),
+    meetingsQuery,
+    supabase.from('opportunities').select('value_eur').eq('project_id', PROJECT_ID).not('stage', 'in', '(won,lost)'),
+    supabase.from('candidate_companies').select('id, name, score, hiring').eq('project_id', PROJECT_ID).eq('source_type', 'hiring').eq('status', 'pending')
+      .order('score', { ascending: false, nullsFirst: false }).limit(5),
+    supabase.from('candidate_companies').select('id', { count: 'exact', head: true }).eq('project_id', PROJECT_ID).eq('source_type', 'hiring').eq('status', 'pending').gte('created_at', weekAgo),
+    supabase.from('signals').select('id, reason, signal_type, detected_at, company:companies(id, name)').eq('project_id', PROJECT_ID).eq('status', 'active')
+      .order('detected_at', { ascending: false }).limit(6),
+  ])
+
+  // Today's meetings from the synced team calendars (Berlin day, duplicates of shared events removed)
+  const berlinToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' })
   const seenMeetings = new Set<string>()
   const meetings = (rawMeetings || []).filter((m: any) => {
     const day = m.all_day ? m.start_at.slice(0, 10) : new Date(m.start_at).toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' })
@@ -65,99 +66,98 @@ export default async function TodayPage({ searchParams }: { searchParams: { mine
   })
   const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' })
 
-  const today = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })
+  const groups = groupTasks(dueTasks)
+  const dueNow = groups.overdue.length + groups.today.length
+  const pipeline = (deals || []).reduce((s: number, d: any) => s + (d.value_eur || 0), 0)
+  const hour = Number(new Date().toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit' }))
+  const greeting = hour < 11 ? 'Guten Morgen' : hour < 18 ? 'Hallo' : 'Guten Abend'
+  const today = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Berlin' })
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 1100 }}>
-      <div style={{ marginBottom: 32 }}>
-        <p style={{ fontSize: 13, color: '#9ca3af', marginBottom: 4 }}>{today}</p>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: '#111827' }}>{"Today's Queue"}</h1>
-          <TriggerQueueButton />
-        </div>
+    <div className="mx-auto max-w-[1180px] px-8 py-8">
+      <div className="mb-6">
+        <p className="text-[13px] text-muted-foreground">{today}</p>
+        <h1 className="mt-0.5 text-2xl font-semibold tracking-tight">{greeting}{me?.display_name ? `, ${me.display_name}` : ''}</h1>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
-        {[
-          { label: 'Actions heute', value: actions?.length ?? 0, color: '#2563eb' },
-          { label: 'Queue leer', value: actions?.length === 0 ? '✓' : '–', color: '#10b981' },
-          { label: 'Active Signale', value: signals?.length ?? 0, color: '#f59e0b' },
-          { label: 'Ausstehend', value: actions?.filter(a => a.priority <= 2).length ?? 0, color: '#ef4444' },
-        ].map((kpi) => (
-          <div key={kpi.label} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '20px 24px' }}>
-            <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>{kpi.label}</p>
-            <p style={{ fontSize: 28, fontWeight: 700, color: kpi.color }}>{kpi.value}</p>
-          </div>
-        ))}
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Kpi label="Fällig" value={dueNow} hint={groups.overdue.length ? `${groups.overdue.length} überfällig` : 'nichts überfällig'} Icon={CheckSquare} tone={groups.overdue.length ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'} href="/tasks" />
+        <Kpi label="Termine heute" value={meetings.length} hint={meetings[0] ? `nächster ${meetings[0].all_day ? 'ganztägig' : hhmm(meetings[0].start_at)}` : 'freier Tag'} Icon={CalendarDays} tone="bg-violet-50 text-violet-600" href="/calendar" />
+        <Kpi label="Offene Pipeline" value={eur(pipeline)} hint={`${deals?.length ?? 0} offene Deals`} Icon={Handshake} tone="bg-emerald-50 text-emerald-600" href="/pipeline" />
+        <Kpi label="Heiße Firmen" value={newHot ?? 0} hint="neu in den letzten 7 Tagen" Icon={Flame} tone="bg-orange-50 text-orange-600" href="/candidates" />
       </div>
 
-      <DueList tasks={dueTasks} data={taskData} mineOnly={mineOnly} showToggle={team.length > 0} />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+        <DueList tasks={dueTasks} data={taskData} mineOnly={mineOnly} showToggle={team.length > 0} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24 }}>
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>{"Prioritäts-Queue · 30 min Budget"}</h2>
-            <span style={{ fontSize: 13, color: '#6b7280' }}>{actions?.length ?? 0} Actions</span>
-          </div>
-          {!actions?.length ? (
-            <div style={{ textAlign: 'center', padding: '48px 0', color: '#9ca3af' }}>
-              <p style={{ fontSize: 32, marginBottom: 12 }}>⚡</p>
-              <p style={{ fontWeight: 500, marginBottom: 4 }}>Queue ist leer</p>
-              <p style={{ fontSize: 13 }}>{"Füge Unternehmen hinzu und klicke \"Run Queue\""}</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {actions.map((action) => (
-                <ActionCard key={action.id} action={action} priorityLabels={PRIORITY_LABELS} />
-              ))}
-            </div>
-          )}
-        </div>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Termine heute</CardTitle>
+              <Link href="/calendar" className="text-xs font-medium text-brand hover:underline">Kalender</Link>
+            </CardHeader>
+            <CardContent>
+              {!meetings.length ? <p className="text-sm text-muted-foreground">Keine Termine heute.</p> : (
+                <ul className="space-y-3">
+                  {meetings.map((m: any) => (
+                    <li key={m.id} className="flex gap-3 text-sm">
+                      <span className="tabular w-11 shrink-0 pt-px text-muted-foreground">{m.all_day ? 'ganzt.' : hhmm(m.start_at)}</span>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{m.title}</p>
+                        <div className="mt-0.5 flex gap-3 text-xs">
+                          {m.company && <Link href={`/companies/${m.company.id}`} className="text-brand hover:underline">{m.company.name}</Link>}
+                          {m.meet_link && <a href={m.meet_link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-brand hover:underline"><Video className="size-3" />Meet</a>}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>Termine heute</h2>
-            <Link href="/calendar" style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none' }}>Kalender →</Link>
-          </div>
-          {!meetings.length ? (
-            <p style={{ fontSize: 13, color: '#9ca3af' }}>Keine Termine heute</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {meetings.map((m: any) => (
-                <div key={m.id} style={{ display: 'flex', gap: 10, fontSize: 13 }}>
-                  <span style={{ color: '#6b7280', width: 42, flexShrink: 0 }}>{m.all_day ? 'ganzt.' : hhmm(m.start_at)}</span>
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ fontWeight: 500, color: '#111827' }}>{m.title}</p>
-                    <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
-                      {m.company && <Link href={`/companies/${m.company.id}`} style={{ fontSize: 11, color: '#1d4ed8', textDecoration: 'none' }}>{m.company.name}</Link>}
-                      {m.meet_link && <a href={m.meet_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: '#2563eb', textDecoration: 'none' }}>Meet ↗</a>}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Heiße Firmen</CardTitle>
+              <Link href="/candidates" className="inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">Alle <ArrowRight className="size-3" /></Link>
+            </CardHeader>
+            <CardContent>
+              {!hot?.length ? <p className="text-sm text-muted-foreground">Noch keine – die Suche läuft jeden Morgen.</p> : (
+                <ul className="divide-y divide-border">
+                  {hot.map((c: any) => (
+                    <li key={c.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{c.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {c.hiring?.open} offene Stellen{c.hiring?.industry ? ` · ${c.hiring.industry.label}` : ''}
+                        </p>
+                      </div>
+                      <Badge tone={(c.score ?? 0) >= 70 ? 'danger' : (c.score ?? 0) >= 45 ? 'warning' : 'neutral'} className="tabular">{c.score ?? '–'}</Badge>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
 
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, color: '#111827', marginBottom: 20 }}>Neue Signale</h2>
-          {!signals?.length ? (
-            <div style={{ textAlign: 'center', padding: '32px 0', color: '#9ca3af' }}>
-              <p style={{ fontSize: 13, marginBottom: 4 }}>Noch keine Signale</p>
-              <p style={{ fontSize: 12 }}>Werden nach dem Queue-Run generiert</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {signals.map((signal) => (
-                <div key={signal.id} style={{ padding: '12px 16px', background: '#f9fafb', borderRadius: 8, fontSize: 13 }}>
-                  <p style={{ fontWeight: 500, color: '#111827' }}>{signal.company?.name}</p>
-                  <p style={{ color: '#6b7280', marginTop: 2 }}>{signal.content}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+          <Card>
+            <CardHeader><CardTitle>Signale bei euren Firmen</CardTitle></CardHeader>
+            <CardContent>
+              {!signals?.length ? <p className="text-sm text-muted-foreground">Keine neuen Signale.</p> : (
+                <ul className="space-y-3">
+                  {signals.map((s: any) => (
+                    <li key={s.id} className="flex gap-2.5 text-sm">
+                      <Radio className="mt-0.5 size-4 shrink-0 text-orange-500" />
+                      <div className="min-w-0">
+                        {s.company && <Link href={`/companies/${s.company.id}`} className="font-medium hover:underline">{s.company.name}</Link>}
+                        <p className="line-clamp-2 text-xs text-muted-foreground">{s.reason}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

@@ -257,8 +257,8 @@ export function NewMenu() {
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <button onClick={() => setMenu(m => !m)} style={{ width: '100%', padding: '9px 12px', fontSize: 14, fontWeight: 600, border: 'none', borderRadius: 8, background: '#2563eb', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-        <span style={{ fontSize: 16, lineHeight: 1 }}>+</span> Neu
+      <button onClick={() => setMenu(m => !m)} className="flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-brand text-[13.5px] font-semibold text-white shadow-sm transition-colors hover:bg-brand/90">
+        <span className="text-base leading-none">+</span> Neu
       </button>
       {menu && (
         <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.12)', padding: 4, zIndex: 50 }}>
