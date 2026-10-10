@@ -7,8 +7,11 @@ import { OPPORTUNITY_STAGE_LABELS } from '@/lib/stages'
 import { ALLOWED_EMAIL_DOMAIN } from '@/lib/google/oauth'
 import { loadCrmIndex } from '@/lib/google/matching'
 import { rematchInbox } from '@/lib/google/emails'
+import { enrollLead } from '@/lib/agents/sequence'
+import { draftOnEvent, draftFirstMessage } from '@/lib/agents/firstMessage'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID!
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || 'https://revenue-os-chi.vercel.app').replace(/\/$/, '')
@@ -51,6 +54,8 @@ async function status(supabase: any, person: any) {
     companyId ? supabase.from('opportunities').select('id, name, stage').eq('company_id', companyId).order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
     supabase.from('tasks').select('title, due_at').eq('person_id', person.id).eq('status', 'open').order('due_at', { ascending: true, nullsFirst: false }).limit(1),
   ])
+  // Pending draft from the first-message agent (table exists from migration 029 on)
+  const { data: drafts } = await supabase.from('agent_items').select('id, body, data').eq('person_id', person.id).eq('status', 'pending').order('created_at', { ascending: false }).limit(1)
   return {
     known: true,
     person: { id: person.id, name: person.full_name || [person.first_name, person.last_name].filter(Boolean).join(' '), jobTitle: person.job_title, email: person.email, url: `${APP_URL}/contacts/${person.id}` },
@@ -58,6 +63,7 @@ async function status(supabase: any, person: any) {
     leads: (leads || []).map((l: any) => ({ id: l.id, name: l.name, stage: LEAD_STAGES[l.stage] ?? l.stage, url: `${APP_URL}/pipeline?focus=${l.id}` })),
     deals: (deals || []).map((d: any) => ({ id: d.id, name: d.name, stage: (OPPORTUNITY_STAGE_LABELS as Record<string, string>)[d.stage] ?? d.stage, url: `${APP_URL}/opportunities/${d.id}` })),
     nextTask: tasks?.[0] ?? null,
+    draft: drafts?.[0] ? { id: drafts[0].id, message: drafts[0].body, connectNote: drafts[0].data?.connect_note ?? null, hook: drafts[0].data?.hook ?? null } : null,
   }
 }
 
@@ -127,7 +133,12 @@ export async function POST(req: Request) {
             stage: body.leadStage === 'contacted' ? 'contacted' : 'outreach', source: 'linkedin', name: str(body.leadName, 120) || null,
           }).select('id').single()
           if (error) throw new Error(error.message)
-          const days = Math.min(60, Math.max(0, Number(body.followUpDays) || 0))
+          // Outreach sequence (if switched on) replaces the single follow-up task; already written → start at the call
+          const enrolled = await enrollLead(supabase, {
+            projectId: PROJECT_ID, leadId: lead.id, personId: person.id, companyId, ownerId: user.id, createdBy: user.id,
+            label: fields.full_name, startStep: body.leadStage === 'contacted' ? 2 : 0,
+          }).catch(() => false)
+          const days = enrolled ? 0 : Math.min(60, Math.max(0, Number(body.followUpDays) || 0))
           if (days) {
             const due = new Date(Date.now() + days * 86400000).toISOString().slice(0, 10)
             await supabase.from('tasks').insert({
@@ -144,6 +155,17 @@ export async function POST(req: Request) {
       }
       const { data: fresh } = await supabase.from('people').select(PERSON_COLS).eq('id', person.id).single()
       return NextResponse.json(await status(supabase, fresh))
+    }
+
+    if (body.action === 'draftMessage') {
+      // First-message agent for this contact; "force" rewrites even when auto drafts are off
+      const person = await findPerson(supabase, slug, name)
+      if (!person?.company_id) return NextResponse.json({ error: 'Kontakt mit Firma zuerst in Revenue OS anlegen.' }, { status: 404 })
+      const { data: lead } = await supabase.from('leads').select('id').eq('company_id', person.company_id).in('stage', ['outreach', 'contacted']).order('created_at', { ascending: false }).limit(1)
+      const target = { projectId: PROJECT_ID, companyId: person.company_id, personId: person.id, leadId: lead?.[0]?.id ?? null }
+      const r = body.force ? await draftFirstMessage(supabase, target) : await draftOnEvent(supabase, target)
+      if (!r) return NextResponse.json({ error: 'Der Erstnachricht-Agent ist ausgeschaltet.' }, { status: 409 })
+      return NextResponse.json(await status(supabase, person))
     }
 
     if (body.action === 'logMessage') {

@@ -13,7 +13,7 @@ export type HrContact = { name: string | null; title: string | null; email: stri
 const UA = { 'User-Agent': 'Mozilla/5.0 (compatible; RevenueOS-CompanyInfo/1.0)', 'Accept-Language': 'de-DE,de;q=0.9,en;q=0.5' }
 const SOCIAL = /personio|linkedin|xing|facebook|instagram|youtube|twitter|x\.com|kununu|google|apple|tiktok|glassdoor|indeed|stepstone|gstatic|cloudflare|cookiebot|usercentrics|jsdelivr|w3\.org|schema\.org|onetrust|hotjar|vimeo|wa\.me|maps\./i
 
-async function fetchHtml(url: string, timeoutMs = 7_000): Promise<{ html: string; url: string } | null> {
+export async function fetchHtml(url: string, timeoutMs = 7_000): Promise<{ html: string; url: string } | null> {
   try {
     const res = await fetch(url, { headers: { Accept: 'text/html', ...UA }, redirect: 'follow', signal: AbortSignal.timeout(timeoutMs) })
     if (!res.ok || !(res.headers.get('content-type') || '').includes('html')) return null

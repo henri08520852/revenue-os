@@ -5,9 +5,10 @@ import { getTeamContext } from '@/lib/team'
 import { baSample, logRun, runHiringDiscovery } from '@/lib/discovery/hiring'
 import { discoverAtsAccounts, pollAtsAccounts } from '@/lib/discovery/ats-feeds'
 import { enrichCandidates } from '@/lib/discovery/enrich'
+import { enrollLead } from '@/lib/agents/sequence'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID!
-type Result = { error: string | null; href?: string }
+type Result = { error: string | null; href?: string; leadId?: string }
 
 const tomorrow = () => new Date(Date.now() + 86400000).toISOString().slice(0, 10)
 
@@ -82,6 +83,7 @@ export async function takeCandidate(id: string, asLead: boolean): Promise<Result
     const contactId = hrId ?? managerId // HR runs the screening day to day → first contact
     const reason = c.hiring ? `${c.hiring.open} offene Stellen${c.hiring.new14 ? `, ${c.hiring.new14} neu in 14 Tagen` : ''}${c.hiring.repeated?.[0] ? `, ${c.hiring.repeated[0].count}× ${c.hiring.repeated[0].role}` : ''}${c.hiring.hrRoles?.length ? `, baut Recruiting auf (${c.hiring.hrRoles[0]})` : ''}` : (c.evidence?.[0]?.title ?? null)
     let href = `/companies/${companyId}`
+    let newLeadId: string | undefined
     if (asLead) {
       const [{ data: openLead }, { data: openDeal }] = await Promise.all([
         supabase.from('leads').select('id').eq('company_id', companyId).in('stage', ['outreach', 'contacted', 'qualified']).limit(1),
@@ -93,11 +95,16 @@ export async function takeCandidate(id: string, asLead: boolean): Promise<Result
           notes: reason ? `Signal: ${reason}` : null,
         }).select('id').single()
         if (error) return { error: error.message }
-        await supabase.from('tasks').insert({
+        // Outreach sequence (if switched on) replaces the single first-contact task
+        const enrolled = await enrollLead(supabase, {
+          projectId: PROJECT_ID, leadId: lead.id, personId: contactId, companyId, ownerId: user.id, createdBy: user.id, label: c.name,
+        }).catch(() => false)
+        if (!enrolled) await supabase.from('tasks').insert({
           project_id: PROJECT_ID, title: `Erstansprache ${c.name}${reason ? ` (${reason})` : ''}`.slice(0, 200), task_type: 'todo',
           due_at: `${tomorrow()}T10:00:00.000Z`, has_time: false, owner_id: user.id, created_by: user.id, company_id: companyId, person_id: contactId, lead_id: lead.id,
         })
         href = `/pipeline?focus=${lead.id}`
+        newLeadId = lead.id
       } else href = openDeal?.length ? `/opportunities/${openDeal[0].id}` : `/pipeline?focus=${openLead![0].id}`
     }
     // Keep the hiring numbers visible on the company
@@ -110,7 +117,7 @@ export async function takeCandidate(id: string, asLead: boolean): Promise<Result
     }
     await supabase.from('candidate_companies').update({ status: 'accepted', existing_company_id: companyId, reviewed_at: new Date().toISOString(), reviewed_by: user.email ?? null }).eq('id', id)
     revalidatePath('/candidates')
-    return { error: null, href }
+    return { error: null, href, leadId: newLeadId }
   } catch (e: any) {
     return { error: e?.message || 'Fehler' }
   }

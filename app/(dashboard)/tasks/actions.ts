@@ -1,6 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { advanceSequences } from '@/lib/agents/sequence'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
 const TYPES = ['todo', 'call', 'email', 'follow_up', 'meeting']
@@ -90,6 +91,11 @@ export async function setTaskDone(id: string, done: boolean): Promise<Result> {
   const supabase = createClient() as any
   const { error } = await supabase.from('tasks').update({ status: done ? 'done' : 'open' }).eq('id', id)
   if (error) return { error: error.message }
+  // A finished sequence step creates the next one
+  if (done) {
+    const { data: seq } = await supabase.from('sequence_enrollments').select('project_id').eq('current_task_id', id).eq('status', 'active').limit(1)
+    if (seq?.length) await advanceSequences(supabase, seq[0].project_id).catch(() => null)
+  }
   revalidateAll()
   return { error: null }
 }

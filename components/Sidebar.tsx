@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, CalendarDays, CheckSquare, CircleHelp, Flame, LayoutDashboard, Search, Settings, Users, Workflow, type LucideIcon } from 'lucide-react'
+import { Bot, Building2, CalendarDays, CheckSquare, CircleHelp, Flame, LayoutDashboard, Search, Settings, Users, Workflow, type LucideIcon } from 'lucide-react'
 import AppSwitcher from './AppSwitcher'
 import { NewMenu } from './CreateRecord'
 import { CommandMenu } from './CommandMenu'
@@ -23,6 +23,7 @@ const SECTIONS: { title: string | null; items: { href: string; label: string; Ic
   ] },
   { title: 'Akquise', items: [
     { href: '/candidates', label: 'Heiße Firmen', Icon: Flame },
+    { href: '/agents', label: 'Agents', Icon: Bot },
   ] },
 ]
 

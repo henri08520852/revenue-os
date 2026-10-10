@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Briefcase, Building2, Check, Globe, Loader2, MapPin, RefreshCw, UserRound, Users, X } from 'lucide-react'
 import { enrichMissing, rejectCandidate, searchNow, takeCandidate } from './actions'
+import { draftForLead } from '../agents/actions'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select } from '@/components/ui/input'
@@ -104,8 +105,14 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
     const href = 'href' in res ? res.href : undefined
     if (what === 'reject') toast(`${c.name} verworfen`)
     else toast.success(what === 'lead' ? `${c.name} ist als Lead in Outreach` : `${c.name} ist jetzt im CRM`, {
-      description: what === 'lead' ? 'Aufgabe „Erstansprache“ für morgen angelegt.' : undefined,
+      description: what === 'lead' ? 'Aufgaben angelegt – der Agent schreibt jetzt die Erstnachricht.' : undefined,
       action: href ? { label: 'Öffnen', onClick: () => router.push(href) } : undefined,
+    })
+    // First-message agent drafts in the background; the draft waits under Agents → Freigaben
+    const leadId = 'leadId' in res ? res.leadId : undefined
+    if (what === 'lead' && leadId) draftForLead(leadId).then(r => {
+      if (r.summary) toast.success(`Entwurf für ${c.name} ist fertig`, { action: { label: 'Ansehen', onClick: () => router.push('/agents') } })
+      else if (r.error) toast.error(`Entwurf: ${r.error}`)
     })
   }
 

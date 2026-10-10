@@ -4,6 +4,7 @@
   if (window.__revenueOs) return
   window.__revenueOs = true
 
+  const APP = 'https://revenue-os-chi.vercel.app'
   const api = body => new Promise(resolve => chrome.runtime.sendMessage({ type: 'api', body }, r => resolve(r || { error: 'Keine Antwort' })))
   const text = el => (el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim()
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
@@ -264,12 +265,15 @@
     .link{background:none;border:none;color:#1a56db;font-size:14px;cursor:pointer;padding:0;display:flex;align-items:center;gap:6px}
     .msg{margin-top:10px;font-size:13px}.err{color:#d93025}.okm{color:#137333}
     .muted{color:#5f6368;font-size:13px}
+    .draft{background:#f6f8fc;border:1px solid #e3e8f2;border-radius:10px;padding:10px 12px;font-size:13.5px;line-height:1.45;white-space:pre-wrap;margin-bottom:6px}
+    .row2{display:flex;gap:14px;align-items:center;margin:2px 0 12px}
+    .small{font-size:12px;color:#5f6368;margin-bottom:6px}
     .diag{display:block;margin:0 auto 10px;background:none;border:none;color:#9aa0a6;font-size:11px;cursor:pointer}
   </style><div id="root"></div>`
   const root = shadow.getElementById('root')
 
   let open = false, page = '', ctx = null, crm = null, msg = '', busy = false
-  let form = {}, taskOpen = false
+  let form = {}, taskOpen = false, drafting = false, draftMsg = ''
 
   const kind = () => location.pathname.startsWith('/in/') ? 'profile' : location.pathname.startsWith('/messaging/') ? 'thread' : null
   const addDays = n => { const d = new Date(Date.now() + n * 86400000); return d.toISOString().slice(0, 10) }
@@ -306,6 +310,31 @@
       ${leads || deals ? leads + deals : '<div class="line"><span class="dot ok"></span>Im CRM · kein offener Lead/Deal</div>'}
       ${crm.nextTask ? `<div class="line muted">📋 ${esc(crm.nextTask.title)}${due ? ' · ' + due : ''}</div>` : ''}
     </div>`
+  }
+
+  // Draft from the first-message agent (Revenue OS → Agents)
+  function draftHtml() {
+    if (!crm?.known || !crm.company) return ''
+    const d = crm.draft
+    if (drafting) return '<div class="sec muted">✍️ Entwurf wird geschrieben … (ca. 10–20 s)</div>'
+    if (!d) return `<div class="sec"><button class="link" id="draft-new">✍️ Erstnachricht schreiben lassen</button>${draftMsg ? `<div class="msg">${draftMsg}</div>` : ''}</div>`
+    return `<div class="sec">
+      <div class="h">✍️ Entwurf</div>
+      ${d.hook ? `<div class="small">Anlass: ${esc(d.hook)}</div>` : ''}
+      ${d.connectNote ? `<div class="small">Vernetzungsnotiz</div><div class="draft">${esc(d.connectNote)}</div><div class="row2"><button class="link" id="copy-note">Notiz kopieren</button></div>` : ''}
+      <div class="small">Erste Nachricht</div><div class="draft">${esc(d.message)}</div>
+      <div class="row2"><button class="link" id="copy-msg">Nachricht kopieren</button><button class="link" id="draft-new">Neu schreiben</button><a class="link" href="${esc(APP)}/agents" target="_blank">Bearbeiten ↗</a></div>
+      ${draftMsg ? `<div class="msg">${draftMsg}</div>` : ''}
+    </div>`
+  }
+
+  async function writeDraft(force) {
+    drafting = true; draftMsg = ''; render()
+    const res = await api({ action: 'draftMessage', profileUrl: profileUrl(), name: ctx.name, force })
+    drafting = false
+    if (res.error) draftMsg = force ? `<span class="err">${esc(res.error)}</span>` : ''
+    else crm = { ...res, companies: crm?.companies }
+    render()
   }
 
   const field = (id, label, value, attrs = '') => `<div class="f"><label>${label}</label><input id="${id}" value="${esc(value)}" autocomplete="off" data-lpignore="true" ${attrs}></div>`
@@ -382,7 +411,7 @@
     const ready = ctx && crm && !crm.error
     root.innerHTML = `<div class="card">
       <div class="head"><span class="t">Revenue OS</span><button id="reload" title="Seite neu einlesen">↻</button><button id="close" title="Schließen">✕</button></div>
-      <div class="scroll">${statusHtml()}${ready ? (k === 'profile' ? profileForm() : threadForm()) + taskForm() : ''}<button class="diag" id="diag">Etwas falsch erkannt? Diagnose kopieren</button></div>
+      <div class="scroll">${statusHtml()}${ready ? draftHtml() : ''}${ready ? (k === 'profile' ? profileForm() : threadForm()) + taskForm() : ''}<button class="diag" id="diag">Etwas falsch erkannt? Diagnose kopieren</button></div>
     </div>`
     const $ = id => shadow.getElementById(id)
     $('close').onclick = () => { open = false; render() }
@@ -406,6 +435,10 @@
     if ($('task-save')) $('task-save').onclick = addTask
     if ($('save')) $('save').onclick = save
     if ($('log')) $('log').onclick = log
+    if ($('draft-new')) $('draft-new').onclick = () => writeDraft(true)
+    const copy = (id, text) => { if ($(id)) $(id).onclick = async () => { try { await navigator.clipboard.writeText(text); $(id).textContent = 'Kopiert ✓' } catch { $(id).textContent = 'Kopieren nicht möglich' } } }
+    copy('copy-note', crm?.draft?.connectNote || '')
+    copy('copy-msg', crm?.draft?.message || '')
   }
 
   const profileUrl = () => ctx?.slug ? `https://www.linkedin.com/in/${ctx.slug}/` : null
@@ -421,7 +454,7 @@
         await new Promise(r => setTimeout(r, 1000))
       }
     }
-    msg = ''; crm = null; taskOpen = false; render()
+    msg = ''; draftMsg = ''; crm = null; taskOpen = false; render()
     crm = await api({ action: 'lookup', profileUrl: profileUrl(), name: ctx.name })
     resetForm()
     render()
@@ -449,8 +482,11 @@
 
   async function save() {
     if (!String(form.first || '').trim() && !String(form.last || '').trim()) { msg = '<span class="err">Bitte einen Namen eingeben.</span>'; return render() }
-    const res = await run(contactPayload(), r => r.leads?.length ? 'Gespeichert ✓ – Lead ist in der Pipeline.' : 'Gespeichert ✓')
+    const payload = contactPayload()
+    const res = await run(payload, r => r.leads?.length ? 'Gespeichert ✓ – Lead ist in der Pipeline.' : 'Gespeichert ✓')
     if (!res.error && form.companyId === 'new' && res.company) form.companyId = res.company.id
+    // New lead in Outreach → the agent drafts the first message right away (if switched on in Revenue OS)
+    if (!res.error && payload.createLead && payload.leadStage !== 'contacted' && res.company && !res.draft) writeDraft(false)
   }
 
   async function log() {
