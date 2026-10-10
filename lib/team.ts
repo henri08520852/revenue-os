@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { isAllowedEmail } from '@/lib/google/oauth'
 
@@ -19,9 +20,10 @@ export function initials(name: string | null | undefined) {
 // Current user + team for the default project. Adds the user to project_members on
 // first visit (migration 020), so owner pickers and the settings page know them.
 // denied: signed in, but neither a team member nor from the allowed Workspace domain
-export async function getTeamContext(): Promise<{ me: TeamMember | null; team: TeamMember[]; denied?: boolean; email?: string | null }> {
+// cache(): layout and page both call this → one lookup per request instead of two
+export const getTeamContext = cache(async (): Promise<{ me: TeamMember | null; team: TeamMember[]; denied?: boolean; email?: string | null }> => {
   const supabase = createClient() as any
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await currentUser(supabase)
   if (!user || !PROJECT_ID) return { me: null, team: [] }
 
   const { data: rows, error } = await supabase
@@ -62,6 +64,18 @@ export async function getTeamContext(): Promise<{ me: TeamMember | null; team: T
     if (!team.some(m => m.user_id === user.id)) team = [...team, me]
   }
   return { me, team }
+})
+
+// getClaims() verifies the session JWT locally when the project uses asymmetric signing keys
+// (no round trip to the auth server); otherwise it falls back to a server check itself
+async function currentUser(supabase: any): Promise<{ id: string; email: string | null } | null> {
+  const { data, error } = await supabase.auth.getClaims()
+  if (!error && data?.claims?.sub) return { id: data.claims.sub, email: data.claims.email ?? null }
+  if (error) {
+    const { data: { user } } = await supabase.auth.getUser()
+    return user ? { id: user.id, email: user.email ?? null } : null
+  }
+  return null
 }
 
 export function memberName(team: TeamMember[], userId: string | null | undefined) {

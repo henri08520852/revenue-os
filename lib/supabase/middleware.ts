@@ -21,7 +21,9 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  // getClaims(): local JWT check when possible instead of an auth-server round trip on every click
+  const { data } = await supabase.auth.getClaims()
+  const user = data?.claims?.sub ? data.claims : null
 
   // Redirect unauthenticated users to login
   if (
