@@ -71,26 +71,43 @@ export async function gather(supabase: any, t: Target) {
   return { text: lines.join('\n'), companyName: company.name as string, personName: (person?.full_name as string) || null, firstName: (person?.first_name as string) || null }
 }
 
-function systemPrompt(cfg: AgentConfig['first_message']) {
-  return `Du schreibst für das Vertriebsteam von HireFlow Erstansprachen auf LinkedIn an Entscheider in Unternehmen im DACH-Raum.
+function systemPrompt(cfg: AgentConfig['first_message'], sender: string) {
+  const address = cfg.address === 'du' ? 'per Du'
+    : cfg.address === 'Sie' ? 'per Sie'
+    : 'per Du bei Start-ups, Tech, Agenturen, Beratungen und Firmen unter ca. 50 Mitarbeitenden; per Sie bei klassischem Mittelstand (Industrie, Handwerk, Logistik, Gesundheit, Handel) und größeren Firmen'
+  return `Du schreibst für ${sender} von HireFlow Erstansprachen auf LinkedIn an HR-Verantwortliche und Geschäftsführungen im DACH-Raum.
 
 Produkt: ${cfg.pitch}
 
+Aufbau der Nachricht (message, 350–550 Zeichen ohne Grußzeile, 3–4 kurze Absätze):
+1. Anrede mit Vornamen („Hallo …,“ / „Guten Tag Frau/Herr …“ nur wenn Sie und das Geschlecht eindeutig im Titel steht, sonst „Guten Tag Vorname Nachname,“). Ohne bekannten Namen: „Hallo zusammen,“.
+2. Der konkrete Anlass, wie wir auf sie gestoßen sind – möglichst die echten offenen Stellen aus den Fakten (z. B. „ihr sucht gerade 4× Projektingenieur:in“), dazu in einem Satz, warum das Zeit bindet.
+3. Was HireFlow tut, mit genau einem greifbaren Ergebnis (z. B. aus 20 Bewerbungen die drei relevantesten). Höchstens zwei Sätze. Optional ein Satz zur Gründergeschichte, wenn er natürlich passt.
+4. ${cfg.link ? `Der Link ${cfg.link}, ` : ''}${cfg.offer ? `das Angebot „${cfg.offer}“ ` : ''}und eine offene Frage, wie sie das heute lösen.
+5. Grußzeile: „Beste Grüße\n${sender}“.
+
 Regeln:
-- Deutsch, ${cfg.address === 'du' ? 'per Du' : 'per Sie'}, natürlich und konkret – wie ein Mensch, nicht wie Werbung. Keine Floskeln („Ich hoffe, es geht Ihnen gut“), keine Superlative, keine Emojis, keine Links.
-- Bezieh dich auf genau einen konkreten Anlass aus den Fakten (z. B. viele offene Stellen, eine Rolle wird mehrfach gesucht, Recruiting wird aufgebaut). Erfinde nichts, was nicht in den Fakten steht.
-- connect_note: Vernetzungsnotiz, höchstens 200 Zeichen (LinkedIn-Limit), ohne Verkauf – nur ein persönlicher Grund für die Vernetzung.
-- message: erste Nachricht nach der Vernetzung, 350–650 Zeichen: Anlass (konkret, z. B. welche Rollen gesucht werden) → vermutete Herausforderung im Recruiting in einem Satz → ein Satz, wie HireFlow hilft → als leichter Einstieg anbieten: ${cfg.offer || 'ein kurzes Gespräch'} → eine kurze Frage zum Abschluss (kein Terminzwang).
+- Deutsch, ${address}. Natürlich und auf Augenhöhe – wie eine Nachricht von Mensch zu Mensch, nicht wie Werbung.
+- Keine Floskeln, keine Superlative, keine Emojis, keine Aufzählungen, kein Fachjargon („Evidenz“, „belastbar“, „Pipeline“). Kein „kein Sales Pitch“, keine Terminforderung.
+- Erfinde nichts, was nicht in den Fakten steht. Gibt es bereits Kontakt im Verlauf, knüpfe daran an statt dich neu vorzustellen.
+- connect_note: Vernetzungsnotiz, höchstens 200 Zeichen (LinkedIn-Limit), ohne Produkt und ohne Link – nur ein persönlicher, konkreter Grund für die Vernetzung.
 - hook: der gewählte Anlass in einem Satz.
-- research: 3–5 kurze Fakten über die Firma, die für das Gespräch nützlich sind (nur aus den Fakten).
-- Gibt es bereits Kontakt im Verlauf, knüpfe daran an statt dich neu vorzustellen.${cfg.style ? `\n\nTonalität des Teams:\n${cfg.style}` : ''}${cfg.examples ? `\n\nBeispiele für Nachrichten, die gut funktioniert haben (Stil übernehmen, nicht kopieren):\n${cfg.examples}` : ''}`
+- research: 3–5 kurze Fakten über die Firma, die für das Gespräch nützlich sind (nur aus den Fakten).${cfg.style ? `\n\nTonalität des Teams:\n${cfg.style}` : ''}${cfg.examples ? `\n\nNachrichten von uns, die gut funktioniert haben – Aufbau, Länge und Ton übernehmen, nicht den Wortlaut:\n${cfg.examples}` : ''}`
+}
+
+// Messages are signed by the lead owner (else the first team member)
+async function senderName(supabase: any, t: Target): Promise<string> {
+  const { data: lead } = t.leadId ? await supabase.from('leads').select('owner_id').eq('id', t.leadId).single() : { data: null }
+  const { data: members } = await supabase.from('project_members').select('user_id, display_name, email').eq('project_id', t.projectId).order('created_at')
+  const m = (members || []).find((x: any) => x.user_id === lead?.owner_id) || members?.[0]
+  return (m?.display_name || m?.email?.split('@')[0] || 'Henri').split(' ')[0]
 }
 
 export async function draftFirstMessage(supabase: any, t: Target, opts: { runId?: string | null; cfg?: AgentConfig['first_message'] } = {}): Promise<{ draft: Draft; itemId: string; costUsd: number }> {
   const key = apiKey()
   if (!key) throw new Error('KI ist noch nicht eingerichtet (API-Key fehlt).')
   const cfg = opts.cfg ?? (await loadSettings(supabase, t.projectId)).first_message.config
-  const facts = await gather(supabase, t)
+  const [facts, sender] = await Promise.all([gather(supabase, t), senderName(supabase, t)])
   if (!facts) throw new Error('Firma nicht gefunden')
 
   const client = new Anthropic({ apiKey: key })
@@ -98,7 +115,7 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: { runId?
     model: MODEL,
     max_tokens: 4000,
     output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
-    system: systemPrompt(cfg),
+    system: systemPrompt(cfg, sender),
     messages: [{ role: 'user', content: `Fakten:\n${facts.text}\n\nSchreibe Vernetzungsnotiz und erste Nachricht${facts.firstName ? ` an ${facts.personName}` : ' an die zuständige Person (ohne Namen, neutrale Anrede)'}.` }],
   } as any)
   if (res.stop_reason === 'refusal') throw new Error('Die KI hat die Anfrage abgelehnt.')

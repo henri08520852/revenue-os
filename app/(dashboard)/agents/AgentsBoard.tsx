@@ -402,10 +402,13 @@ function SettingsSheet({ agentKey, settings, onClose }: { agentKey: AgentKey; se
               </Field>
               <Field label="Anrede">
                 <Select value={cfg.address} onChange={e => set({ address: e.target.value })}>
-                  <option value="Sie">Sie</option><option value="du">du</option>
+                  <option value="auto">Automatisch (du bei Start-ups/Tech, Sie im Mittelstand)</option><option value="du">immer du</option><option value="Sie">immer Sie</option>
                 </Select>
               </Field>
-              <Field label="Einstieg, den wir anbieten" hint="Wird in der Nachricht als leichter erster Schritt angeboten – statt direkt nach einer Demo zu fragen.">
+              <Field label="Link in der Nachricht (optional)">
+                <Input value={cfg.link} onChange={e => set({ link: e.target.value })} placeholder="hireflow.one/business" />
+              </Field>
+              <Field label="Einstieg, den wir anbieten" hint="Optional, z. B. „einen kostenlosen Kurz-Check eurer Stellenanzeigen“. Leer = Link + offene Frage.">
                 <Textarea rows={2} value={cfg.offer} onChange={e => set({ offer: e.target.value })} />
               </Field>
               <Field label="Tonalität (optional)" hint="z. B. „locker, kurz, ohne Fachbegriffe; wir sind ein junges Team aus …“">

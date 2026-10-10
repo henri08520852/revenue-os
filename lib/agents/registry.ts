@@ -13,9 +13,36 @@ export const DEFAULT_STEPS: SequenceStep[] = [
   { day: 14, title: 'Nachfassen auf LinkedIn', type: 'follow_up' },
 ]
 
-export const DEFAULT_PITCH = 'HireFlow ist eine Recruiting-Software für Unternehmen im DACH-Raum: Stellenanzeigen, Bewerbermanagement und automatisches Vorab-Screening per Fragen – damit HR-Teams auch bei vielen Bewerbungen schnell die passenden Kandidaten finden.'
+export const DEFAULT_PITCH = 'HireFlow (hireflow.one) ist ein KI-Prescreening fürs Recruiting: Bewerbende beantworten rollenbezogene Fragen, HireFlow strukturiert die Antworten, macht sie vergleichbar und zeigt vor dem ersten Gespräch, wer wirklich passt – z. B. aus 20 Bewerbungen die drei relevantesten Profile. So entstehen weniger Erstgespräche ohne Match. Gegründet von Henri und Simon, die selbst inhouse in Recruiting und HR gearbeitet haben.'
 
-export const DEFAULT_OFFER = 'einen kostenlosen Kurz-Check ihrer aktuellen Stellenanzeigen (was auffällt, wo Bewerbende abspringen)'
+export const DEFAULT_OFFER = ''
+export const DEFAULT_LINK = 'hireflow.one/business'
+export const DEFAULT_STYLE = 'Kurz und auf Augenhöhe, nicht verkäuferisch. Ein Gedanke pro Absatz, einfache Wörter statt Fachjargon. Nicht mit „Ich“ beginnen. Nie „kein Sales Pitch“ schreiben. Abschluss: Link, dann eine offene Frage, wie sie es heute lösen.'
+
+// Henri's messages that worked – the agent copies the style, not the wording
+export const DEFAULT_EXAMPLES = `Hallo Tessa,
+
+ich bin über deine Verantwortung für People und Recruiting bei CON-iNG gestolpert. Gerade bei Engineering- und Beratungsrollen kann die erste Qualifizierung schnell viel Zeit binden.
+
+HireFlow strukturiert Kandidatenantworten rollenbezogen, macht sie vergleichbar und liefert vor dem ersten Gespräch konkrete Evidenz. So entstehen schneller belastbare Shortlists.
+
+Ein kurzer Überblick: hireflow.one/business. Wie löst ihr die Vorauswahl aktuell?
+
+Beste Grüße
+Henri
+
+---
+
+Hi Lennard,
+
+ich habe gesehen, dass ihr Unterstützung im Recruiting und in People Operations sucht. Da Recruiting noch nah am Gründungsteam liegt, bindet die erste Auswahl schnell wertvolle Zeit.
+
+Mein Partner Simon und ich haben selbst inhouse in Recruiting und HR gearbeitet. Daraus ist HireFlow entstanden: ein Prescreening mit KI, das aus 20 Bewerbungen die drei relevantesten Profile herausfiltert, bevor ein Kalendertermin entsteht.
+
+Schau gern rein: hireflow.one/business. Mich interessiert, wie ihr Prescreening aktuell löst.
+
+Beste Grüße
+Henri`
 
 export const DEFAULT_LETTER = `{{anrede}},
 
@@ -28,7 +55,7 @@ Gern zeige ich Ihnen in 20 Minuten, wie das bei {{firma}} aussehen könnte – u
 export type LetterConfig = { sender: string; subject: string; template: string; closing: string; signer: string; signerTitle: string; contact: string }
 
 export type AgentConfig = {
-  first_message: { pitch: string; style: string; examples: string; address: 'Sie' | 'du'; autoDraft: boolean; offer: string }
+  first_message: { pitch: string; style: string; examples: string; address: 'auto' | 'Sie' | 'du'; autoDraft: boolean; offer: string; link: string }
   letter: LetterConfig
   sequence: { steps: SequenceStep[] }
   follow_up_guard: { days: number }
@@ -60,7 +87,7 @@ export const AGENTS: { key: AgentKey; kind: 'agent' | 'workflow'; label: string;
 ]
 
 export const DEFAULTS: AgentConfig = {
-  first_message: { pitch: DEFAULT_PITCH, style: '', examples: '', address: 'Sie', autoDraft: true, offer: DEFAULT_OFFER },
+  first_message: { pitch: DEFAULT_PITCH, style: DEFAULT_STYLE, examples: DEFAULT_EXAMPLES, address: 'auto', autoDraft: true, offer: DEFAULT_OFFER, link: DEFAULT_LINK },
   letter: { sender: 'HireFlow\nStraße Hausnummer\nPLZ Ort', subject: 'Ihre offenen Stellen – eine Idee für {{firma}}', template: DEFAULT_LETTER, closing: 'Mit freundlichen Grüßen', signer: '', signerTitle: '', contact: '' },
   sequence: { steps: DEFAULT_STEPS },
   follow_up_guard: { days: 7 },

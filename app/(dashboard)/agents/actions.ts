@@ -75,8 +75,8 @@ export async function saveAgentConfig(key: string, config: Record<string, unknow
       if (!String(clean.template || '').trim()) return { error: 'Die Vorlage darf nicht leer sein' }
     }
     if (key === 'first_message') {
-      for (const f of ['pitch', 'style', 'examples', 'offer']) if (f in clean) clean[f] = String(clean[f] ?? '').slice(0, 4000)
-      if ('address' in clean) clean.address = clean.address === 'du' ? 'du' : 'Sie'
+      for (const f of ['pitch', 'style', 'examples', 'offer', 'link']) if (f in clean) clean[f] = String(clean[f] ?? '').slice(0, 6000)
+      if ('address' in clean) clean.address = ['du', 'Sie'].includes(clean.address as string) ? clean.address : 'auto'
       if ('autoDraft' in clean) clean.autoDraft = !!clean.autoDraft
     }
     const { data: row } = await supabase.from('automation_settings').select('enabled, config').eq('project_id', PROJECT_ID).eq('agent_key', key).maybeSingle()
