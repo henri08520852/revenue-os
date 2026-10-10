@@ -19,6 +19,21 @@ export const DEFAULT_OFFER = ''
 export const DEFAULT_LINK = 'hireflow.one/business'
 export const DEFAULT_STYLE = 'Kurz und auf Augenhöhe, nicht verkäuferisch. Ein Gedanke pro Absatz, einfache Wörter statt Fachjargon. Nicht mit „Ich“ beginnen. Nie „kein Sales Pitch“ schreiben. Abschluss: Link, dann eine offene Frage, wie sie es heute lösen.'
 
+// Second audience: recruitment agencies (Personalvermittlungen) – own pitch, examples and structure
+export const AGENCY_PITCH = 'HireFlow (hireflow.one) für Personalvermittlungen: Interviews und Kandidatenantworten werden automatisch ausgewertet, Kandidaten strukturiert verglichen und die wichtigsten Punkte stehen direkt für die Vorstellung beim Kunden bereit. So landet eine gute Shortlist schneller beim Kunden und Recruiter:innen verbringen weniger Zeit mit Notizen und Protokollen.'
+export const AGENCY_EXAMPLES = `Hi Constantin,
+
+ich habe gesehen, dass ihr bei hiral Fach- und Führungskräfte für eure Kunden vermittelt. In der Vermittlung entscheidet oft, wie schnell eine gute Shortlist beim Kunden liegt – und dazwischen stecken viele Interviews und Notizen.
+
+Mit HireFlow werten Agenturen Interviews und Kandidatenantworten automatisch aus, vergleichen Kandidaten strukturiert und haben die wichtigsten Punkte direkt für die Kundenvorstellung parat.
+
+Mich interessiert, wie ihr das heute macht: Wo kostet es euch am meisten Zeit?
+
+Beste Grüße
+Henri`
+export type AgencyConfig = { pitch: string; examples: string; link: string }
+export const AGENCY_RE = /personalvermittl|personaldienst|personalberatung|personal[- ]?service|personalleasing|zeitarbeit|arbeitnehmerüberlassung|headhunt|executive search|direct search|recruiting[- ]?(agentur|agency|partner|unternehmen)|personalagentur|staffing|talent (solutions|partners)|recruitment (agency|consultants?)/i
+
 // Henri's messages that worked – the agent copies the style, not the wording
 export const DEFAULT_EXAMPLES = `Hallo Tessa,
 
@@ -55,7 +70,7 @@ Gern zeige ich Ihnen in 20 Minuten, wie das bei {{firma}} aussehen könnte – u
 export type LetterConfig = { sender: string; subject: string; template: string; closing: string; signer: string; signerTitle: string; contact: string }
 
 export type AgentConfig = {
-  first_message: { pitch: string; style: string; examples: string; address: 'auto' | 'Sie' | 'du'; autoDraft: boolean; offer: string; link: string }
+  first_message: { pitch: string; style: string; examples: string; address: 'auto' | 'Sie' | 'du'; autoDraft: boolean; offer: string; link: string; agency: AgencyConfig }
   letter: LetterConfig
   sequence: { steps: SequenceStep[] }
   follow_up_guard: { days: number }
@@ -87,7 +102,7 @@ export const AGENTS: { key: AgentKey; kind: 'agent' | 'workflow'; label: string;
 ]
 
 export const DEFAULTS: AgentConfig = {
-  first_message: { pitch: DEFAULT_PITCH, style: DEFAULT_STYLE, examples: DEFAULT_EXAMPLES, address: 'auto', autoDraft: true, offer: DEFAULT_OFFER, link: DEFAULT_LINK },
+  first_message: { pitch: DEFAULT_PITCH, style: DEFAULT_STYLE, examples: DEFAULT_EXAMPLES, address: 'auto', autoDraft: true, offer: DEFAULT_OFFER, link: DEFAULT_LINK, agency: { pitch: AGENCY_PITCH, examples: AGENCY_EXAMPLES, link: DEFAULT_LINK } },
   letter: { sender: 'HireFlow\nStraße Hausnummer\nPLZ Ort', subject: 'Ihre offenen Stellen – eine Idee für {{firma}}', template: DEFAULT_LETTER, closing: 'Mit freundlichen Grüßen', signer: '', signerTitle: '', contact: '' },
   sequence: { steps: DEFAULT_STEPS },
   follow_up_guard: { days: 7 },
@@ -102,6 +117,7 @@ export async function loadSettings(supabase: any, projectId: string): Promise<Ag
     const row = (data || []).find((r: any) => r.agent_key === a.key)
     ;(out as any)[a.key] = { enabled: row ? row.enabled : true, config: { ...DEFAULTS[a.key], ...(row?.config || {}) } }
   }
+  out.first_message.config.agency = { ...DEFAULTS.first_message.agency, ...(out.first_message.config.agency || {}) }
   const steps = out.sequence.config.steps
   if (!Array.isArray(steps) || !steps.length) out.sequence.config.steps = DEFAULT_STEPS
   return out

@@ -215,6 +215,7 @@ function DraftCard({ item }: { item: QueueItem }) {
             <a href={item.people.linkedin_url} target="_blank" rel="noreferrer" title="LinkedIn-Profil öffnen"
               className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"><ExternalLink className="size-4" /></a>
           )}
+          {item.data?.segment === 'agency' && <Badge tone="violet">Personalvermittlung</Badge>}
           <Badge tone="sky">{item.channel === 'linkedin' ? 'LinkedIn' : item.channel ?? 'Entwurf'}</Badge>
         </div>
       </CardHeader>
@@ -397,6 +398,7 @@ function SettingsSheet({ agentKey, settings, onClose }: { agentKey: AgentKey; se
         <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
           {agentKey === 'first_message' && (
             <>
+              <div className="text-sm font-semibold">Unternehmen (Inhouse-HR)</div>
               <Field label="Was ist HireFlow? (Grundlage für jede Nachricht)">
                 <Textarea rows={4} value={cfg.pitch} onChange={e => set({ pitch: e.target.value })} />
               </Field>
@@ -417,6 +419,21 @@ function SettingsSheet({ agentKey, settings, onClose }: { agentKey: AgentKey; se
               <Field label="Beispiel-Nachrichten, die gut funktioniert haben (optional)" hint="Der Agent übernimmt den Stil, nicht den Wortlaut.">
                 <Textarea rows={6} value={cfg.examples} onChange={e => set({ examples: e.target.value })} />
               </Field>
+              <div className="space-y-4 rounded-md border border-border bg-muted/40 p-4">
+                <div>
+                  <div className="text-sm font-semibold">Personalvermittlungen</div>
+                  <p className="text-xs text-muted-foreground">Eigene Nachricht für Agenturen und Personalberatungen – der Agent erkennt sie automatisch an Name, Branche und Website.</p>
+                </div>
+                <Field label="Was ist HireFlow für Personalvermittlungen?">
+                  <Textarea rows={4} value={cfg.agency?.pitch ?? ''} onChange={e => set({ agency: { ...cfg.agency, pitch: e.target.value } })} />
+                </Field>
+                <Field label="Link (optional)">
+                  <Input value={cfg.agency?.link ?? ''} onChange={e => set({ agency: { ...cfg.agency, link: e.target.value } })} />
+                </Field>
+                <Field label="Beispiel-Nachrichten an Personalvermittlungen">
+                  <Textarea rows={8} value={cfg.agency?.examples ?? ''} onChange={e => set({ agency: { ...cfg.agency, examples: e.target.value } })} />
+                </Field>
+              </div>
               <label className="flex items-center justify-between gap-4 rounded-md border border-border px-3 py-2.5 text-sm">
                 <span>Automatisch Entwürfe für neue Leads schreiben<span className="block text-xs text-muted-foreground">Sonst nur auf Knopfdruck</span></span>
                 <Switch checked={!!cfg.autoDraft} onChange={v => set({ autoDraft: v })} />

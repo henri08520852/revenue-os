@@ -2,7 +2,7 @@
 // Only drafts – the result waits in the approval queue (automation_items) and is never sent automatically.
 import Anthropic from '@anthropic-ai/sdk'
 import { fetchHtml, textOf } from '@/lib/discovery/enrich'
-import { loadSettings, startRun, finishRun, AgentConfig } from './registry'
+import { loadSettings, startRun, finishRun, AgentConfig, AGENCY_RE } from './registry'
 
 export const MODEL = process.env.AI_MODEL || 'claude-haiku-5-5'
 // USD per million tokens (input, output) for the cost counter
@@ -71,7 +71,17 @@ export async function gather(supabase: any, t: Target) {
   return { text: lines.join('\n'), companyName: company.name as string, personName: (person?.full_name as string) || null, firstName: (person?.first_name as string) || null }
 }
 
-function systemPrompt(cfg: AgentConfig['first_message'], sender: string) {
+export type Segment = 'company' | 'agency'
+
+// Recruitment agencies get their own message: name, industry and the start of the website decide
+export function segmentOf(factsText: string): Segment {
+  const head = factsText.split('\nAuszug Website:\n')
+  const site = (head[1] || '').slice(0, 1500)
+  return AGENCY_RE.test(head[0].split('\n').slice(0, 2).join(' ')) || (site.match(new RegExp(AGENCY_RE.source, 'gi')) || []).length >= 2 ? 'agency' : 'company'
+}
+
+function systemPrompt(cfg: AgentConfig['first_message'], sender: string, segment: Segment = 'company') {
+  if (segment === 'agency') return agencyPrompt(cfg, sender)
   const address = cfg.address === 'du' ? 'per Du'
     : cfg.address === 'Sie' ? 'per Sie'
     : 'per Du bei Start-ups, Tech, Agenturen, Beratungen und Firmen unter ca. 50 Mitarbeitenden; per Sie bei klassischem Mittelstand (Industrie, Handwerk, Logistik, Gesundheit, Handel) und größeren Firmen'
@@ -103,19 +113,42 @@ async function senderName(supabase: any, t: Target): Promise<string> {
   return (m?.display_name || m?.email?.split('@')[0] || 'Henri').split(' ')[0]
 }
 
+function agencyPrompt(cfg: AgentConfig['first_message'], sender: string) {
+  const a = cfg.agency
+  return `Du schreibst für ${sender} von HireFlow Erstansprachen auf LinkedIn an Inhaber:innen, Geschäftsführungen und Recruiter:innen von Personalvermittlungen und Personalberatungen im DACH-Raum.
+
+Produkt für Personalvermittlungen: ${a.pitch}
+
+Aufbau der Nachricht (message, 350–550 Zeichen ohne Grußzeile, 3–4 kurze Absätze):
+1. Anrede per Du mit Vornamen („Hi …,“ oder „Hallo …,“). Ohne bekannten Namen: „Hallo zusammen,“.
+2. Ein konkreter Bezug zur Agentur aus den Fakten (Spezialisierung, Branchen, Standorte, was sie vermitteln) und in einem Satz, wo in der Vermittlung Zeit verloren geht (Interviews, Notizen, Kundenvorstellung, Tempo bis zur Shortlist).
+3. Was HireFlow für Agenturen tut, mit genau einem greifbaren Ergebnis. Höchstens zwei Sätze.
+4. ${a.link ? `Optional der Link ${a.link}, dann ` : ''}eine offene Frage, wie sie das heute machen oder wo es am meisten Zeit kostet.
+5. Grußzeile: „Beste Grüße\n${sender}“.
+
+Regeln:
+- Deutsch, per Du, auf Augenhöhe – von Recruiting-Leuten für Recruiting-Leute, nicht wie Werbung.
+- Keine Floskeln, keine Superlative, keine Emojis, keine Aufzählungen, kein Fachjargon. Nie „kein Sales Pitch“ schreiben, keine Terminforderung („15 Minuten“, „wann passt es dir“).
+- Erfinde nichts, was nicht in den Fakten steht. Gibt es bereits Kontakt im Verlauf, knüpfe daran an.
+- connect_note: Vernetzungsnotiz, höchstens 200 Zeichen, ohne Produkt und ohne Link – ein persönlicher Grund (z. B. gleiche Branche Recruiting).
+- hook: der gewählte Bezug in einem Satz.
+- research: 3–5 kurze Fakten über die Agentur (nur aus den Fakten).${a.examples ? `\n\nNachrichten von uns an Personalvermittlungen – Aufbau, Länge und Ton übernehmen, nicht den Wortlaut:\n${a.examples}` : ''}`
+}
+
 export async function draftFirstMessage(supabase: any, t: Target, opts: { runId?: string | null; cfg?: AgentConfig['first_message'] } = {}): Promise<{ draft: Draft; itemId: string; costUsd: number }> {
   const key = apiKey()
   if (!key) throw new Error('KI ist noch nicht eingerichtet (API-Key fehlt).')
   const cfg = opts.cfg ?? (await loadSettings(supabase, t.projectId)).first_message.config
   const [facts, sender] = await Promise.all([gather(supabase, t), senderName(supabase, t)])
   if (!facts) throw new Error('Firma nicht gefunden')
+  const segment = segmentOf(facts.text)
 
   const client = new Anthropic({ apiKey: key })
   const res = await client.messages.create({
     model: MODEL,
     max_tokens: 4000,
     output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
-    system: systemPrompt(cfg, sender),
+    system: systemPrompt(cfg, sender, segment),
     messages: [{ role: 'user', content: `Fakten:\n${facts.text}\n\nSchreibe Vernetzungsnotiz und erste Nachricht${facts.firstName ? ` an ${facts.personName}` : ' an die zuständige Person (ohne Namen, neutrale Anrede)'}.` }],
   } as any)
   if (res.stop_reason === 'refusal') throw new Error('Die KI hat die Anfrage abgelehnt.')
@@ -128,7 +161,7 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: { runId?
     project_id: t.projectId, agent_key: 'first_message', kind: 'message_draft', channel: 'linkedin', status: 'pending',
     title: `Erstnachricht an ${facts.personName || facts.companyName}${facts.personName ? ` (${facts.companyName})` : ''}`,
     body: draft.message, run_id: opts.runId ?? null,
-    data: { connect_note: draft.connect_note?.slice(0, 300), hook: draft.hook, research: draft.research, model: MODEL, cost_usd: costUsd },
+    data: { connect_note: draft.connect_note?.slice(0, 300), hook: draft.hook, research: draft.research, segment, model: MODEL, cost_usd: costUsd },
     company_id: t.companyId, person_id: t.personId ?? null, lead_id: t.leadId ?? null,
   }
   // One open draft per contact/lead: rewrite replaces it
