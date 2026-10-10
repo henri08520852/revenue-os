@@ -48,7 +48,7 @@ export const DEFAULTS: AgentConfig = {
 export type AgentSettings = { [K in AgentKey]: { enabled: boolean; config: AgentConfig[K] } }
 
 export async function loadSettings(supabase: any, projectId: string): Promise<AgentSettings> {
-  const { data } = await supabase.from('agent_settings').select('agent_key, enabled, config').eq('project_id', projectId)
+  const { data } = await supabase.from('automation_settings').select('agent_key, enabled, config').eq('project_id', projectId)
   const out = {} as AgentSettings
   for (const a of AGENTS) {
     const row = (data || []).find((r: any) => r.agent_key === a.key)
@@ -62,13 +62,13 @@ export async function loadSettings(supabase: any, projectId: string): Promise<Ag
 // ---------- run log ----------
 
 export async function startRun(supabase: any, projectId: string, key: AgentKey, trigger: 'manual' | 'cron' | 'event') {
-  const { data } = await supabase.from('agent_runs').insert({ project_id: projectId, agent_key: key, trigger }).select('id').single()
+  const { data } = await supabase.from('automation_runs').insert({ project_id: projectId, agent_key: key, trigger }).select('id').single()
   return (data?.id as string) ?? null
 }
 
 export async function finishRun(supabase: any, runId: string | null, r: { status?: 'ok' | 'error' | 'skipped'; items?: number; summary?: string; error?: string; costUsd?: number }) {
   if (!runId) return
-  await supabase.from('agent_runs').update({
+  await supabase.from('automation_runs').update({
     status: r.status ?? (r.error ? 'error' : 'ok'), items: r.items ?? 0, summary: r.summary ?? null,
     error: r.error ?? null, cost_usd: Math.round((r.costUsd ?? 0) * 100000) / 100000, finished_at: new Date().toISOString(),
   }).eq('id', runId)

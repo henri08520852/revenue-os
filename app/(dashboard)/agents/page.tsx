@@ -15,15 +15,15 @@ export default async function AgentsPage() {
   const [{ team }, settings, items, runs, monthRuns, seq] = await Promise.all([
     getTeamContext(),
     loadSettings(supabase, PROJECT_ID),
-    supabase.from('agent_items')
+    supabase.from('automation_items')
       .select('id, agent_key, kind, channel, title, body, data, created_at, company_id, person_id, lead_id, companies(name), people(full_name, job_title, linkedin_url)')
       .eq('project_id', PROJECT_ID).eq('status', 'pending').order('created_at', { ascending: false }).limit(50),
-    supabase.from('agent_runs').select('id, agent_key, trigger, status, items, summary, error, cost_usd, started_at, finished_at, created_by')
+    supabase.from('automation_runs').select('id, agent_key, trigger, status, items, summary, error, cost_usd, started_at, finished_at, created_by')
       .eq('project_id', PROJECT_ID).order('started_at', { ascending: false }).limit(25),
-    supabase.from('agent_runs').select('agent_key, cost_usd, started_at').eq('project_id', PROJECT_ID).gte('started_at', monthStart),
+    supabase.from('automation_runs').select('agent_key, cost_usd, started_at').eq('project_id', PROJECT_ID).gte('started_at', monthStart),
     supabase.from('sequence_enrollments').select('status').eq('project_id', PROJECT_ID).eq('status', 'active'),
   ])
-  const missing = !!items.error && /agent_items|relation|schema cache/i.test(items.error.message || '')
+  const missing = !!items.error && /automation_items|relation|schema cache/i.test(items.error.message || '')
 
   const lastRun: Record<string, RunRow | null> = {}
   for (const a of AGENTS) lastRun[a.key] = (runs.data || []).find((r: any) => r.agent_key === a.key) ?? null

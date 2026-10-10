@@ -41,8 +41,8 @@ export async function setAgentEnabled(key: string, enabled: boolean): Promise<Re
   if (!isKey(key)) return { error: 'Unbekannter Agent' }
   try {
     const { supabase } = await session()
-    const { data: row } = await supabase.from('agent_settings').select('config').eq('project_id', PROJECT_ID).eq('agent_key', key).maybeSingle()
-    const { error } = await supabase.from('agent_settings').upsert({ project_id: PROJECT_ID, agent_key: key, enabled, config: row?.config ?? {}, updated_at: new Date().toISOString() })
+    const { data: row } = await supabase.from('automation_settings').select('config').eq('project_id', PROJECT_ID).eq('agent_key', key).maybeSingle()
+    const { error } = await supabase.from('automation_settings').upsert({ project_id: PROJECT_ID, agent_key: key, enabled, config: row?.config ?? {}, updated_at: new Date().toISOString() })
     if (error) return { error: error.message }
     revalidatePath('/agents')
     return { error: null }
@@ -70,8 +70,8 @@ export async function saveAgentConfig(key: string, config: Record<string, unknow
       if ('address' in clean) clean.address = clean.address === 'du' ? 'du' : 'Sie'
       if ('autoDraft' in clean) clean.autoDraft = !!clean.autoDraft
     }
-    const { data: row } = await supabase.from('agent_settings').select('enabled, config').eq('project_id', PROJECT_ID).eq('agent_key', key).maybeSingle()
-    const { error } = await supabase.from('agent_settings').upsert({
+    const { data: row } = await supabase.from('automation_settings').select('enabled, config').eq('project_id', PROJECT_ID).eq('agent_key', key).maybeSingle()
+    const { error } = await supabase.from('automation_settings').upsert({
       project_id: PROJECT_ID, agent_key: key, enabled: row?.enabled ?? true, config: { ...(row?.config || {}), ...clean }, updated_at: new Date().toISOString(),
     })
     if (error) return { error: error.message }
@@ -83,9 +83,9 @@ export async function saveAgentConfig(key: string, config: Record<string, unknow
 export async function saveItem(id: string, body: string, connectNote: string | null): Promise<Result> {
   try {
     const { supabase } = await session()
-    const { data: item } = await supabase.from('agent_items').select('data').eq('id', id).single()
+    const { data: item } = await supabase.from('automation_items').select('data').eq('id', id).single()
     if (!item) return { error: 'Entwurf nicht gefunden' }
-    const { error } = await supabase.from('agent_items').update({ body: body.slice(0, 5000), data: { ...item.data, connect_note: connectNote?.slice(0, 600) ?? null, edited: true } }).eq('id', id)
+    const { error } = await supabase.from('automation_items').update({ body: body.slice(0, 5000), data: { ...item.data, connect_note: connectNote?.slice(0, 600) ?? null, edited: true } }).eq('id', id)
     return { error: error?.message ?? null }
   } catch (e) { return fail(e) }
 }
@@ -96,9 +96,9 @@ export async function approveItem(id: string, body: string, connectNote: string 
     const { supabase, me } = await session()
     const saved = await saveItem(id, body, connectNote)
     if (saved.error) return saved
-    const { data: item } = await supabase.from('agent_items').select('company_id, person_id, lead_id, channel, body').eq('id', id).single()
+    const { data: item } = await supabase.from('automation_items').select('company_id, person_id, lead_id, channel, body').eq('id', id).single()
     const now = new Date().toISOString()
-    const { error } = await supabase.from('agent_items').update({ status: 'approved', decided_at: now, decided_by: me.user_id }).eq('id', id)
+    const { error } = await supabase.from('automation_items').update({ status: 'approved', decided_at: now, decided_by: me.user_id }).eq('id', id)
     if (error) return { error: error.message }
     if (item?.person_id && item.channel === 'linkedin') {
       await supabase.from('activities').insert({
@@ -115,7 +115,7 @@ export async function approveItem(id: string, body: string, connectNote: string 
 export async function dismissItem(id: string): Promise<Result> {
   try {
     const { supabase, me } = await session()
-    const { error } = await supabase.from('agent_items').update({ status: 'dismissed', decided_at: new Date().toISOString(), decided_by: me.user_id }).eq('id', id)
+    const { error } = await supabase.from('automation_items').update({ status: 'dismissed', decided_at: new Date().toISOString(), decided_by: me.user_id }).eq('id', id)
     revalidatePath('/agents')
     return { error: error?.message ?? null }
   } catch (e) { return fail(e) }
@@ -124,7 +124,7 @@ export async function dismissItem(id: string): Promise<Result> {
 export async function redraftItem(id: string): Promise<Result> {
   try {
     const { supabase } = await session()
-    const { data: item } = await supabase.from('agent_items').select('company_id, person_id, lead_id').eq('id', id).single()
+    const { data: item } = await supabase.from('automation_items').select('company_id, person_id, lead_id').eq('id', id).single()
     if (!item?.company_id) return { error: 'Entwurf ohne Firma' }
     await draftFirstMessage(supabase, { projectId: PROJECT_ID, companyId: item.company_id, personId: item.person_id, leadId: item.lead_id })
     revalidatePath('/agents')

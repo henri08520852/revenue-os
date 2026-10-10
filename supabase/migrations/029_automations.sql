@@ -1,13 +1,13 @@
 -- ============================================================
 -- 029: Agents & workflows (command center)
---   * agent_settings       on/off + config per agent
---   * agent_runs           log of every run (manual, cron, event) with AI cost
---   * agent_items          approval queue: drafts and suggestions wait for a human
+--   * automation_settings  on/off + config per agent
+--   * automation_runs      log of every run (manual, cron, event) with AI cost
+--   * automation_items     approval queue: drafts and suggestions wait for a human
 --   * sequence_enrollments outreach sequence per lead (one task per step)
 -- Same access rule as every other project table (migration 024).
 -- ============================================================
 
-create table if not exists agent_settings (
+create table if not exists automation_settings (
   project_id  uuid not null references projects(id) on delete cascade,
   agent_key   text not null,
   enabled     boolean not null default true,
@@ -17,7 +17,7 @@ create table if not exists agent_settings (
   primary key (project_id, agent_key)
 );
 
-create table if not exists agent_runs (
+create table if not exists automation_runs (
   id          uuid primary key default gen_random_uuid(),
   project_id  uuid not null references projects(id) on delete cascade,
   agent_key   text not null,
@@ -31,13 +31,13 @@ create table if not exists agent_runs (
   finished_at timestamptz,
   created_by  uuid default auth.uid() references auth.users(id) on delete set null
 );
-create index if not exists idx_agent_runs_recent on agent_runs(project_id, started_at desc);
+create index if not exists idx_automation_runs_recent on automation_runs(project_id, started_at desc);
 
-create table if not exists agent_items (
+create table if not exists automation_items (
   id             uuid primary key default gen_random_uuid(),
   project_id     uuid not null references projects(id) on delete cascade,
   agent_key      text not null,
-  run_id         uuid references agent_runs(id) on delete set null,
+  run_id         uuid references automation_runs(id) on delete set null,
   kind           text not null,                       -- e.g. 'message_draft'
   status         text not null default 'pending' check (status in ('pending','approved','dismissed')),
   channel        text,                                -- linkedin | email | phone
@@ -52,9 +52,9 @@ create table if not exists agent_items (
   decided_at     timestamptz,
   decided_by     uuid references auth.users(id) on delete set null
 );
-create index if not exists idx_agent_items_queue on agent_items(project_id, status, created_at desc);
-create index if not exists idx_agent_items_person on agent_items(person_id);
-create index if not exists idx_agent_items_lead on agent_items(lead_id);
+create index if not exists idx_automation_items_queue on automation_items(project_id, status, created_at desc);
+create index if not exists idx_automation_items_person on automation_items(person_id);
+create index if not exists idx_automation_items_lead on automation_items(lead_id);
 
 create table if not exists sequence_enrollments (
   id              uuid primary key default gen_random_uuid(),
@@ -80,7 +80,7 @@ create trigger trg_sequence_updated_at before update on sequence_enrollments
 do $$
 declare t text;
 begin
-  foreach t in array array['agent_settings','agent_runs','agent_items','sequence_enrollments'] loop
+  foreach t in array array['automation_settings','automation_runs','automation_items','sequence_enrollments'] loop
     execute format('alter table %I enable row level security', t);
     execute format('drop policy if exists %I on %I', t || '_member_all', t);
     execute format('create policy %I on %I for all to authenticated

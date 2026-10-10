@@ -55,7 +55,7 @@ async function status(supabase: any, person: any) {
     supabase.from('tasks').select('title, due_at').eq('person_id', person.id).eq('status', 'open').order('due_at', { ascending: true, nullsFirst: false }).limit(1),
   ])
   // Pending draft from the first-message agent (table exists from migration 029 on)
-  const { data: drafts } = await supabase.from('agent_items').select('id, body, data').eq('person_id', person.id).eq('status', 'pending').order('created_at', { ascending: false }).limit(1)
+  const { data: drafts } = await supabase.from('automation_items').select('id, body, data').eq('person_id', person.id).eq('status', 'pending').order('created_at', { ascending: false }).limit(1)
   return {
     known: true,
     person: { id: person.id, name: person.full_name || [person.first_name, person.last_name].filter(Boolean).join(' '), jobTitle: person.job_title, email: person.email, url: `${APP_URL}/contacts/${person.id}` },

@@ -1,5 +1,5 @@
 // First-message agent: researches company + contact and drafts a LinkedIn connection note and first message.
-// Only drafts – the result waits in the approval queue (agent_items) and is never sent automatically.
+// Only drafts – the result waits in the approval queue (automation_items) and is never sent automatically.
 import Anthropic from '@anthropic-ai/sdk'
 import { fetchHtml, textOf } from '@/lib/discovery/enrich'
 import { loadSettings, startRun, finishRun, AgentConfig } from './registry'
@@ -115,15 +115,15 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: { runId?
     company_id: t.companyId, person_id: t.personId ?? null, lead_id: t.leadId ?? null,
   }
   // One open draft per contact/lead: rewrite replaces it
-  let q = supabase.from('agent_items').select('id').eq('agent_key', 'first_message').eq('status', 'pending')
+  let q = supabase.from('automation_items').select('id').eq('agent_key', 'first_message').eq('status', 'pending')
   q = t.personId ? q.eq('person_id', t.personId) : t.leadId ? q.eq('lead_id', t.leadId) : q.eq('company_id', t.companyId).is('person_id', null)
   const { data: existing } = await q.limit(1)
   let itemId: string
   if (existing?.length) {
     itemId = existing[0].id
-    await supabase.from('agent_items').update({ ...row, created_at: new Date().toISOString() }).eq('id', itemId)
+    await supabase.from('automation_items').update({ ...row, created_at: new Date().toISOString() }).eq('id', itemId)
   } else {
-    const { data, error } = await supabase.from('agent_items').insert(row).select('id').single()
+    const { data, error } = await supabase.from('automation_items').insert(row).select('id').single()
     if (error) throw new Error(error.message)
     itemId = data.id
   }
@@ -157,7 +157,7 @@ export async function draftMissing(supabase: any, projectId: string, trigger: 'm
   try {
     const [{ data: leads }, { data: items }] = await Promise.all([
       supabase.from('leads').select('id, company_id, person_id').eq('project_id', projectId).eq('stage', 'outreach').not('company_id', 'is', null).order('created_at', { ascending: false }).limit(60),
-      supabase.from('agent_items').select('lead_id').eq('project_id', projectId).eq('agent_key', 'first_message').not('lead_id', 'is', null),
+      supabase.from('automation_items').select('lead_id').eq('project_id', projectId).eq('agent_key', 'first_message').not('lead_id', 'is', null),
     ])
     const has = new Set((items || []).map((i: any) => i.lead_id))
     const todo = (leads || []).filter((l: any) => !has.has(l.id)).slice(0, opts.limit ?? 5)
