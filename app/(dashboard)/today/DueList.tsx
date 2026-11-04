@@ -15,10 +15,14 @@ const GROUPS = [
   { key: 'week',    label: 'Diese Woche', color: '#6b7280' },
 ] as const
 
-// "Fällig" block on the Today page: open tasks up to the end of this week, tick off inline
+// Each bucket shows its first few tasks; the rest fold out on click
+const PREVIEW = 3
+
+// "Fällig" block on the Today page: open tasks up to the end of this week, stacked by bucket, tick off inline
 export default function DueList({ tasks, data, mineOnly, showToggle }: { tasks: Task[]; data: TaskPickData; mineOnly?: boolean; showToggle?: boolean }) {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Task | null>(null)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const groups = groupTasks(tasks)
   const total = groups.overdue.length + groups.today.length + groups.week.length
   const ownerName = (id: string | null) => data.team.find(m => m.user_id === id)?.display_name ?? null
@@ -47,19 +51,30 @@ export default function DueList({ tasks, data, mineOnly, showToggle }: { tasks: 
           Diese Woche ist nichts fällig 🎉
         </p>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           {GROUPS.map(g => {
             const list = groups[g.key]
+            const isOpen = !!expanded[g.key]
+            const shown = isOpen ? list : list.slice(0, PREVIEW)
+            const hidden = list.length - shown.length
             return (
               <div key={g.key}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid #f3f4f6' }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: g.color, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{g.label}</span>
                   <span style={{ fontSize: 12, color: '#9ca3af' }}>{list.length}</span>
                 </div>
                 {list.length === 0
-                  ? <p style={{ fontSize: 12, color: '#d1d5db' }}>—</p>
+                  ? <p style={{ fontSize: 12, color: '#9ca3af' }}>Nichts fällig</p>
                   : <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {list.map(t => <TaskRow key={t.id} task={t} ownerName={mineOnly ? null : ownerName(t.owner_id)} onEdit={() => setEditing(t)} />)}
+                      {shown.map(t => <TaskRow key={t.id} task={t} ownerName={mineOnly ? null : ownerName(t.owner_id)} onEdit={() => setEditing(t)} />)}
+                      {(hidden > 0 || (isOpen && list.length > PREVIEW)) && (
+                        <button
+                          onClick={() => setExpanded(e => ({ ...e, [g.key]: !isOpen }))}
+                          style={{ alignSelf: 'flex-start', fontSize: 12, fontWeight: 500, color: '#2563eb', background: 'none', border: 'none', padding: '4px 0', cursor: 'pointer' }}
+                        >
+                          {isOpen ? 'Weniger anzeigen' : `${hidden} weitere anzeigen`}
+                        </button>
+                      )}
                     </div>}
               </div>
             )
