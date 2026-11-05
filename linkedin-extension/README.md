@@ -12,7 +12,7 @@ Die Erweiterung liest nur die sichtbare Seite und nur, wenn du klickst. Sie nutz
 
 ## Installation
 
-1. Ordner `linkedin-extension` herunterladen (oder `revenue-os-linkedin.zip` entpacken).
+1. In Revenue OS unter **Einstellungen → LinkedIn-Erweiterung** die ZIP herunterladen und entpacken (wird bei jedem Deploy automatisch aus diesem Ordner gebaut, `npm run ext:zip`).
 2. Chrome → `chrome://extensions` → oben rechts **Entwicklermodus** an.
 3. **Entpackte Erweiterung laden** → den Ordner `linkedin-extension` wählen.
 4. Einmal in https://revenue-os-chi.vercel.app anmelden – fertig. LinkedIn-Tab neu laden.

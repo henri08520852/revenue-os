@@ -4,11 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/zip-extension.js",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "db:migrate": "supabase db push",
-    "db:types": "supabase gen types typescript --local > types/database.ts"
+    "db:types": "supabase gen types typescript --local > types/database.ts",
+    "ext:zip": "node scripts/zip-extension.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

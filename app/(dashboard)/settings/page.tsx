@@ -42,6 +42,25 @@ export default async function SettingsPage({ searchParams }: { searchParams: { g
       </section>
 
       <section style={card}>
+        <h2 style={h2}>LinkedIn-Erweiterung (Chrome)</h2>
+        <p style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.6, marginBottom: 12 }}>
+          Speichert LinkedIn-Profile und -Nachrichten mit einem Klick hier im CRM – mit deinem eigenen Login.
+        </p>
+        <a href="/revenue-os-linkedin.zip" download style={{ display: 'inline-block', padding: '8px 14px', background: '#2563eb', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+          Erweiterung herunterladen (.zip)
+        </a>
+        <ol style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.8, marginTop: 14, paddingLeft: 18, listStyle: 'decimal' }}>
+          <li>ZIP entpacken (Doppelklick) – es entsteht der Ordner <b>linkedin-extension</b>.</li>
+          <li>In Chrome <code>chrome://extensions</code> öffnen und oben rechts den <b>Entwicklermodus</b> einschalten.</li>
+          <li><b>Entpackte Erweiterung laden</b> klicken und den Ordner <b>linkedin-extension</b> auswählen.</li>
+          <li>LinkedIn-Tab neu laden – unten rechts erscheint <b>⚡ Revenue OS</b>.</li>
+        </ol>
+        <p style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>
+          Den Ordner danach nicht löschen oder verschieben. Für ein Update: neue ZIP entpacken, Ordner ersetzen und bei der Erweiterung auf ↻ klicken.
+        </p>
+      </section>
+
+      <section style={card}>
         <h2 style={h2}>Team <span style={{ fontSize: 12, fontWeight: 500, color: '#9ca3af', marginLeft: 6 }}>{team.length}</span></h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {team.map(m => (
