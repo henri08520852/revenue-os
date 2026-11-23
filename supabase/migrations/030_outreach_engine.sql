@@ -25,7 +25,12 @@ alter table leads add column if not exists replied_at            timestamptz;
 alter table people add column if not exists persona        text;
 alter table people add column if not exists persona_source text check (persona_source in ('rule','manual'));
 
--- A prospect does not make the company warm: only real contact does
+-- Company status follows real contact:
+--   target (nothing sent, also prospects) → outreach (written, no reply) → warm (replied) → hot → customer
+alter table companies drop constraint if exists companies_account_status_check;
+alter table companies add constraint companies_account_status_check
+  check (account_status in ('target','outreach','warm','hot','active_deal','customer','inactive'));
+
 create or replace function derive_company_account_status(p_company_id uuid)
 returns text language sql stable as $$
   select case
@@ -34,7 +39,9 @@ returns text language sql stable as $$
     when exists (select 1 from opportunities o
                  where o.company_id = p_company_id and o.stage not in ('won','lost')) then 'hot'
     when exists (select 1 from leads l
-                 where l.company_id = p_company_id and l.stage not in ('disqualified','prospect')) then 'warm'
+                 where l.company_id = p_company_id and l.stage in ('contacted','qualified','converted')) then 'warm'
+    when exists (select 1 from leads l
+                 where l.company_id = p_company_id and l.stage = 'outreach') then 'outreach'
     else 'target'
   end;
 $$;

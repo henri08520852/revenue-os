@@ -4,10 +4,11 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
-const STATUSES = ['target', 'warm', 'hot', 'customer', 'inactive']
+const STATUSES = ['target', 'outreach', 'warm', 'hot', 'customer', 'inactive']
 
 const COLORS: Record<string, string> = {
   target:      'bg-gray-100 text-gray-600',
+  outreach:    'bg-indigo-100 text-indigo-700',
   warm:        'bg-yellow-100 text-yellow-700',
   hot:         'bg-orange-100 text-orange-700',
   active_deal: 'bg-green-100 text-green-700',

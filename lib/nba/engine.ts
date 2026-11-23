@@ -140,7 +140,7 @@ export async function generateActions(
     let whyAction: string
 
     // Determine action type based on account status
-    if (company.account_status === 'target' || company.account_status === 'warm') {
+    if (company.account_status === 'target' || company.account_status === 'outreach' || company.account_status === 'warm') {
       actionType = hasIntro ? 'intro_request' : 'linkedin_message'
       priority = isHot ? 2 : 3
       whyNow = buildWhyNow(companySignals)

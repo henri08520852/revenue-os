@@ -4,7 +4,8 @@ import Link from 'next/link'
 
 const FLOW = [
   { title: 'Company',  sub: 'Status: Target',            color: '#1d4ed8', bg: '#dbeafe', href: '/companies' },
-  { title: 'Lead',     sub: 'Status: Warm',              color: '#6d28d9', bg: '#ede9fe', href: '/pipeline?show=leads' },
+  { title: 'Angeschrieben', sub: 'Status: Outreach',          color: '#3730a3', bg: '#e0e7ff', href: '/pipeline?show=leads' },
+  { title: 'Antwort',  sub: 'Status: Warm',              color: '#6d28d9', bg: '#ede9fe', href: '/pipeline?show=leads' },
   { title: 'Deal',     sub: 'Status: Hot',               color: '#c2410c', bg: '#ffedd5', href: '/pipeline' },
   { title: 'Gewonnen', sub: 'Status: Customer',          color: '#15803d', bg: '#dcfce7', href: '/pipeline' },
 ]

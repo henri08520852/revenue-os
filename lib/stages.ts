@@ -15,9 +15,11 @@ export const OPPORTUNITY_STAGE_LABELS: Record<OpportunityStageKey, string> = {
 }
 
 // Company lifecycle — set automatically by migration 019 triggers:
-// target → warm (lead exists) → hot (open deal) → customer (deal won). inactive is manual only.
+// target → outreach (written, no reply) → warm (replied) → hot (open deal) → customer (deal won). inactive is manual only.
+// Prospects (not written yet) keep the company on target.
 export const ACCOUNT_STATUSES = [
   { key: 'target',   label: 'Target',   bg: '#dbeafe', text: '#1d4ed8' },
+  { key: 'outreach', label: 'Outreach', bg: '#e0e7ff', text: '#3730a3' },
   { key: 'warm',     label: 'Warm',     bg: '#fef3c7', text: '#92400e' },
   { key: 'hot',      label: 'Hot',      bg: '#ffedd5', text: '#c2410c' },
   { key: 'customer', label: 'Customer', bg: '#ede9fe', text: '#5b21b6' },
