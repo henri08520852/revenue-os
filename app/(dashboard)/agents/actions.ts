@@ -82,6 +82,14 @@ export async function saveAgentConfig(key: string, config: Record<string, unknow
         clean.agency = { pitch: String(a.pitch ?? '').slice(0, 6000), examples: String(a.examples ?? '').slice(0, 6000), link: String(a.link ?? '').slice(0, 300) }
       }
       if ('autoDraft' in clean) clean.autoDraft = !!clean.autoDraft
+      if ('playbooks' in clean) {
+        const t = (v: unknown, n = 600) => String(v ?? '').trim().slice(0, n)
+        clean.playbooks = (Array.isArray(clean.playbooks) ? clean.playbooks as any[] : []).slice(0, 20).filter(p => p?.key).map(p => ({
+          key: t(p.key, 40), name: t(p.name, 80) || t(p.key, 40), personas: Array.isArray(p.personas) ? p.personas.map((x: unknown) => t(x, 40)).slice(0, 8) : [],
+          pain: t(p.pain), outcome: t(p.outcome), question: t(p.question), address: ['du', 'Sie'].includes(p.address) ? p.address : 'auto', active: p.active !== false,
+          variants: (Array.isArray(p.variants) ? p.variants : []).slice(0, 4).map((v: any, i: number) => ({ key: 'ABCD'[i], angle: t(v?.angle, 400) })),
+        }))
+      }
     }
     const { data: row } = await supabase.from('automation_settings').select('enabled, config').eq('project_id', PROJECT_ID).eq('agent_key', key).maybeSingle()
     const { error } = await supabase.from('automation_settings').upsert({
@@ -119,14 +127,17 @@ export async function approveItem(id: string, body: string, connectNote: string 
         channel: 'post', source: 'manual', occurred_at: now, created_by: me.email ?? null, summary: 'Brief verschickt', extracted_intel: { body: item.body },
       })
     }
-    if (item?.person_id && item.channel === 'linkedin') {
+    if ((item?.person_id || item?.company_id) && item.channel === 'linkedin') {
       await supabase.from('activities').insert({
         project_id: PROJECT_ID, company_id: item.company_id, person_id: item.person_id, activity_type: 'linkedin_message', direction: 'outbound',
         channel: 'linkedin_message', source: 'manual', occurred_at: now, created_by: me.email ?? null, summary: 'LinkedIn-Nachricht',
         raw_reference: `li:${item.person_id}:outbound:${String(item.body).slice(0, 200)}`, extracted_intel: { body: item.body },
       })
     }
+    // Sent → lead leaves "Prospect" (database trigger); the sequence continues after the first-contact steps
+    if (item?.lead_id) await advanceSequences(supabase, PROJECT_ID).catch(() => null)
     revalidatePath('/agents')
+    revalidatePath('/pipeline')
     return { error: null }
   } catch (e) { return fail(e) }
 }
@@ -183,7 +194,7 @@ export async function draftForCompany(companyId: string, kind: 'message' | 'lett
   try {
     const { supabase } = await session()
     const [{ data: lead }, { data: people }] = await Promise.all([
-      supabase.from('leads').select('id, person_id').eq('company_id', companyId).in('stage', ['outreach', 'contacted', 'qualified']).order('created_at', { ascending: false }).limit(1),
+      supabase.from('leads').select('id, person_id').eq('company_id', companyId).in('stage', ['prospect', 'outreach', 'contacted', 'qualified']).order('created_at', { ascending: false }).limit(1),
       supabase.from('people').select('id').eq('company_id', companyId).order('created_at', { ascending: true }).limit(1),
     ])
     const target = { projectId: PROJECT_ID, companyId, personId: lead?.[0]?.person_id ?? people?.[0]?.id ?? null, leadId: lead?.[0]?.id ?? null }

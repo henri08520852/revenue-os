@@ -14,6 +14,9 @@ import { Input, Select } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { AGENTS, AgentKey, AgentSettings, SequenceStep } from '@/lib/agents/registry'
+import type { Playbook } from '@/lib/outreach/playbooks'
+import { PERSONAS, type Persona } from '@/lib/outreach/persona'
+import { SIGNALS, type SignalKey } from '@/lib/outreach/playbooks'
 import { cn } from '@/lib/utils'
 import { runAgent, setAgentEnabled, saveAgentConfig, saveItem, saveLetter, approveItem, dismissItem, redraftItem } from './actions'
 
@@ -22,6 +25,7 @@ export type QueueItem = {
   company_id: string | null; person_id: string | null; lead_id: string | null
   companies: { name: string } | null; people: { full_name: string | null; job_title: string | null; linkedin_url: string | null } | null
 }
+export type StatRow = { persona: string; playbook_key: string; variant: string; signal_used: string; sent: number; replies: number; qualified: number; avg_score: number | null }
 export type RunRow = {
   id: string; agent_key: string; trigger: 'manual' | 'cron' | 'event'; status: 'running' | 'ok' | 'error' | 'skipped'; items: number
   summary: string | null; error: string | null; cost_usd: number; started_at: string; finished_at: string | null; created_by: string | null; by?: string | null
@@ -40,8 +44,8 @@ function ago(iso: string) {
 }
 const TRIGGER: Record<RunRow['trigger'], string> = { manual: 'manuell', cron: 'automatisch', event: 'Ereignis' }
 
-export default function AgentsBoard({ missing, settings, items, runs, lastRun, stats }: {
-  missing: boolean; settings: AgentSettings; items: QueueItem[]; runs: RunRow[]
+export default function AgentsBoard({ missing, settings, items, runs, lastRun, stats, outreach = [] }: {
+  missing: boolean; settings: AgentSettings; items: QueueItem[]; runs: RunRow[]; outreach?: StatRow[]
   lastRun: Record<string, RunRow | null>; stats: { pending: number; runs7: number; costUsd: number; activeSequences: number }
 }) {
   const [editing, setEditing] = useState<AgentKey | null>(null)
@@ -88,12 +92,15 @@ export default function AgentsBoard({ missing, settings, items, runs, lastRun, s
           )}
         </section>
 
-        <section>
+        <section className="space-y-6">
+          <OutreachStats rows={outreach} playbooks={settings.first_message.config.playbooks} />
+          <div>
           <h2 className="mb-3 text-[15px] font-semibold">Protokoll</h2>
           <Card className="divide-y divide-border">
             {runs.length === 0 && <div className="px-4 py-6 text-center text-sm text-muted-foreground">Noch keine Läufe</div>}
             {runs.map(r => <RunLine key={r.id} run={r} />)}
           </Card>
+          </div>
         </section>
       </div>
 
@@ -216,10 +223,22 @@ function DraftCard({ item }: { item: QueueItem }) {
               className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"><ExternalLink className="size-4" /></a>
           )}
           {item.data?.segment === 'agency' && <Badge tone="violet">Personalvermittlung</Badge>}
+          {typeof item.data?.score === 'number' && (
+            <Badge tone={item.data.score >= 60 ? 'success' : 'warning'} title={item.data.score >= 60 ? 'Personalisiert' : 'Wirkt generisch – bitte von Hand nachschärfen'}>
+              {item.data.score >= 60 ? `Score ${item.data.score}` : `Generisch · ${item.data.score}`}
+            </Badge>
+          )}
           <Badge tone="sky">{item.channel === 'linkedin' ? 'LinkedIn' : item.channel ?? 'Entwurf'}</Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        {item.data?.persona_label && (
+          <div className="flex flex-wrap gap-1.5 text-[12px]">
+            <Badge tone="outline">{item.data.persona_label}</Badge>
+            {item.data.playbook_name && <Badge tone="outline">{item.data.playbook_name} · Variante {item.data.variant}</Badge>}
+            {item.data.signal_label && <Badge tone={item.data.signal === 'none' ? 'warning' : 'outline'}>{item.data.signal_label}</Badge>}
+          </div>
+        )}
         {item.data?.hook && (
           <div className="flex items-start gap-2 rounded-md bg-violet-50 px-3 py-2 text-[13px] text-violet-900">
             <Sparkles className="mt-0.5 size-3.5 shrink-0" /><span><span className="font-medium">Anlass:</span> {item.data.hook}</span>
@@ -434,6 +453,7 @@ function SettingsSheet({ agentKey, settings, onClose }: { agentKey: AgentKey; se
                   <Textarea rows={8} value={cfg.agency?.examples ?? ''} onChange={e => set({ agency: { ...cfg.agency, examples: e.target.value } })} />
                 </Field>
               </div>
+              <PlaybooksEditor playbooks={cfg.playbooks || []} onChange={playbooks => set({ playbooks })} />
               <label className="flex items-center justify-between gap-4 rounded-md border border-border px-3 py-2.5 text-sm">
                 <span>Automatisch Entwürfe für neue Leads schreiben<span className="block text-xs text-muted-foreground">Sonst nur auf Knopfdruck</span></span>
                 <Switch checked={!!cfg.autoDraft} onChange={v => set({ autoDraft: v })} />
@@ -516,6 +536,97 @@ function StepsEditor({ steps, onChange }: { steps: SequenceStep[]; onChange: (s:
         onClick={() => onChange([...steps, { day: (steps[steps.length - 1]?.day ?? 0) + 3, title: 'Nachfassen', type: 'follow_up' }])}>
         <Plus /> Schritt hinzufügen
       </Button>
+    </div>
+  )
+}
+
+// What works: reply rate per persona / playbook variant / signal (from contacted leads)
+function OutreachStats({ rows, playbooks }: { rows: StatRow[]; playbooks: Playbook[] }) {
+  const [by, setBy] = useState<'persona' | 'variant' | 'signal'>('persona')
+  const pbName = (k: string) => playbooks.find(p => p.key === k)?.name ?? k
+  const groups = new Map<string, { sent: number; replies: number; qualified: number }>()
+  for (const r of rows) {
+    const key = by === 'persona' ? (PERSONAS[r.persona as Persona] ?? r.persona)
+      : by === 'variant' ? (r.playbook_key === 'ohne' ? 'Ohne Playbook' : `${pbName(r.playbook_key)} · ${r.variant}`)
+      : (SIGNALS[r.signal_used as SignalKey] ?? 'Ohne Signal')
+    const g = groups.get(key) ?? { sent: 0, replies: 0, qualified: 0 }
+    g.sent += Number(r.sent); g.replies += Number(r.replies); g.qualified += Number(r.qualified)
+    groups.set(key, g)
+  }
+  const list = Array.from(groups.entries()).sort((a, b) => b[1].sent - a[1].sent)
+  const total = list.reduce((s, [, g]) => s + g.sent, 0)
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-[15px] font-semibold">Was funktioniert</h2>
+        <Select value={by} onChange={e => setBy(e.target.value as any)} className="h-8 w-auto text-[13px]">
+          <option value="persona">nach Persona</option><option value="variant">nach Playbook-Variante</option><option value="signal">nach Signal</option>
+        </Select>
+      </div>
+      <Card className="divide-y divide-border text-[13px]">
+        {list.length === 0 && <div className="px-4 py-6 text-center text-muted-foreground">Noch keine angeschriebenen Leads. Sobald Nachrichten als gesendet markiert sind, stehen hier die Antwortquoten.</div>}
+        {list.map(([k, g]) => {
+          const rate = g.sent ? Math.round((g.replies / g.sent) * 100) : 0
+          return (
+            <div key={k} className="px-4 py-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate font-medium">{k}</span>
+                <span className="shrink-0 tabular-nums text-muted-foreground">{g.replies}/{g.sent} · <span className="font-semibold text-foreground">{rate} %</span></span>
+              </div>
+              <div className="mt-1.5 h-1.5 rounded-full bg-muted"><div className="h-1.5 rounded-full bg-violet-500" style={{ width: `${rate}%` }} /></div>
+            </div>
+          )
+        })}
+        {total > 0 && total < 20 && <div className="px-4 py-2 text-[12px] text-muted-foreground">Erst ab ca. 20 Nachrichten pro Gruppe aussagekräftig.</div>}
+      </Card>
+    </div>
+  )
+}
+
+function PlaybooksEditor({ playbooks, onChange }: { playbooks: Playbook[]; onChange: (p: Playbook[]) => void }) {
+  const [open, setOpen] = useState<string | null>(null)
+  const upd = (i: number, patch: Partial<Playbook>) => onChange(playbooks.map((p, j) => j === i ? { ...p, ...patch } : p))
+  return (
+    <div className="space-y-3 rounded-md border border-border bg-muted/40 p-4">
+      <div>
+        <div className="text-sm font-semibold">Playbooks nach Persona</div>
+        <p className="text-xs text-muted-foreground">Die Persona kommt aus dem Jobtitel. Pro Persona legt das Playbook Schmerz, Ergebnis und Abschlussfrage fest. Die Varianten werden abwechselnd genutzt, damit ihr seht, was mehr Antworten bringt.</p>
+      </div>
+      {playbooks.map((p, i) => (
+        <div key={p.key} className="rounded-md border border-border bg-card">
+          <div className="flex items-center justify-between gap-2 px-3 py-2">
+            <button type="button" className="min-w-0 flex-1 truncate text-left text-sm font-medium" onClick={() => setOpen(open === p.key ? null : p.key)}>
+              {p.name} <span className="text-xs font-normal text-muted-foreground">· {p.variants.length} Variante{p.variants.length > 1 ? 'n' : ''}</span>
+            </button>
+            <Switch checked={p.active} onChange={v => upd(i, { active: v })} />
+          </div>
+          {open === p.key && (
+            <div className="space-y-3 border-t border-border px-3 py-3">
+              <Field label="Typischer Schmerz"><Textarea rows={2} value={p.pain} onChange={e => upd(i, { pain: e.target.value })} /></Field>
+              <Field label="Das eine Ergebnis, das wir nennen"><Textarea rows={2} value={p.outcome} onChange={e => upd(i, { outcome: e.target.value })} /></Field>
+              <Field label="Abschlussfrage (Richtung)"><Input value={p.question} onChange={e => upd(i, { question: e.target.value })} /></Field>
+              <Field label="Anrede">
+                <Select value={p.address} onChange={e => upd(i, { address: e.target.value as Playbook['address'] })}>
+                  <option value="auto">wie oben eingestellt</option><option value="du">du</option><option value="Sie">Sie</option>
+                </Select>
+              </Field>
+              {p.variants.map((v, k) => (
+                <Field key={k} label={`Variante ${'ABCD'[k]} – Winkel`}>
+                  <div className="flex gap-2">
+                    <Input value={v.angle} onChange={e => upd(i, { variants: p.variants.map((x, m) => m === k ? { ...x, angle: e.target.value } : x) })} />
+                    {p.variants.length > 1 && (
+                      <Button type="button" variant="ghost" size="icon" aria-label="Variante entfernen" onClick={() => upd(i, { variants: p.variants.filter((_, m) => m !== k) })}><Trash2 /></Button>
+                    )}
+                  </div>
+                </Field>
+              ))}
+              {p.variants.length < 4 && (
+                <Button type="button" variant="outline" size="sm" onClick={() => upd(i, { variants: [...p.variants, { key: 'ABCD'[p.variants.length], angle: '' }] })}><Plus /> Variante</Button>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   )
 }

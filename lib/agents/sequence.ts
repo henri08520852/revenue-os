@@ -19,6 +19,12 @@ async function createStepTask(supabase: any, e: Enroll, steps: SequenceStep[], i
   return data.id as string
 }
 
+// First step after the pre-contact steps (connect + first message) – where an already contacted lead starts
+export function afterFirstContact(steps: SequenceStep[]) {
+  const i = steps.findIndex(s => !s.draft)
+  return i < 0 ? steps.length - 1 : i
+}
+
 // Returns true when the lead was enrolled (caller then skips its own single follow-up task)
 export async function enrollLead(supabase: any, e: Enroll): Promise<boolean> {
   const settings = await loadSettings(supabase, e.projectId)
@@ -66,9 +72,24 @@ export async function advanceSequences(supabase: any, projectId: string, trigger
       stopped++
     }
     const stage = r.leads?.stage
-    if (!stage || !['outreach', 'contacted'].includes(stage)) { await stop('Lead ist weitergerückt oder geschlossen'); continue }
+    if (!stage || !['prospect', 'outreach', 'contacted'].includes(stage)) { await stop('Lead ist weitergerückt oder geschlossen'); continue }
     if ((replies || []).some((a: any) => a.person_id === r.person_id && a.occurred_at >= r.started_at)) { await stop('Antwort erhalten'); continue }
     const task = r.current_task_id ? taskById.get(r.current_task_id) : null
+    const label = r.leads?.people?.full_name || r.leads?.companies?.name || r.leads?.name || 'Lead'
+    // First message is out (lead left "Prospect") → close the remaining pre-contact steps and continue after them
+    if (stage !== 'prospect' && steps[r.step]?.draft) {
+      const jump = afterFirstContact(steps)
+      if (jump > r.step) {
+        if (task && task.status !== 'done') await supabase.from('tasks').update({ status: 'done', completed_at: new Date().toISOString() }).eq('id', task.id)
+        const gap = Math.max(0, steps[jump].day - (steps[jump - 1]?.day ?? 0)) * DAY
+        const taskId = await createStepTask(supabase, {
+          projectId, leadId: r.lead_id, personId: r.person_id, companyId: r.company_id, ownerId: r.owner_id, label,
+        }, steps, jump, Date.now() + gap)
+        await supabase.from('sequence_enrollments').update({ step: jump, current_task_id: taskId }).eq('id', r.id)
+        advanced++
+        continue
+      }
+    }
     if (task && task.status !== 'done') continue           // current step still open
     const next = r.step + 1
     if (next >= steps.length) {
@@ -78,7 +99,6 @@ export async function advanceSequences(supabase: any, projectId: string, trigger
     // Deleted task → continue now; done task → keep the planned gap between the steps
     const base = task?.completed_at ? Date.parse(task.completed_at) : Date.now()
     const gap = Math.max(0, (steps[next].day - (steps[r.step]?.day ?? 0))) * DAY
-    const label = r.leads?.people?.full_name || r.leads?.companies?.name || r.leads?.name || 'Lead'
     const taskId = await createStepTask(supabase, {
       projectId, leadId: r.lead_id, personId: r.person_id, companyId: r.company_id, ownerId: r.owner_id, label,
     }, steps, next, Math.max(Date.now(), base + gap))

@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
 
 // Stages a lead can be moved to by hand — 'converted' is only set by convertLeadToOpportunity
-const MOVABLE_STAGES = ['outreach', 'contacted', 'qualified', 'disqualified']
+const MOVABLE_STAGES = ['prospect', 'outreach', 'contacted', 'qualified', 'disqualified']
 
 // Date-only follow-ups are stored at 10:00 UTC → same calendar day in Berlin all year
 function toIsoOrNull(date: string | null | undefined) {
@@ -48,7 +48,7 @@ export async function createLead(input: {
     company_id: input.companyId,
     person_id: input.personId || null,
     name: input.name || null,
-    stage: 'outreach',
+    stage: 'prospect',
     source: 'manual',
     notes: input.notes || null,
   }).select('id, project_id, company_id, person_id, owner_id, name').single()

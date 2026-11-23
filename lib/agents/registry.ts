@@ -2,6 +2,7 @@
 // Workflows are fixed rules (no AI, free, predictable); agents use the Claude API and cost a little per run.
 // Everything that would leave the house (messages) lands in the approval queue first.
 
+import { DEFAULT_PLAYBOOKS, mergePlaybooks, type Playbook } from '@/lib/outreach/playbooks'
 export type SequenceStep = { day: number; title: string; type: 'todo' | 'call' | 'email' | 'follow_up'; draft?: boolean; letter?: boolean }
 
 // Tuned for "Heiße Firmen": no cold e-mail – LinkedIn first, phone via the switchboard, letter to the management
@@ -70,7 +71,7 @@ Gern zeige ich Ihnen in 20 Minuten, wie das bei {{firma}} aussehen könnte – u
 export type LetterConfig = { sender: string; subject: string; template: string; closing: string; signer: string; signerTitle: string; contact: string }
 
 export type AgentConfig = {
-  first_message: { pitch: string; style: string; examples: string; address: 'auto' | 'Sie' | 'du'; autoDraft: boolean; offer: string; link: string; agency: AgencyConfig }
+  first_message: { pitch: string; style: string; examples: string; address: 'auto' | 'Sie' | 'du'; autoDraft: boolean; offer: string; link: string; agency: AgencyConfig; playbooks: Playbook[] }
   letter: LetterConfig
   sequence: { steps: SequenceStep[] }
   follow_up_guard: { days: number }
@@ -102,7 +103,7 @@ export const AGENTS: { key: AgentKey; kind: 'agent' | 'workflow'; label: string;
 ]
 
 export const DEFAULTS: AgentConfig = {
-  first_message: { pitch: DEFAULT_PITCH, style: DEFAULT_STYLE, examples: DEFAULT_EXAMPLES, address: 'auto', autoDraft: true, offer: DEFAULT_OFFER, link: DEFAULT_LINK, agency: { pitch: AGENCY_PITCH, examples: AGENCY_EXAMPLES, link: DEFAULT_LINK } },
+  first_message: { pitch: DEFAULT_PITCH, style: DEFAULT_STYLE, examples: DEFAULT_EXAMPLES, address: 'auto', autoDraft: true, offer: DEFAULT_OFFER, link: DEFAULT_LINK, agency: { pitch: AGENCY_PITCH, examples: AGENCY_EXAMPLES, link: DEFAULT_LINK }, playbooks: DEFAULT_PLAYBOOKS },
   letter: { sender: 'HireFlow\nStraße Hausnummer\nPLZ Ort', subject: 'Ihre offenen Stellen – eine Idee für {{firma}}', template: DEFAULT_LETTER, closing: 'Mit freundlichen Grüßen', signer: '', signerTitle: '', contact: '' },
   sequence: { steps: DEFAULT_STEPS },
   follow_up_guard: { days: 7 },
@@ -118,6 +119,7 @@ export async function loadSettings(supabase: any, projectId: string): Promise<Ag
     ;(out as any)[a.key] = { enabled: row ? row.enabled : true, config: { ...DEFAULTS[a.key], ...(row?.config || {}) } }
   }
   out.first_message.config.agency = { ...DEFAULTS.first_message.agency, ...(out.first_message.config.agency || {}) }
+  out.first_message.config.playbooks = mergePlaybooks(out.first_message.config.playbooks)
   const steps = out.sequence.config.steps
   if (!Array.isArray(steps) || !steps.length) out.sequence.config.steps = DEFAULT_STEPS
   return out

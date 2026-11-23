@@ -33,7 +33,7 @@ const BUYER_ROLE_LABELS: Record<string, string> = {
 }
 
 const LEAD_STAGE_LABELS: Record<string, string> = {
-  outreach: 'Outreach', contacted: 'Im Gespräch', qualified: 'Qualifiziert',
+  prospect: 'Prospect', outreach: 'Outreach', contacted: 'Im Gespräch', qualified: 'Qualifiziert',
   converted: 'Umgewandelt', disqualified: 'Disqualifiziert',
 }
 

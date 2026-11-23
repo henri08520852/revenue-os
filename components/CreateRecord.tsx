@@ -22,7 +22,7 @@ const DEAL_STAGES = [
   { key: 'proposal', label: 'Proposal' }, { key: 'negotiation', label: 'Verhandlung' },
 ]
 const LEAD_STAGES = [
-  { key: 'outreach', label: 'Outreach' }, { key: 'contacted', label: 'Im Gespräch' }, { key: 'qualified', label: 'Qualifiziert' },
+  { key: 'prospect', label: 'Prospect' }, { key: 'outreach', label: 'Outreach' }, { key: 'contacted', label: 'Im Gespräch' }, { key: 'qualified', label: 'Qualifiziert' },
 ]
 const DEAL_ROLES = [
   { key: 'champion', label: '⭐ Champion' }, { key: 'decision_maker', label: '🎯 Decision Maker' },
@@ -79,7 +79,7 @@ function Form({ kind, data, preset, onDone, onCancel }: { kind: Exclude<CreateKi
   const [f, setF] = useState({
     first: '', last: '', jobTitle: '', email: '', phone: '', linkedin: '', buyerRole: '', dealRole: preset.dealRole ?? 'stakeholder',
     name: '', domain: '', stage: 'discovery', value: '', ownerId: data.meId ?? '', personId: preset.personId ?? '',
-    nextStep: '', nextStepDate: '', followUp: '', notes: '', leadStage: 'outreach',
+    nextStep: '', nextStepDate: '', followUp: '', notes: '', leadStage: 'prospect',
   })
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF(s => ({ ...s, [k]: e.target.value }))
   const [error, setError] = useState<string | null>(null)

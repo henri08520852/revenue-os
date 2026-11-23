@@ -68,11 +68,11 @@ export async function createFromCalendly(svc: any, conn: GoogleConnection, event
       // Lead in "Im Gespräch" unless the company already has an open lead or deal
       if (companyId) {
         const [{ data: openLead }, { data: openDeal }] = await Promise.all([
-          svc.from('leads').select('id').eq('company_id', companyId).in('stage', ['outreach', 'contacted', 'qualified']).limit(1),
+          svc.from('leads').select('id').eq('company_id', companyId).in('stage', ['prospect', 'outreach', 'contacted', 'qualified']).limit(1),
           svc.from('opportunities').select('id').eq('company_id', companyId).not('stage', 'in', '(won,lost)').limit(1),
         ])
         if (openLead?.length) {
-          await svc.from('leads').update({ stage: 'contacted' }).eq('id', openLead[0].id).eq('stage', 'outreach')
+          await svc.from('leads').update({ stage: 'contacted' }).eq('id', openLead[0].id).in('stage', ['prospect', 'outreach'])
         } else if (!openDeal?.length) {
           await svc.from('leads').insert({
             project_id: conn.project_id, company_id: companyId, person_id: person.id, owner_id: conn.user_id,

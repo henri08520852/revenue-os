@@ -12,7 +12,7 @@ export async function saveQualification(kind: 'lead' | 'deal', id: string, value
   if (error) return { error: error.message }
   // All criteria confirmed → the lead is qualified (ready to become a deal)
   if (kind === 'lead' && qualiScore(q) === QUALI_CRITERIA.length) {
-    await supabase.from('leads').update({ stage: 'qualified' }).eq('id', id).in('stage', ['outreach', 'contacted'])
+    await supabase.from('leads').update({ stage: 'qualified' }).eq('id', id).in('stage', ['prospect', 'outreach', 'contacted'])
   }
   revalidatePath('/', 'layout')
   return { error: null }

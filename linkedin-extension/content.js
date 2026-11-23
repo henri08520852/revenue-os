@@ -291,7 +291,7 @@
     form = {
       first: ctx.firstName, last: ctx.lastName, title: crm?.person?.jobTitle || ctx.jobTitle, email: crm?.person?.email || '',
       companyId: match ? match.id : 'new', companyName: ctx.company,
-      lead: true, stage: ctx.kind === 'thread' && ctx.messages?.some(m => m.inbound) && ctx.messages?.some(m => !m.inbound) ? 'contacted' : 'outreach', fu: true, days: 5,
+      lead: true, stage: ctx.kind === 'thread' && ctx.messages?.some(m => m.inbound) && ctx.messages?.some(m => !m.inbound) ? 'contacted' : ctx.kind === 'thread' && ctx.messages?.some(m => !m.inbound) ? 'outreach' : 'prospect', fu: true, days: 5,
       text: ctx.body || '', direction: ctx.inbound ? 'inbound' : 'outbound', all: false,
       taskTitle: 'LinkedIn Follow-up', taskDate: addDays(3),
     }
@@ -351,7 +351,7 @@
       ${hasOpen ? '' : `
       <label class="chk"><input type="checkbox" id="lead" ${form.lead ? 'checked' : ''}> Als Lead in die Pipeline</label>
       ${form.lead ? `<div class="ind">
-        <div class="seg"><button id="st-outreach" class="${form.stage === 'outreach' ? 'on' : ''}">Outreach</button><button id="st-contacted" class="${form.stage === 'contacted' ? 'on' : ''}">Im Gespräch</button></div>
+        <div class="seg"><button id="st-prospect" class="${form.stage === 'prospect' ? 'on' : ''}" title="Wollen wir anschreiben – noch nichts gesendet">Prospect</button><button id="st-outreach" title="Schon angeschrieben" class="${form.stage === 'outreach' ? 'on' : ''}">Outreach</button><button id="st-contacted" class="${form.stage === 'contacted' ? 'on' : ''}">Im Gespräch</button></div>
         <label class="chk"><input type="checkbox" id="fu" ${form.fu ? 'checked' : ''}> Follow-up in <input class="n" id="days" value="${esc(form.days)}" autocomplete="off"> Tagen</label>
       </div>` : ''}`}`
   }
@@ -426,7 +426,7 @@
     if ($('companyId')) $('companyId').onchange = e => { form.companyId = e.target.value; render() }
     if ($('lead')) $('lead').onchange = e => { form.lead = e.target.checked; render() }
     if ($('fu')) $('fu').onchange = e => { form.fu = e.target.checked }
-    for (const st of ['outreach', 'contacted']) if ($('st-' + st)) $('st-' + st).onclick = () => { form.stage = st; render() }
+    for (const st of ['prospect', 'outreach', 'contacted']) if ($('st-' + st)) $('st-' + st).onclick = () => { form.stage = st; render() }
     if ($('in')) $('in').onclick = () => { form.direction = 'inbound'; render() }
     if ($('out')) $('out').onclick = () => { form.direction = 'outbound'; render() }
     if ($('all')) $('all').onchange = e => { form.all = e.target.checked; render() }

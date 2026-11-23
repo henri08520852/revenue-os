@@ -86,12 +86,12 @@ export async function takeCandidate(id: string, asLead: boolean): Promise<Result
     let newLeadId: string | undefined
     if (asLead) {
       const [{ data: openLead }, { data: openDeal }] = await Promise.all([
-        supabase.from('leads').select('id').eq('company_id', companyId).in('stage', ['outreach', 'contacted', 'qualified']).limit(1),
+        supabase.from('leads').select('id').eq('company_id', companyId).in('stage', ['prospect', 'outreach', 'contacted', 'qualified']).limit(1),
         supabase.from('opportunities').select('id').eq('company_id', companyId).not('stage', 'in', '(won,lost)').limit(1),
       ])
       if (!openLead?.length && !openDeal?.length) {
         const { data: lead, error } = await supabase.from('leads').insert({
-          project_id: PROJECT_ID, company_id: companyId, person_id: contactId, owner_id: user.id, stage: 'outreach', source: 'signal',
+          project_id: PROJECT_ID, company_id: companyId, person_id: contactId, owner_id: user.id, stage: 'prospect', source: 'signal',
           notes: reason ? `Signal: ${reason}` : null,
         }).select('id').single()
         if (error) return { error: error.message }

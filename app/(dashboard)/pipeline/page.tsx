@@ -8,7 +8,7 @@ import { ACTIVE_OPPORTUNITY_STAGES } from '@/lib/stages'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
 const ACTIVE_STAGES: string[] = ACTIVE_OPPORTUNITY_STAGES
-const OPEN_LEAD = ['outreach', 'contacted', 'qualified']
+const OPEN_LEAD = ['prospect', 'outreach', 'contacted', 'qualified']
 
 type Search = { show?: string; owner?: string; closed?: string; focus?: string }
 

@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getTeamContext } from '@/lib/team'
 import { AGENTS, loadSettings } from '@/lib/agents/registry'
-import AgentsBoard, { QueueItem, RunRow } from './AgentsBoard'
+import AgentsBoard, { QueueItem, RunRow, StatRow } from './AgentsBoard'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // "Jetzt ausführen" for the first-message agent writes several drafts
@@ -12,7 +12,7 @@ export default async function AgentsPage() {
   const supabase = createClient() as any
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString()
-  const [{ team }, settings, items, runs, monthRuns, seq] = await Promise.all([
+  const [{ team }, settings, items, runs, monthRuns, seq, outreach] = await Promise.all([
     getTeamContext(),
     loadSettings(supabase, PROJECT_ID),
     supabase.from('automation_items')
@@ -22,6 +22,7 @@ export default async function AgentsPage() {
       .eq('project_id', PROJECT_ID).order('started_at', { ascending: false }).limit(25),
     supabase.from('automation_runs').select('agent_key, cost_usd, started_at').eq('project_id', PROJECT_ID).gte('started_at', monthStart),
     supabase.from('sequence_enrollments').select('status').eq('project_id', PROJECT_ID).eq('status', 'active'),
+    supabase.from('outreach_stats').select('persona, playbook_key, variant, signal_used, sent, replies, qualified, avg_score').eq('project_id', PROJECT_ID),
   ])
   const missing = !!items.error && /automation_items|relation|schema cache/i.test(items.error.message || '')
 
@@ -38,6 +39,7 @@ export default async function AgentsPage() {
       items={(items.data || []) as QueueItem[]}
       runs={((runs.data || []) as RunRow[]).map(r => ({ ...r, by: r.created_by ? names[r.created_by] ?? null : null }))}
       lastRun={lastRun}
+      outreach={(outreach.data || []) as StatRow[]}
       stats={{ pending: (items.data || []).length, runs7, costUsd: cost, activeSequences: (seq.data || []).length }}
     />
   )

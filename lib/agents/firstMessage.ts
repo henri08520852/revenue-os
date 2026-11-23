@@ -3,6 +3,8 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { fetchHtml, textOf } from '@/lib/discovery/enrich'
 import { loadSettings, startRun, finishRun, AgentConfig, AGENCY_RE } from './registry'
+import { personaOf, roleCategoryOf, PERSONAS, type Persona } from '@/lib/outreach/persona'
+import { playbookFor, pickVariant, pickSignal, personalizationScore, SIGNALS } from '@/lib/outreach/playbooks'
 
 export const MODEL = process.env.AI_MODEL || 'claude-haiku-5-5'
 // USD per million tokens (input, output) for the cost counter
@@ -34,9 +36,9 @@ export const apiKey = () => process.env.ANTHROPIC_BRIEFING_API_KEY || process.en
 export async function gather(supabase: any, t: Target) {
   const [{ data: company }, { data: person }, { data: cand }, { data: signals }, { data: acts }] = await Promise.all([
     supabase.from('companies').select('name, domain, website_url, industry, city, country, employee_estimate, employee_range').eq('id', t.companyId).single(),
-    t.personId ? supabase.from('people').select('full_name, first_name, last_name, job_title').eq('id', t.personId).single() : { data: null },
+    t.personId ? supabase.from('people').select('full_name, first_name, last_name, job_title, persona, persona_source, role_category').eq('id', t.personId).single() : { data: null },
     supabase.from('candidate_companies').select('hiring, enrichment_data, evidence').eq('existing_company_id', t.companyId).order('updated_at', { ascending: false }).limit(1),
-    supabase.from('signals').select('reason, created_at').eq('company_id', t.companyId).order('created_at', { ascending: false }).limit(3),
+    supabase.from('signals').select('reason, created_at, signal_type').eq('company_id', t.companyId).order('created_at', { ascending: false }).limit(3),
     supabase.from('activities').select('activity_type, direction, occurred_at, summary, extracted_intel').eq('company_id', t.companyId).order('occurred_at', { ascending: false }).limit(6),
   ])
   if (!company) return null
@@ -68,7 +70,17 @@ export async function gather(supabase: any, t: Target) {
   const history = (acts || []).map((a: any) => `- ${a.occurred_at?.slice(0, 10)} ${a.activity_type} ${a.direction || ''}: ${String(a.extracted_intel?.body || a.summary || '').slice(0, 300)}`)
   if (history.length) lines.push(`Bisheriger Kontakt:\n${history.join('\n')}`)
   if (website) lines.push(`Auszug Website:\n${website}`)
-  return { text: lines.join('\n'), companyName: company.name as string, personName: (person?.full_name as string) || null, firstName: (person?.first_name as string) || null }
+  const evidence = (c?.evidence || []) as any[]
+  return {
+    text: lines.join('\n'), companyName: company.name as string, personName: (person?.full_name as string) || null, firstName: (person?.first_name as string) || null,
+    jobTitle: (person?.job_title as string) || null, size: size ?? null, person,
+    signalFacts: {
+      hiring: h ?? null, jobs: evidence.filter(e => e?.title && (e.published_at || e.first_seen_at)),
+      signalReasons: (signals || []).map((s: any) => ({ reason: s.reason, created_at: s.created_at, type: s.signal_type })),
+      hasHistory: (acts || []).some((a: any) => a.direction === 'inbound' || a.direction === 'outbound'),
+    },
+    factWords: [...(h?.repeated || []).map((r: any) => r.role), ...(h?.hrRoles || []), ...jobs] as string[],
+  }
 }
 
 export type Segment = 'company' | 'agency'
@@ -143,25 +155,45 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: { runId?
   if (!facts) throw new Error('Firma nicht gefunden')
   const segment = segmentOf(facts.text)
 
+  // Personalisation: persona (manual wins) → playbook → least used variant → strongest signal
+  const p = facts.person as any
+  const persona: Persona = p?.persona_source === 'manual' && p?.persona ? p.persona : personaOf(facts.jobTitle, facts.size, segment === 'agency')
+  const playbook = playbookFor(cfg.playbooks, persona)
+  const { data: usedRows } = await supabase.from('leads').select('variant').eq('project_id', t.projectId).eq('playbook_key', playbook.key).not('variant', 'is', null)
+  const used: Record<string, number> = {}
+  for (const r of usedRows || []) used[r.variant] = (used[r.variant] ?? 0) + 1
+  const variant = pickVariant(playbook, used)
+  const signal = pickSignal(facts.signalFacts)
+  const address = cfg.address === 'auto' && playbook.address !== 'auto' ? playbook.address : cfg.address
+  const brief = [
+    `Zielperson: ${PERSONAS[persona]}`,
+    `Playbook „${playbook.name}“, Variante ${variant.key}${variant.angle ? `: ${variant.angle}` : ''}`,
+    `Typischer Schmerz dieser Zielperson: ${playbook.pain}`,
+    `Das eine Ergebnis, das wir nennen: ${playbook.outcome}`,
+    `Offene Frage am Ende in diese Richtung: ${playbook.question}`,
+    `Aufhänger (warum gerade jetzt): ${signal.text}`,
+  ].join('\n')
+
   const client = new Anthropic({ apiKey: key })
   const res = await client.messages.create({
     model: MODEL,
     max_tokens: 4000,
     output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
-    system: systemPrompt(cfg, sender, segment),
-    messages: [{ role: 'user', content: `Fakten:\n${facts.text}\n\nSchreibe Vernetzungsnotiz und erste Nachricht${facts.firstName ? ` an ${facts.personName}` : ' an die zuständige Person (ohne Namen, neutrale Anrede)'}.` }],
+    system: systemPrompt({ ...cfg, address }, sender, segment),
+    messages: [{ role: 'user', content: `Fakten:\n${facts.text}\n\nVorgaben für diese Nachricht (Winkel, Ergebnis und Frage hieraus übernehmen, Aufhänger als Anlass nutzen):\n${brief}\n\nSchreibe Vernetzungsnotiz und erste Nachricht${facts.firstName ? ` an ${facts.personName}` : ' an die zuständige Person (ohne Namen, neutrale Anrede)'}.` }],
   } as any)
   if (res.stop_reason === 'refusal') throw new Error('Die KI hat die Anfrage abgelehnt.')
   const block = res.content.find(b => b.type === 'text')
   const draft = JSON.parse(block && block.type === 'text' ? block.text : '{}') as Draft
   if (!draft.message) throw new Error('KI-Antwort unvollständig')
   const costUsd = costOf(MODEL, res.usage)
+  const score = personalizationScore(draft.message, { signal: signal.key, firstName: facts.firstName, facts: facts.factWords })
 
   const row = {
     project_id: t.projectId, agent_key: 'first_message', kind: 'message_draft', channel: 'linkedin', status: 'pending',
     title: `Erstnachricht an ${facts.personName || facts.companyName}${facts.personName ? ` (${facts.companyName})` : ''}`,
     body: draft.message, run_id: opts.runId ?? null,
-    data: { connect_note: draft.connect_note?.slice(0, 300), hook: draft.hook, research: draft.research, segment, model: MODEL, cost_usd: costUsd },
+    data: { connect_note: draft.connect_note?.slice(0, 300), hook: draft.hook, research: draft.research, segment, model: MODEL, cost_usd: costUsd, persona, persona_label: PERSONAS[persona], playbook: playbook.key, playbook_name: playbook.name, variant: variant.key, signal: signal.key, signal_label: SIGNALS[signal.key], score },
     company_id: t.companyId, person_id: t.personId ?? null, lead_id: t.leadId ?? null,
   }
   // One open draft per contact/lead: rewrite replaces it
@@ -176,6 +208,11 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: { runId?
     const { data, error } = await supabase.from('automation_items').insert(row).select('id').single()
     if (error) throw new Error(error.message)
     itemId = data.id
+  }
+  // Remember what was used: lead (for reply rates) and contact (persona)
+  if (t.leadId) await supabase.from('leads').update({ persona, playbook_key: playbook.key, variant: variant.key, signal_used: signal.key, personalization_score: score }).eq('id', t.leadId)
+  if (t.personId && p?.persona_source !== 'manual') {
+    await supabase.from('people').update({ persona, persona_source: 'rule', ...(p?.role_category ? {} : { role_category: roleCategoryOf(persona) }) }).eq('id', t.personId)
   }
   return { draft, itemId, costUsd }
 }
@@ -206,7 +243,7 @@ export async function draftMissing(supabase: any, projectId: string, trigger: 'm
   const errors: string[] = []
   try {
     const [{ data: leads }, { data: items }] = await Promise.all([
-      supabase.from('leads').select('id, company_id, person_id').eq('project_id', projectId).eq('stage', 'outreach').not('company_id', 'is', null).order('created_at', { ascending: false }).limit(60),
+      supabase.from('leads').select('id, company_id, person_id').eq('project_id', projectId).in('stage', ['prospect', 'outreach']).not('company_id', 'is', null).order('created_at', { ascending: false }).limit(60),
       supabase.from('automation_items').select('lead_id').eq('project_id', projectId).eq('agent_key', 'first_message').not('lead_id', 'is', null),
     ])
     const has = new Set((items || []).map((i: any) => i.lead_id))

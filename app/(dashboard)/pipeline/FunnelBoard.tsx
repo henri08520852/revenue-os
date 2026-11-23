@@ -16,6 +16,7 @@ export type Show = 'all' | 'leads' | 'deals'
 
 type Col = { key: string; label: string; color: string }
 const LEAD_COLS: Col[] = [
+  { key: 'prospect',  label: 'Prospect',     color: '#ddd6fe' },
   { key: 'outreach',  label: 'Outreach',     color: '#c4b5fd' },
   { key: 'contacted', label: 'Im Gespräch',  color: '#a78bfa' },
   { key: 'qualified', label: 'Qualifiziert', color: '#7c3aed' },

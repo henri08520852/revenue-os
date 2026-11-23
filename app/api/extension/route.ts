@@ -7,7 +7,9 @@ import { OPPORTUNITY_STAGE_LABELS } from '@/lib/stages'
 import { ALLOWED_EMAIL_DOMAIN } from '@/lib/google/oauth'
 import { loadCrmIndex } from '@/lib/google/matching'
 import { rematchInbox } from '@/lib/google/emails'
-import { enrollLead } from '@/lib/agents/sequence'
+import { enrollLead, afterFirstContact, advanceSequences } from '@/lib/agents/sequence'
+import { loadSettings } from '@/lib/agents/registry'
+import { personaOf, roleCategoryOf } from '@/lib/outreach/persona'
 import { draftOnEvent, draftFirstMessage } from '@/lib/agents/firstMessage'
 
 export const dynamic = 'force-dynamic'
@@ -15,7 +17,7 @@ export const maxDuration = 60
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID!
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || 'https://revenue-os-chi.vercel.app').replace(/\/$/, '')
-const LEAD_STAGES: Record<string, string> = { outreach: 'Outreach', contacted: 'Im Gespräch', qualified: 'Qualifiziert', converted: 'Umgewandelt', disqualified: 'Disqualifiziert' }
+const LEAD_STAGES: Record<string, string> = { prospect: 'Prospect', outreach: 'Outreach', contacted: 'Im Gespräch', qualified: 'Qualifiziert', converted: 'Umgewandelt', disqualified: 'Disqualifiziert' }
 
 // Same slug the people trigger stores in linkedin_id (migration 003)
 function slugOf(url: string | null | undefined) {
@@ -120,23 +122,31 @@ export async function POST(req: Request) {
         if (error) throw new Error(error.message)
         person = { id: data.id }
       }
+      // Persona from the job title (a persona set by hand stays)
+      if (fields.job_title) {
+        const { data: co } = companyId ? await supabase.from('companies').select('employee_estimate, employee_range').eq('id', companyId).single() : { data: null }
+        const persona = personaOf(fields.job_title, co?.employee_estimate || co?.employee_range, false)
+        await supabase.from('people').update({ persona, persona_source: 'rule', role_category: roleCategoryOf(persona) })
+          .eq('id', person.id).or('persona_source.is.null,persona_source.eq.rule')
+      }
 
-      // Lead in Outreach (unless the company already has an open lead or deal) + follow-up task
+      const leadStage = ['prospect', 'outreach', 'contacted'].includes(body.leadStage) ? body.leadStage : 'prospect'
+      // Lead (unless the company already has an open lead or deal) + follow-up task
       if (body.createLead && companyId) {
         const [{ data: openLead }, { data: openDeal }] = await Promise.all([
-          supabase.from('leads').select('id').eq('company_id', companyId).in('stage', ['outreach', 'contacted', 'qualified']).limit(1),
+          supabase.from('leads').select('id').eq('company_id', companyId).in('stage', ['prospect', 'outreach', 'contacted', 'qualified']).limit(1),
           supabase.from('opportunities').select('id').eq('company_id', companyId).not('stage', 'in', '(won,lost)').limit(1),
         ])
         if (!openLead?.length && !openDeal?.length) {
           const { data: lead, error } = await supabase.from('leads').insert({
             project_id: PROJECT_ID, company_id: companyId, person_id: person.id, owner_id: user.id,
-            stage: body.leadStage === 'contacted' ? 'contacted' : 'outreach', source: 'linkedin', name: str(body.leadName, 120) || null,
+            stage: leadStage, source: 'linkedin', name: str(body.leadName, 120) || null,
           }).select('id').single()
           if (error) throw new Error(error.message)
           // Outreach sequence (if switched on) replaces the single follow-up task; already written → start at the call
           const enrolled = await enrollLead(supabase, {
             projectId: PROJECT_ID, leadId: lead.id, personId: person.id, companyId, ownerId: user.id, createdBy: user.id,
-            label: fields.full_name, startStep: body.leadStage === 'contacted' ? 2 : 0,
+            label: fields.full_name, startStep: leadStage === 'prospect' ? 0 : afterFirstContact((await loadSettings(supabase, PROJECT_ID)).sequence.config.steps),
           }).catch(() => false)
           const days = enrolled ? 0 : Math.min(60, Math.max(0, Number(body.followUpDays) || 0))
           if (days) {
@@ -161,7 +171,7 @@ export async function POST(req: Request) {
       // First-message agent for this contact; "force" rewrites even when auto drafts are off
       const person = await findPerson(supabase, slug, name)
       if (!person?.company_id) return NextResponse.json({ error: 'Kontakt mit Firma zuerst in Revenue OS anlegen.' }, { status: 404 })
-      const { data: lead } = await supabase.from('leads').select('id').eq('company_id', person.company_id).in('stage', ['outreach', 'contacted']).order('created_at', { ascending: false }).limit(1)
+      const { data: lead } = await supabase.from('leads').select('id').eq('company_id', person.company_id).in('stage', ['prospect', 'outreach', 'contacted']).order('created_at', { ascending: false }).limit(1)
       const target = { projectId: PROJECT_ID, companyId: person.company_id, personId: person.id, leadId: lead?.[0]?.id ?? null }
       const r = body.force ? await draftFirstMessage(supabase, target) : await draftOnEvent(supabase, target)
       if (!r) return NextResponse.json({ error: 'Der Erstnachricht-Agent ist ausgeschaltet.' }, { status: 409 })
@@ -184,7 +194,7 @@ export async function POST(req: Request) {
 
       const [{ data: deal }, { data: outreachLead }] = person.company_id ? await Promise.all([
         supabase.from('opportunities').select('id').eq('company_id', person.company_id).not('stage', 'in', '(won,lost)').order('created_at', { ascending: false }).limit(1),
-        supabase.from('leads').select('id').eq('company_id', person.company_id).eq('stage', 'outreach').limit(1),
+        supabase.from('leads').select('id').eq('company_id', person.company_id).in('stage', ['prospect', 'outreach']).limit(1),
       ]) : [{ data: [] }, { data: [] }]
 
       // Same text twice → log once
@@ -210,6 +220,8 @@ export async function POST(req: Request) {
         const { error } = await supabase.from('activities').insert(rows)
         if (error) throw new Error(error.message)
       }
+      // Sent message moves Prospect → Outreach (database trigger); move the sequence on right away
+      if (rows.some(r => r.direction === 'outbound')) await advanceSequences(supabase, PROJECT_ID).catch(() => null)
       const inbound = rows.some(r => r.direction === 'inbound')
       if (inbound) {
         const latest = rows.filter(r => r.direction === 'inbound').map(r => r.occurred_at).sort().pop()
@@ -227,7 +239,7 @@ export async function POST(req: Request) {
       // Attach to the open deal, else the open lead of the company
       const [{ data: deal }, { data: lead }] = person.company_id ? await Promise.all([
         supabase.from('opportunities').select('id').eq('company_id', person.company_id).not('stage', 'in', '(won,lost)').order('created_at', { ascending: false }).limit(1),
-        supabase.from('leads').select('id').eq('company_id', person.company_id).in('stage', ['outreach', 'contacted', 'qualified']).order('created_at', { ascending: false }).limit(1),
+        supabase.from('leads').select('id').eq('company_id', person.company_id).in('stage', ['prospect', 'outreach', 'contacted', 'qualified']).order('created_at', { ascending: false }).limit(1),
       ]) : [{ data: [] }, { data: [] }]
       const { error } = await supabase.from('tasks').insert({
         project_id: PROJECT_ID, title, task_type: ['call', 'email', 'follow_up', 'meeting'].includes(body.taskType) ? body.taskType : 'todo',

@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { convertLeadToOpportunity, updateLeadFollowUp, updateLeadOwner, updateLeadStage } from './actions'
 
 export const LEAD_STAGES = [
+  { key: 'prospect',     label: 'Prospect',     color: '#cbd5e1' },
   { key: 'outreach',     label: 'Outreach',     color: '#94a3b8' },
   { key: 'contacted',    label: 'Im Gespräch',  color: '#60a5fa' },
   { key: 'qualified',    label: 'Qualifiziert', color: '#8b5cf6' },
@@ -15,7 +16,7 @@ export const LEAD_STAGES = [
   { key: 'disqualified', label: 'Disqualifiziert', color: '#9ca3af' },
 ]
 
-const MOVABLE = ['outreach', 'contacted', 'qualified', 'disqualified']
+const MOVABLE = ['prospect', 'outreach', 'contacted', 'qualified', 'disqualified']
 
 export type Member = { user_id: string; display_name: string }
 

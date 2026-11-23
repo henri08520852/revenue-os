@@ -1,7 +1,7 @@
 // Follow-up guard: open leads and deals with no open task and no activity for N days get a follow-up task.
 import { loadSettings, startRun, finishRun } from './registry'
 
-const LEAD_OPEN = ['outreach', 'contacted', 'qualified']
+const LEAD_OPEN = ['prospect', 'outreach', 'contacted', 'qualified']
 const MAX_TASKS = 40
 
 export async function runFollowUpGuard(supabase: any, projectId: string, trigger: 'manual' | 'cron') {
