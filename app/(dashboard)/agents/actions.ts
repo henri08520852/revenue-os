@@ -75,13 +75,14 @@ export async function saveAgentConfig(key: string, config: Record<string, unknow
       if (!String(clean.template || '').trim()) return { error: 'Die Vorlage darf nicht leer sein' }
     }
     if (key === 'first_message') {
-      for (const f of ['pitch', 'style', 'examples', 'offer', 'link']) if (f in clean && typeof clean[f] !== 'object') clean[f] = String(clean[f] ?? '').slice(0, 6000)
+      for (const f of ['pitch', 'style', 'examples', 'offer', 'link', 'baseText']) if (f in clean && typeof clean[f] !== 'object') clean[f] = String(clean[f] ?? '').slice(0, 6000)
       if ('address' in clean) clean.address = ['du', 'Sie'].includes(clean.address as string) ? clean.address : 'auto'
       if ('agency' in clean) {
         const a = (clean.agency || {}) as Record<string, unknown>
         clean.agency = { pitch: String(a.pitch ?? '').slice(0, 6000), examples: String(a.examples ?? '').slice(0, 6000), link: String(a.link ?? '').slice(0, 300) }
       }
       if ('autoDraft' in clean) clean.autoDraft = !!clean.autoDraft
+      if ('useBaseText' in clean) clean.useBaseText = !!clean.useBaseText
       if ('playbooks' in clean) {
         const t = (v: unknown, n = 600) => String(v ?? '').trim().slice(0, n)
         clean.playbooks = (Array.isArray(clean.playbooks) ? clean.playbooks as any[] : []).slice(0, 20).filter(p => p?.key).map(p => ({
@@ -104,9 +105,12 @@ export async function saveAgentConfig(key: string, config: Record<string, unknow
 export async function saveItem(id: string, body: string, connectNote: string | null): Promise<Result> {
   try {
     const { supabase } = await session()
-    const { data: item } = await supabase.from('automation_items').select('data').eq('id', id).single()
+    const { data: item } = await supabase.from('automation_items').select('data, body').eq('id', id).single()
     if (!item) return { error: 'Entwurf nicht gefunden' }
-    const { error } = await supabase.from('automation_items').update({ body: body.slice(0, 5000), data: { ...item.data, connect_note: connectNote?.slice(0, 600) ?? null, edited: true } }).eq('id', id)
+    const changed = (item.body ?? '') !== body
+    // Keep the agent's original next to the edited version (to learn what we change)
+    const original = item.data?.original ?? (changed ? item.body : undefined)
+    const { error } = await supabase.from('automation_items').update({ body: body.slice(0, 5000), data: { ...item.data, connect_note: connectNote?.slice(0, 600) ?? null, edited: !!item.data?.edited || changed, ...(original ? { original } : {}) } }).eq('id', id)
     return { error: error?.message ?? null }
   } catch (e) { return fail(e) }
 }
@@ -154,11 +158,12 @@ export async function dismissItem(id: string): Promise<Result> {
 export async function redraftItem(id: string): Promise<Result> {
   try {
     const { supabase } = await session()
-    const { data: item } = await supabase.from('automation_items').select('kind, company_id, person_id, lead_id').eq('id', id).single()
+    const { data: item } = await supabase.from('automation_items').select('kind, company_id, person_id, lead_id, data').eq('id', id).single()
     if (!item?.company_id) return { error: 'Entwurf ohne Firma' }
     const target = { projectId: PROJECT_ID, companyId: item.company_id, personId: item.person_id, leadId: item.lead_id }
     if (item.kind === 'letter') await draftLetter(supabase, target)
-    else await draftFirstMessage(supabase, target)
+    // Keep what the team typed in (composer / extension) for the rewrite
+    else await draftFirstMessage(supabase, target, { notes: item.data?.notes, profile: item.data?.profile, address: item.data?.address })
     revalidatePath('/agents')
     return { error: null }
   } catch (e) { return fail(e) }

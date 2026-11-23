@@ -114,9 +114,10 @@ export function pickVariant(pb: Playbook, used: Record<string, number>): Playboo
 
 // ---------- signals: why now ----------
 
-export type SignalKey = 'repeated_role' | 'builds_recruiting' | 'long_open' | 'new_jobs' | 'many_jobs' | 'news' | 'history' | 'none'
+export type SignalKey = 'personal' | 'repeated_role' | 'builds_recruiting' | 'long_open' | 'new_jobs' | 'many_jobs' | 'news' | 'history' | 'none'
 
 export const SIGNALS: Record<SignalKey, string> = {
+  personal: 'Persönlicher Bezug',
   repeated_role: 'Rolle mehrfach gesucht',
   builds_recruiting: 'Baut Recruiting auf',
   long_open: 'Stelle lange offen',
@@ -134,11 +135,13 @@ export type SignalFacts = {
   jobs?: { title?: string; published_at?: string; first_seen_at?: string }[]
   signalReasons?: { reason: string; created_at: string; type?: string }[]
   hasHistory?: boolean
+  personal?: string | null
 }
 
 // Strongest fresh signal first
 export function pickSignal(f: SignalFacts): Signal {
   const h = f.hiring
+  if (f.personal) return { key: 'personal', text: `Persönlicher Bezug vom Team (bevorzugt als Anlass nutzen): ${f.personal}` }
   if (f.hasHistory) return { key: 'history', text: 'Es gab schon Kontakt – daran anknüpfen statt neu vorstellen.' }
   if (h?.repeated?.length) return { key: 'repeated_role', text: `Sucht ${h.repeated[0].count}× ${h.repeated[0].role} gleichzeitig.` }
   if (h?.hrRoles?.length) return { key: 'builds_recruiting', text: `Sucht selbst Verstärkung im HR/Recruiting (${h.hrRoles[0]}) – das Volumen zieht an.` }

@@ -147,7 +147,10 @@ Regeln:
 - research: 3–5 kurze Fakten über die Agentur (nur aus den Fakten).${a.examples ? `\n\nNachrichten von uns an Personalvermittlungen – Aufbau, Länge und Ton übernehmen, nicht den Wortlaut:\n${a.examples}` : ''}`
 }
 
-export async function draftFirstMessage(supabase: any, t: Target, opts: { runId?: string | null; cfg?: AgentConfig['first_message'] } = {}): Promise<{ draft: Draft; itemId: string; costUsd: number }> {
+// notes/profile: what the team knows about the person (composer, extension); address overrides the auto rule
+export type DraftOpts = { runId?: string | null; cfg?: AgentConfig['first_message']; notes?: string | null; profile?: string | null; address?: 'auto' | 'du' | 'Sie' }
+
+export async function draftFirstMessage(supabase: any, t: Target, opts: DraftOpts = {}): Promise<{ draft: Draft; itemId: string; costUsd: number }> {
   const key = apiKey()
   if (!key) throw new Error('KI ist noch nicht eingerichtet (API-Key fehlt).')
   const cfg = opts.cfg ?? (await loadSettings(supabase, t.projectId)).first_message.config
@@ -163,8 +166,18 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: { runId?
   const used: Record<string, number> = {}
   for (const r of usedRows || []) used[r.variant] = (used[r.variant] ?? 0) + 1
   const variant = pickVariant(playbook, used)
-  const signal = pickSignal(facts.signalFacts)
-  const address = cfg.address === 'auto' && playbook.address !== 'auto' ? playbook.address : cfg.address
+  const notes = (opts.notes || '').trim().slice(0, 1500)
+  const profile = (opts.profile || '').trim().slice(0, 2500)
+  const signal = pickSignal({ ...facts.signalFacts, personal: notes || null })
+  const address = opts.address && opts.address !== 'auto' ? opts.address
+    : cfg.address === 'auto' && playbook.address !== 'auto' ? playbook.address : cfg.address
+  const extraFacts = [
+    profile ? `LinkedIn-Profil der Person (Info/Headline, nur Fakten daraus nutzen):\n${profile}` : '',
+    notes ? `Infos vom Team über Person/Firma (zuverlässig, bevorzugt nutzen):\n${notes}` : '',
+  ].filter(Boolean).join('\n\n')
+  const base = cfg.useBaseText && segment !== 'agency' && cfg.baseText?.trim()
+    ? `\n\nBasistext – hat Vorrang vor dem allgemeinen Aufbau: Aufbau und alle festen Sätze wörtlich übernehmen, nur die {{…}}-Stellen passend zu dieser Person ausformulieren ({{anrede}} nach den Anrede-Regeln, {{absender}} = ${sender}). Bei Sie die festen Sätze grammatisch auf Sie umstellen. Länge darf vom Basistext abhängen.\n---\n${cfg.baseText.trim()}\n---`
+    : ''
   const brief = [
     `Zielperson: ${PERSONAS[persona]}`,
     `Playbook „${playbook.name}“, Variante ${variant.key}${variant.angle ? `: ${variant.angle}` : ''}`,
@@ -180,7 +193,7 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: { runId?
     max_tokens: 4000,
     output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
     system: systemPrompt({ ...cfg, address }, sender, segment),
-    messages: [{ role: 'user', content: `Fakten:\n${facts.text}\n\nVorgaben für diese Nachricht (Winkel, Ergebnis und Frage hieraus übernehmen, Aufhänger als Anlass nutzen):\n${brief}\n\nSchreibe Vernetzungsnotiz und erste Nachricht${facts.firstName ? ` an ${facts.personName}` : ' an die zuständige Person (ohne Namen, neutrale Anrede)'}.` }],
+    messages: [{ role: 'user', content: `Fakten:\n${facts.text}${extraFacts ? `\n\n${extraFacts}` : ''}\n\nVorgaben für diese Nachricht (Winkel, Ergebnis und Frage hieraus übernehmen, Aufhänger als Anlass nutzen):\n${brief}${base}\n\nSchreibe Vernetzungsnotiz und erste Nachricht${facts.firstName ? ` an ${facts.personName}` : ' an die zuständige Person (ohne Namen, neutrale Anrede)'}.` }],
   } as any)
   if (res.stop_reason === 'refusal') throw new Error('Die KI hat die Anfrage abgelehnt.')
   const block = res.content.find(b => b.type === 'text')
@@ -193,7 +206,7 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: { runId?
     project_id: t.projectId, agent_key: 'first_message', kind: 'message_draft', channel: 'linkedin', status: 'pending',
     title: `Erstnachricht an ${facts.personName || facts.companyName}${facts.personName ? ` (${facts.companyName})` : ''}`,
     body: draft.message, run_id: opts.runId ?? null,
-    data: { connect_note: draft.connect_note?.slice(0, 300), hook: draft.hook, research: draft.research, segment, model: MODEL, cost_usd: costUsd, persona, persona_label: PERSONAS[persona], playbook: playbook.key, playbook_name: playbook.name, variant: variant.key, signal: signal.key, signal_label: SIGNALS[signal.key], score },
+    data: { connect_note: draft.connect_note?.slice(0, 300), hook: draft.hook, research: draft.research, segment, model: MODEL, cost_usd: costUsd, persona, persona_label: PERSONAS[persona], playbook: playbook.key, playbook_name: playbook.name, variant: variant.key, signal: signal.key, signal_label: SIGNALS[signal.key], score, ...(notes ? { notes } : {}), ...(profile ? { profile } : {}), base_text: !!base, address },
     company_id: t.companyId, person_id: t.personId ?? null, lead_id: t.leadId ?? null,
   }
   // One open draft per contact/lead: rewrite replaces it
@@ -218,12 +231,12 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: { runId?
 }
 
 // Single draft triggered by an event (LinkedIn import, Heiße Firma taken) – logged as its own run
-export async function draftOnEvent(supabase: any, t: Target) {
+export async function draftOnEvent(supabase: any, t: Target, extra: Pick<DraftOpts, 'notes' | 'profile'> = {}) {
   const settings = await loadSettings(supabase, t.projectId)
   if (!settings.first_message.enabled || !settings.first_message.config.autoDraft) return null
   const runId = await startRun(supabase, t.projectId, 'first_message', 'event')
   try {
-    const r = await draftFirstMessage(supabase, t, { runId, cfg: settings.first_message.config })
+    const r = await draftFirstMessage(supabase, t, { runId, cfg: settings.first_message.config, ...extra })
     await finishRun(supabase, runId, { items: 1, summary: '1 Entwurf erstellt', costUsd: r.costUsd })
     return r
   } catch (e: any) {

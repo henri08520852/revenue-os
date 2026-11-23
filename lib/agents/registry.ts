@@ -16,6 +16,18 @@ export const DEFAULT_STEPS: SequenceStep[] = [
 
 export const DEFAULT_PITCH = 'HireFlow (hireflow.one) ist ein KI-Prescreening fürs Recruiting: Bewerbende beantworten rollenbezogene Fragen, HireFlow strukturiert die Antworten, macht sie vergleichbar und zeigt vor dem ersten Gespräch, wer wirklich passt – z. B. aus 20 Bewerbungen die drei relevantesten Profile. So entstehen weniger Erstgespräche ohne Match. Gegründet von Henri und Simon, die selbst inhouse in Recruiting und HR gearbeitet haben.'
 
+// Base text: fixed sentences stay as they are, the agent only writes the {{…}} parts for each person
+export const DEFAULT_BASE_TEXT = `{{anrede}}
+
+{{anlass}} {{schmerz}}
+
+Mein Partner Simon und ich haben selbst inhouse in Recruiting und HR gearbeitet. Daraus ist HireFlow entstanden: {{ergebnis}}
+
+Schau gern rein: hireflow.one/business. {{frage}}
+
+Beste Grüße
+{{absender}}`
+
 export const DEFAULT_OFFER = ''
 export const DEFAULT_LINK = 'hireflow.one/business'
 export const DEFAULT_STYLE = 'Kurz und auf Augenhöhe, nicht verkäuferisch. Ein Gedanke pro Absatz, einfache Wörter statt Fachjargon. Nicht mit „Ich“ beginnen. Nie „kein Sales Pitch“ schreiben. Abschluss: Link, dann eine offene Frage, wie sie es heute lösen.'
@@ -71,7 +83,7 @@ Gern zeige ich Ihnen in 20 Minuten, wie das bei {{firma}} aussehen könnte – u
 export type LetterConfig = { sender: string; subject: string; template: string; closing: string; signer: string; signerTitle: string; contact: string }
 
 export type AgentConfig = {
-  first_message: { pitch: string; style: string; examples: string; address: 'auto' | 'Sie' | 'du'; autoDraft: boolean; offer: string; link: string; agency: AgencyConfig; playbooks: Playbook[] }
+  first_message: { pitch: string; style: string; examples: string; address: 'auto' | 'Sie' | 'du'; autoDraft: boolean; offer: string; link: string; agency: AgencyConfig; playbooks: Playbook[]; baseText: string; useBaseText: boolean }
   letter: LetterConfig
   sequence: { steps: SequenceStep[] }
   follow_up_guard: { days: number }
@@ -103,7 +115,7 @@ export const AGENTS: { key: AgentKey; kind: 'agent' | 'workflow'; label: string;
 ]
 
 export const DEFAULTS: AgentConfig = {
-  first_message: { pitch: DEFAULT_PITCH, style: DEFAULT_STYLE, examples: DEFAULT_EXAMPLES, address: 'auto', autoDraft: true, offer: DEFAULT_OFFER, link: DEFAULT_LINK, agency: { pitch: AGENCY_PITCH, examples: AGENCY_EXAMPLES, link: DEFAULT_LINK }, playbooks: DEFAULT_PLAYBOOKS },
+  first_message: { pitch: DEFAULT_PITCH, style: DEFAULT_STYLE, examples: DEFAULT_EXAMPLES, address: 'auto', autoDraft: true, offer: DEFAULT_OFFER, link: DEFAULT_LINK, agency: { pitch: AGENCY_PITCH, examples: AGENCY_EXAMPLES, link: DEFAULT_LINK }, playbooks: DEFAULT_PLAYBOOKS, baseText: DEFAULT_BASE_TEXT, useBaseText: true },
   letter: { sender: 'HireFlow\nStraße Hausnummer\nPLZ Ort', subject: 'Ihre offenen Stellen – eine Idee für {{firma}}', template: DEFAULT_LETTER, closing: 'Mit freundlichen Grüßen', signer: '', signerTitle: '', contact: '' },
   sequence: { steps: DEFAULT_STEPS },
   follow_up_guard: { days: 7 },

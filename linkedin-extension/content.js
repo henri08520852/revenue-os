@@ -58,6 +58,18 @@
     return { slug, name, firstName: parts.slice(0, -1).join(' ') || name, lastName: parts.length > 1 ? parts[parts.length - 1] : '', jobTitle: jobTitle.slice(0, 160), company: company.slice(0, 120) }
   }
 
+  // Headline + "Info"/"About" text of the open profile – context for the message agent (only read, never stored on LinkedIn)
+  function profileText() {
+    if (ctx?.kind !== 'profile') return ''
+    const head = text(document.querySelector('main .text-body-medium.break-words'))
+    const anchor = document.getElementById('about')
+    const sec = anchor?.closest('section') || [...document.querySelectorAll('main section')].find(x => /^(Info|About|Infos)\b/.test(text(x.querySelector('h2'))))
+    let about = sec ? String(sec.innerText || '').split('\n').map(l => l.trim()).filter(Boolean) : []
+    about = about.filter((l, i) => !(i === 0 && /^(Info|About|Infos)$/i.test(l)) && !/^(… mehr|…more|mehr anzeigen|see more|show more)$/i.test(l) && !/^(Info|About)$/i.test(l))
+    const uniq = [...new Set(about)].join(' ').replace(/\s+/g, ' ').trim()
+    return [head ? `Headline: ${head}` : '', uniq ? `Info: ${uniq}` : ''].filter(Boolean).join('\n').slice(0, 2500)
+  }
+
   // "Consultant at The Green Recruitment Company, specialising …" → title + company
   function splitHeadline(headline) {
     let jobTitle = String(headline || '').split(/\s+\|\s+/)[0], company = ''
@@ -273,7 +285,7 @@
   const root = shadow.getElementById('root')
 
   let open = false, page = '', ctx = null, crm = null, msg = '', busy = false
-  let form = {}, taskOpen = false, drafting = false, draftMsg = ''
+  let form = {}, taskOpen = false, drafting = false, draftMsg = '', draftHint = ''
 
   const kind = () => location.pathname.startsWith('/in/') ? 'profile' : location.pathname.startsWith('/messaging/') ? 'thread' : null
   const addDays = n => { const d = new Date(Date.now() + n * 86400000); return d.toISOString().slice(0, 10) }
@@ -317,12 +329,14 @@
     if (!crm?.known || !crm.company) return ''
     const d = crm.draft
     if (drafting) return '<div class="sec muted">✍️ Entwurf wird geschrieben … (ca. 10–20 s)</div>'
-    if (!d) return `<div class="sec"><button class="link" id="draft-new">✍️ Erstnachricht schreiben lassen</button>${draftMsg ? `<div class="msg">${draftMsg}</div>` : ''}</div>`
+    const hint = `<div class="f"><label>Was weißt du über die Person? (optional)</label><textarea id="draft-hint" rows="2" placeholder="z. B. Post über Fachkräftemangel, kennen uns von …">${esc(draftHint)}</textarea></div>`
+    if (!d) return `<div class="sec">${hint}<button class="link" id="draft-new">✍️ Erstnachricht schreiben lassen</button>${draftMsg ? `<div class="msg">${draftMsg}</div>` : ''}</div>`
     return `<div class="sec">
       <div class="h">✍️ Entwurf</div>
       ${d.hook ? `<div class="small">Anlass: ${esc(d.hook)}</div>` : ''}
       ${d.connectNote ? `<div class="small">Vernetzungsnotiz</div><div class="draft">${esc(d.connectNote)}</div><div class="row2"><button class="link" id="copy-note">Notiz kopieren</button></div>` : ''}
       <div class="small">Erste Nachricht</div><div class="draft">${esc(d.message)}</div>
+      ${hint}
       <div class="row2"><button class="link" id="copy-msg">Nachricht kopieren</button><button class="link" id="draft-new">Neu schreiben</button><a class="link" href="${esc(APP)}/agents" target="_blank">Bearbeiten ↗</a></div>
       ${draftMsg ? `<div class="msg">${draftMsg}</div>` : ''}
     </div>`
@@ -330,7 +344,7 @@
 
   async function writeDraft(force) {
     drafting = true; draftMsg = ''; render()
-    const res = await api({ action: 'draftMessage', profileUrl: profileUrl(), name: ctx.name, force })
+    const res = await api({ action: 'draftMessage', profileUrl: profileUrl(), name: ctx.name, force, notes: draftHint, profile: profileText() })
     drafting = false
     if (res.error) draftMsg = force ? `<span class="err">${esc(res.error)}</span>` : ''
     else crm = { ...res, companies: crm?.companies }
@@ -436,6 +450,7 @@
     if ($('save')) $('save').onclick = save
     if ($('log')) $('log').onclick = log
     if ($('draft-new')) $('draft-new').onclick = () => writeDraft(true)
+    if ($('draft-hint')) $('draft-hint').oninput = e => { draftHint = e.target.value }
     const copy = (id, text) => { if ($(id)) $(id).onclick = async () => { try { await navigator.clipboard.writeText(text); $(id).textContent = 'Kopiert ✓' } catch { $(id).textContent = 'Kopieren nicht möglich' } } }
     copy('copy-note', crm?.draft?.connectNote || '')
     copy('copy-msg', crm?.draft?.message || '')
@@ -454,7 +469,7 @@
         await new Promise(r => setTimeout(r, 1000))
       }
     }
-    msg = ''; draftMsg = ''; crm = null; taskOpen = false; render()
+    msg = ''; draftMsg = ''; draftHint = ''; crm = null; taskOpen = false; render()
     crm = await api({ action: 'lookup', profileUrl: profileUrl(), name: ctx.name })
     resetForm()
     render()

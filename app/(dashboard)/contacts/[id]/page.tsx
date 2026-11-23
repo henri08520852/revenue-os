@@ -66,6 +66,7 @@ export default async function ContactPage({ params }: { params: { id: string } }
             {person.email && <a href={`mailto:${person.email}`} style={{ color: '#2563eb', textDecoration: 'none' }}>✉ {person.email}</a>}
             {person.phone && <a href={`tel:${String(person.phone).replace(/\s/g, '')}`} style={{ color: '#2563eb', textDecoration: 'none' }}>📞 {person.phone}</a>}
             {person.linkedin_url && <a href={person.linkedin_url} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', textDecoration: 'none' }}>LinkedIn ↗</a>}
+            <Link href={`/compose?person=${person.id}`} style={{ color: '#7c3aed', textDecoration: 'none', fontWeight: 500 }}>✍️ Nachricht schreiben</Link>
           </div>
           <div style={{ marginTop: 14 }}>
             <QuickActions

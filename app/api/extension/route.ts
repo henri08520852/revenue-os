@@ -173,7 +173,8 @@ export async function POST(req: Request) {
       if (!person?.company_id) return NextResponse.json({ error: 'Kontakt mit Firma zuerst in Revenue OS anlegen.' }, { status: 404 })
       const { data: lead } = await supabase.from('leads').select('id').eq('company_id', person.company_id).in('stage', ['prospect', 'outreach', 'contacted']).order('created_at', { ascending: false }).limit(1)
       const target = { projectId: PROJECT_ID, companyId: person.company_id, personId: person.id, leadId: lead?.[0]?.id ?? null }
-      const r = body.force ? await draftFirstMessage(supabase, target) : await draftOnEvent(supabase, target)
+      const extra = { notes: str(body.notes, 1500) || null, profile: str(body.profile, 2500) || null }
+      const r = body.force ? await draftFirstMessage(supabase, target, extra) : await draftOnEvent(supabase, target, extra)
       if (!r) return NextResponse.json({ error: 'Der Erstnachricht-Agent ist ausgeschaltet.' }, { status: 409 })
       return NextResponse.json(await status(supabase, person))
     }

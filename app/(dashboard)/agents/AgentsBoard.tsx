@@ -175,7 +175,7 @@ function AgentCard({ agent, enabled, last, disabled, onSettings }: {
   )
 }
 
-function DraftCard({ item }: { item: QueueItem }) {
+export function DraftCard({ item, onDone }: { item: QueueItem; onDone?: (kind: string) => void }) {
   const router = useRouter()
   const [note, setNote] = useState<string>(item.data?.connect_note ?? '')
   const [body, setBody] = useState<string>(item.body ?? '')
@@ -200,6 +200,7 @@ function DraftCard({ item }: { item: QueueItem }) {
     setBusy(null)
     if (r.error) return toast.error(r.error)
     toast.success(kind === 'approve' ? 'Als gesendet markiert – im Verlauf geloggt' : kind === 'dismiss' ? 'Entwurf verworfen' : 'Neu geschrieben')
+    onDone?.(kind)
     router.refresh()
   }
 
@@ -417,6 +418,15 @@ function SettingsSheet({ agentKey, settings, onClose }: { agentKey: AgentKey; se
         <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
           {agentKey === 'first_message' && (
             <>
+              <div className="space-y-3 rounded-md border border-border bg-muted/40 p-4">
+                <label className="flex items-center justify-between gap-4 text-sm">
+                  <span className="font-semibold">Basistext verwenden<span className="block text-xs font-normal text-muted-foreground">Feste Sätze bleiben, der Agent füllt nur die Lücken in doppelten geschweiften Klammern.</span></span>
+                  <Switch checked={cfg.useBaseText !== false} onChange={v => set({ useBaseText: v })} />
+                </label>
+                <Field label="Basistext" hint="Platzhalter: {{anrede}} {{anlass}} {{schmerz}} {{ergebnis}} {{frage}} {{absender}} – oder eigene, z. B. {{bezug}}. Alles andere übernimmt der Agent wörtlich. Gilt nicht für Personalvermittlungen.">
+                  <Textarea rows={11} value={cfg.baseText ?? ''} onChange={e => set({ baseText: e.target.value })} className="font-mono text-[13px]" />
+                </Field>
+              </div>
               <div className="text-sm font-semibold">Unternehmen (Inhouse-HR)</div>
               <Field label="Was ist HireFlow? (Grundlage für jede Nachricht)">
                 <Textarea rows={4} value={cfg.pitch} onChange={e => set({ pitch: e.target.value })} />
