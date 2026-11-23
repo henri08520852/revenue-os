@@ -83,6 +83,14 @@ export async function saveAgentConfig(key: string, config: Record<string, unknow
       }
       if ('autoDraft' in clean) clean.autoDraft = !!clean.autoDraft
       if ('useBaseText' in clean) clean.useBaseText = !!clean.useBaseText
+      if ('baseTexts' in clean) {
+        const b = (clean.baseTexts || {}) as Record<string, unknown>
+        clean.baseTexts = Object.fromEntries(['small', 'mid', 'large', 'agency'].map(k => [k, String(b[k] ?? '').slice(0, 4000)]))
+      }
+      if ('industries' in clean) {
+        clean.industries = (Array.isArray(clean.industries) ? clean.industries as any[] : []).slice(0, 30).filter(i => i?.key)
+          .map(i => ({ key: String(i.key).slice(0, 40), label: String(i.label ?? '').slice(0, 80), pain: String(i.pain ?? '').slice(0, 600), active: i.active !== false }))
+      }
       if ('playbooks' in clean) {
         const t = (v: unknown, n = 600) => String(v ?? '').trim().slice(0, n)
         clean.playbooks = (Array.isArray(clean.playbooks) ? clean.playbooks as any[] : []).slice(0, 20).filter(p => p?.key).map(p => ({
@@ -163,7 +171,7 @@ export async function redraftItem(id: string): Promise<Result> {
     const target = { projectId: PROJECT_ID, companyId: item.company_id, personId: item.person_id, leadId: item.lead_id }
     if (item.kind === 'letter') await draftLetter(supabase, target)
     // Keep what the team typed in (composer / extension) for the rewrite
-    else await draftFirstMessage(supabase, target, { notes: item.data?.notes, profile: item.data?.profile, address: item.data?.address })
+    else await draftFirstMessage(supabase, target, { notes: item.data?.notes, profile: item.data?.profile, address: item.data?.address, segment: item.data?.overrides?.segment, industry: item.data?.overrides?.industry })
     revalidatePath('/agents')
     return { error: null }
   } catch (e) { return fail(e) }

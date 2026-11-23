@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input, Select } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { PERSONAS, personaOf, type Persona } from '@/lib/outreach/persona'
+import { SEGMENTS, type SegmentKey } from '@/lib/outreach/segments'
 import { DraftCard, QueueItem } from '../agents/AgentsBoard'
 import { composeMessage, loadItem } from './actions'
 import { cn } from '@/lib/utils'
@@ -21,7 +22,10 @@ export type SentRow = {
 
 const day = (iso: string | null) => iso ? new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : ''
 
-export default function Composer({ contacts, sent, preselect, baseText }: { contacts: ContactOption[]; sent: SentRow[]; preselect: string | null; baseText: string | null }) {
+export default function Composer({ contacts, sent, preselect, baseTexts, industries }: {
+  contacts: ContactOption[]; sent: SentRow[]; preselect: string | null
+  baseTexts: Record<SegmentKey, string> | null; industries: { key: string; label: string }[]
+}) {
   const [mode, setMode] = useState<'pick' | 'new'>(preselect || contacts.length ? 'pick' : 'new')
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState<ContactOption | null>(contacts.find(c => c.id === preselect) ?? null)
@@ -30,6 +34,8 @@ export default function Composer({ contacts, sent, preselect, baseText }: { cont
   const [profile, setProfile] = useState('')
   const [address, setAddress] = useState<'auto' | 'du' | 'Sie'>('auto')
   const [persona, setPersona] = useState<Persona | 'auto'>('auto')
+  const [segment, setSegment] = useState<SegmentKey | 'auto'>('auto')
+  const [industry, setIndustry] = useState('auto')
   const [busy, setBusy] = useState(false)
   const [item, setItem] = useState<QueueItem | null>(null)
   const [version, setVersion] = useState(0)
@@ -49,7 +55,7 @@ export default function Composer({ contacts, sent, preselect, baseText }: { cont
     setBusy(true)
     const r = await composeMessage({
       ...(mode === 'pick' ? { personId: picked!.id } : f),
-      notes, profile, address, persona,
+      notes, profile, address, persona, segment, industry,
     })
     setBusy(false)
     if (r.error) return toast.error(r.error)
@@ -135,6 +141,21 @@ export default function Composer({ contacts, sent, preselect, baseText }: { cont
               </L>
             </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <L label="Firmentyp / Größe">
+                <Select value={segment} onChange={e => setSegment(e.target.value as any)}>
+                  <option value="auto">Automatisch</option>
+                  {(Object.keys(SEGMENTS) as SegmentKey[]).map(k => <option key={k} value={k}>{SEGMENTS[k]}</option>)}
+                </Select>
+              </L>
+              <L label="Branche">
+                <Select value={industry} onChange={e => setIndustry(e.target.value)}>
+                  <option value="auto">Automatisch</option>
+                  {industries.map(i => <option key={i.key} value={i.key}>{i.label}</option>)}
+                </Select>
+              </L>
+            </div>
+
             <L label="Was weißt du über die Person oder Firma? (optional, macht die Nachricht persönlich)">
               <Textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)}
                 placeholder="z. B. hat gestern über Fachkräftemangel gepostet · wir kennen uns von der Messe · sucht 3 Pflegekräfte · gleiche Uni" />
@@ -150,10 +171,15 @@ export default function Composer({ contacts, sent, preselect, baseText }: { cont
             {mode === 'new' && <p className="text-[12px] text-muted-foreground"><UserPlus className="mr-1 inline size-3.5" />Kontakt und Firma werden angelegt, die Firma landet als Prospect in der Pipeline.</p>}
           </Card>
 
-          {baseText && (
+          {baseTexts && (
             <details className="rounded-md border border-border bg-card px-4 py-3 text-[13px]">
-              <summary className="cursor-pointer select-none font-medium">Aktueller Basistext</summary>
-              <pre className="mt-2 whitespace-pre-wrap font-sans text-muted-foreground">{baseText}</pre>
+              <summary className="cursor-pointer select-none font-medium">Basistext {segment === 'auto' ? '(wird nach Firmentyp gewählt)' : `– ${SEGMENTS[segment]}`}</summary>
+              {(segment === 'auto' ? (Object.keys(SEGMENTS) as SegmentKey[]) : [segment]).map(k => (
+                <div key={k} className="mt-3">
+                  {segment === 'auto' && <div className="text-[12px] font-medium">{SEGMENTS[k]}</div>}
+                  <pre className="mt-1 whitespace-pre-wrap font-sans text-muted-foreground">{baseTexts[k]}</pre>
+                </div>
+              ))}
             </details>
           )}
         </section>

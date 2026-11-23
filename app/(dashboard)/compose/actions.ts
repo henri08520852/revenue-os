@@ -6,6 +6,7 @@ import { getTeamContext } from '@/lib/team'
 import { draftFirstMessage } from '@/lib/agents/firstMessage'
 import { enrollLead } from '@/lib/agents/sequence'
 import { PERSONAS, roleCategoryOf, type Persona } from '@/lib/outreach/persona'
+import type { SegmentKey } from '@/lib/outreach/segments'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID!
 
@@ -14,6 +15,8 @@ export type ComposeInput = {
   first?: string; last?: string; title?: string; company?: string; linkedinUrl?: string
   notes?: string; profile?: string
   address?: 'auto' | 'du' | 'Sie'
+  segment?: SegmentKey | 'auto'
+  industry?: string
   persona?: Persona | 'auto'
 }
 
@@ -101,7 +104,7 @@ export async function composeMessage(input: ComposeInput): Promise<{ error: stri
     }
 
     const r = await draftFirstMessage(supabase, { projectId: PROJECT_ID, companyId: companyId!, personId, leadId }, {
-      notes: s(input.notes, 1500) || null, profile: s(input.profile, 2500) || null, address: input.address ?? 'auto',
+      notes: s(input.notes, 1500) || null, profile: s(input.profile, 2500) || null, address: input.address ?? 'auto', segment: input.segment ?? 'auto', industry: input.industry || 'auto',
     })
     const { data: item } = await supabase.from('automation_items').select(ITEM_COLS).eq('id', r.itemId).single()
     revalidatePath('/agents')

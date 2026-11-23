@@ -3,6 +3,7 @@
 // Everything that would leave the house (messages) lands in the approval queue first.
 
 import { DEFAULT_PLAYBOOKS, mergePlaybooks, type Playbook } from '@/lib/outreach/playbooks'
+import { DEFAULT_BASE_TEXTS, DEFAULT_INDUSTRIES, mergeBaseTexts, mergeIndustries, type IndustryBlock, type SegmentKey } from '@/lib/outreach/segments'
 export type SequenceStep = { day: number; title: string; type: 'todo' | 'call' | 'email' | 'follow_up'; draft?: boolean; letter?: boolean }
 
 // Tuned for "Heiße Firmen": no cold e-mail – LinkedIn first, phone via the switchboard, letter to the management
@@ -45,7 +46,7 @@ Mich interessiert, wie ihr das heute macht: Wo kostet es euch am meisten Zeit?
 Beste Grüße
 Henri`
 export type AgencyConfig = { pitch: string; examples: string; link: string }
-export const AGENCY_RE = /personalvermittl|personaldienst|personalberatung|personal[- ]?service|personalleasing|zeitarbeit|arbeitnehmerüberlassung|headhunt|executive search|direct search|recruiting[- ]?(agentur|agency|partner|unternehmen)|personalagentur|staffing|talent (solutions|partners)|recruitment (agency|consultants?)/i
+export const AGENCY_RE = /personalvermittl|arbeitsvermittl|personaldienst|personalberatung|personal[- ]?service|personalleasing|zeitarbeit|arbeitnehmerüberlassung|headhunt|executive search|direct search|recruiting[- ]?(agentur|agency|partner|unternehmen)|personalagentur|staffing|talent (solutions|partners)|recruitment (agency|consultants?)/i
 
 // Henri's messages that worked – the agent copies the style, not the wording
 export const DEFAULT_EXAMPLES = `Hallo Tessa,
@@ -83,7 +84,7 @@ Gern zeige ich Ihnen in 20 Minuten, wie das bei {{firma}} aussehen könnte – u
 export type LetterConfig = { sender: string; subject: string; template: string; closing: string; signer: string; signerTitle: string; contact: string }
 
 export type AgentConfig = {
-  first_message: { pitch: string; style: string; examples: string; address: 'auto' | 'Sie' | 'du'; autoDraft: boolean; offer: string; link: string; agency: AgencyConfig; playbooks: Playbook[]; baseText: string; useBaseText: boolean }
+  first_message: { pitch: string; style: string; examples: string; address: 'auto' | 'Sie' | 'du'; autoDraft: boolean; offer: string; link: string; agency: AgencyConfig; playbooks: Playbook[]; baseText: string; useBaseText: boolean; baseTexts: Record<SegmentKey, string>; industries: IndustryBlock[] }
   letter: LetterConfig
   sequence: { steps: SequenceStep[] }
   follow_up_guard: { days: number }
@@ -115,7 +116,7 @@ export const AGENTS: { key: AgentKey; kind: 'agent' | 'workflow'; label: string;
 ]
 
 export const DEFAULTS: AgentConfig = {
-  first_message: { pitch: DEFAULT_PITCH, style: DEFAULT_STYLE, examples: DEFAULT_EXAMPLES, address: 'auto', autoDraft: true, offer: DEFAULT_OFFER, link: DEFAULT_LINK, agency: { pitch: AGENCY_PITCH, examples: AGENCY_EXAMPLES, link: DEFAULT_LINK }, playbooks: DEFAULT_PLAYBOOKS, baseText: DEFAULT_BASE_TEXT, useBaseText: true },
+  first_message: { pitch: DEFAULT_PITCH, style: DEFAULT_STYLE, examples: DEFAULT_EXAMPLES, address: 'auto', autoDraft: true, offer: DEFAULT_OFFER, link: DEFAULT_LINK, agency: { pitch: AGENCY_PITCH, examples: AGENCY_EXAMPLES, link: DEFAULT_LINK }, playbooks: DEFAULT_PLAYBOOKS, baseText: '', useBaseText: true, baseTexts: DEFAULT_BASE_TEXTS, industries: DEFAULT_INDUSTRIES },
   letter: { sender: 'HireFlow\nStraße Hausnummer\nPLZ Ort', subject: 'Ihre offenen Stellen – eine Idee für {{firma}}', template: DEFAULT_LETTER, closing: 'Mit freundlichen Grüßen', signer: '', signerTitle: '', contact: '' },
   sequence: { steps: DEFAULT_STEPS },
   follow_up_guard: { days: 7 },
@@ -132,6 +133,8 @@ export async function loadSettings(supabase: any, projectId: string): Promise<Ag
   }
   out.first_message.config.agency = { ...DEFAULTS.first_message.agency, ...(out.first_message.config.agency || {}) }
   out.first_message.config.playbooks = mergePlaybooks(out.first_message.config.playbooks)
+  out.first_message.config.baseTexts = mergeBaseTexts(out.first_message.config.baseTexts, out.first_message.config.baseText)
+  out.first_message.config.industries = mergeIndustries(out.first_message.config.industries)
   const steps = out.sequence.config.steps
   if (!Array.isArray(steps) || !steps.length) out.sequence.config.steps = DEFAULT_STEPS
   return out

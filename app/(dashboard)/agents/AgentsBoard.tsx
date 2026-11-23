@@ -17,6 +17,7 @@ import { AGENTS, AgentKey, AgentSettings, SequenceStep } from '@/lib/agents/regi
 import type { Playbook } from '@/lib/outreach/playbooks'
 import { PERSONAS, type Persona } from '@/lib/outreach/persona'
 import { SIGNALS, type SignalKey } from '@/lib/outreach/playbooks'
+import { SEGMENTS, type SegmentKey, type IndustryBlock } from '@/lib/outreach/segments'
 import { cn } from '@/lib/utils'
 import { runAgent, setAgentEnabled, saveAgentConfig, saveItem, saveLetter, approveItem, dismissItem, redraftItem } from './actions'
 
@@ -238,6 +239,8 @@ export function DraftCard({ item, onDone }: { item: QueueItem; onDone?: (kind: s
             <Badge tone="outline">{item.data.persona_label}</Badge>
             {item.data.playbook_name && <Badge tone="outline">{item.data.playbook_name} · Variante {item.data.variant}</Badge>}
             {item.data.signal_label && <Badge tone={item.data.signal === 'none' ? 'warning' : 'outline'}>{item.data.signal_label}</Badge>}
+            {item.data.size_label && <Badge tone="outline">{item.data.size_label}</Badge>}
+            {item.data.industry_label && <Badge tone="outline">{item.data.industry_label}</Badge>}
           </div>
         )}
         {item.data?.hook && (
@@ -423,10 +426,9 @@ function SettingsSheet({ agentKey, settings, onClose }: { agentKey: AgentKey; se
                   <span className="font-semibold">Basistext verwenden<span className="block text-xs font-normal text-muted-foreground">Feste Sätze bleiben, der Agent füllt nur die Lücken in doppelten geschweiften Klammern.</span></span>
                   <Switch checked={cfg.useBaseText !== false} onChange={v => set({ useBaseText: v })} />
                 </label>
-                <Field label="Basistext" hint="Platzhalter: {{anrede}} {{anlass}} {{schmerz}} {{ergebnis}} {{frage}} {{absender}} – oder eigene, z. B. {{bezug}}. Alles andere übernimmt der Agent wörtlich. Gilt nicht für Personalvermittlungen.">
-                  <Textarea rows={11} value={cfg.baseText ?? ''} onChange={e => set({ baseText: e.target.value })} className="font-mono text-[13px]" />
-                </Field>
+                <BaseTextsEditor texts={cfg.baseTexts || {}} onChange={baseTexts => set({ baseTexts })} />
               </div>
+              <IndustriesEditor industries={cfg.industries || []} onChange={industries => set({ industries })} />
               <div className="text-sm font-semibold">Unternehmen (Inhouse-HR)</div>
               <Field label="Was ist HireFlow? (Grundlage für jede Nachricht)">
                 <Textarea rows={4} value={cfg.pitch} onChange={e => set({ pitch: e.target.value })} />
@@ -633,6 +635,53 @@ function PlaybooksEditor({ playbooks, onChange }: { playbooks: Playbook[]; onCha
               {p.variants.length < 4 && (
                 <Button type="button" variant="outline" size="sm" onClick={() => upd(i, { variants: [...p.variants, { key: 'ABCD'[p.variants.length], angle: '' }] })}><Plus /> Variante</Button>
               )}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function BaseTextsEditor({ texts, onChange }: { texts: Partial<Record<SegmentKey, string>>; onChange: (t: Record<SegmentKey, string>) => void }) {
+  const [seg, setSeg] = useState<SegmentKey>('mid')
+  const keys = Object.keys(SEGMENTS) as SegmentKey[]
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap gap-1">
+        {keys.map(k => (
+          <button key={k} type="button" onClick={() => setSeg(k)}
+            className={cn('rounded-md border px-2.5 py-1 text-[12px] font-medium', seg === k ? 'border-brand bg-brand/10 text-brand' : 'border-border bg-card text-muted-foreground')}>
+            {SEGMENTS[k]}
+          </button>
+        ))}
+      </div>
+      <Field label={`Basistext: ${SEGMENTS[seg]}`} hint="Platzhalter: {{anrede}} {{anlass}} {{schmerz}} {{ergebnis}} {{frage}} {{absender}} – oder eigene, z. B. {{bezug}}. {{schmerz}} füllt der Agent aus Branche + Rolle. Alles andere bleibt wörtlich.">
+        <Textarea rows={11} value={texts[seg] ?? ''} onChange={e => onChange({ ...(texts as Record<SegmentKey, string>), [seg]: e.target.value })} className="font-mono text-[13px]" />
+      </Field>
+      <p className="mt-1 text-[11px] text-muted-foreground">Größe kommt aus der Mitarbeiterzahl; ohne Angabe gilt Mittelstand (ab 50 offenen Stellen: Großunternehmen). Agenturen erkennt der Agent an Name, Branche und Website.</p>
+    </div>
+  )
+}
+
+function IndustriesEditor({ industries, onChange }: { industries: IndustryBlock[]; onChange: (i: IndustryBlock[]) => void }) {
+  const [open, setOpen] = useState<string | null>(null)
+  const upd = (i: number, patch: Partial<IndustryBlock>) => onChange(industries.map((x, j) => j === i ? { ...x, ...patch } : x))
+  return (
+    <div className="space-y-2 rounded-md border border-border bg-muted/40 p-4">
+      <div>
+        <div className="text-sm font-semibold">Branchen-Bausteine</div>
+        <p className="text-xs text-muted-foreground">Das typische Problem pro Branche. Der Agent erkennt die Branche aus Firmenname und Stellen und baut es in {'{{schmerz}}'} ein.</p>
+      </div>
+      {industries.map((ind, i) => (
+        <div key={ind.key} className="rounded-md border border-border bg-card">
+          <div className="flex items-center justify-between gap-2 px-3 py-2">
+            <button type="button" className="min-w-0 flex-1 truncate text-left text-sm font-medium" onClick={() => setOpen(open === ind.key ? null : ind.key)}>{ind.label}</button>
+            <Switch checked={ind.active} onChange={v => upd(i, { active: v })} />
+          </div>
+          {open === ind.key && (
+            <div className="border-t border-border px-3 py-3">
+              <Textarea rows={3} value={ind.pain} onChange={e => upd(i, { pain: e.target.value })} />
             </div>
           )}
         </div>

@@ -25,7 +25,8 @@ export default async function ComposePage({ searchParams }: { searchParams: { pe
       contacts={contacts}
       sent={(sent || []) as SentRow[]}
       preselect={searchParams.person ?? null}
-      baseText={settings.first_message.config.useBaseText ? settings.first_message.config.baseText : null}
+      baseTexts={settings.first_message.config.useBaseText ? settings.first_message.config.baseTexts : null}
+      industries={settings.first_message.config.industries.filter(i => i.active).map(i => ({ key: i.key, label: i.label }))}
     />
   )
 }

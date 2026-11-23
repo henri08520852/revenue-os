@@ -4,6 +4,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import { fetchHtml, textOf } from '@/lib/discovery/enrich'
 import { loadSettings, startRun, finishRun, AgentConfig, AGENCY_RE } from './registry'
 import { personaOf, roleCategoryOf, PERSONAS, type Persona } from '@/lib/outreach/persona'
+import { segmentFor, SEGMENTS, type SegmentKey } from '@/lib/outreach/segments'
+import { classify } from '@/lib/discovery/industry'
 import { playbookFor, pickVariant, pickSignal, personalizationScore, SIGNALS } from '@/lib/outreach/playbooks'
 
 export const MODEL = process.env.AI_MODEL || 'claude-haiku-5-5'
@@ -79,6 +81,8 @@ export async function gather(supabase: any, t: Target) {
       signalReasons: (signals || []).map((s: any) => ({ reason: s.reason, created_at: s.created_at, type: s.signal_type })),
       hasHistory: (acts || []).some((a: any) => a.direction === 'inbound' || a.direction === 'outbound'),
     },
+    industryKey: (c?.hiring?.industry?.key as string | undefined) ?? classify(`${company.name} ${company.industry || ''}`, company.domain || null, jobs).industry?.key ?? null,
+    openJobs: (h?.open as number | undefined) ?? null,
     factWords: [...(h?.repeated || []).map((r: any) => r.role), ...(h?.hrRoles || []), ...jobs] as string[],
   }
 }
@@ -148,7 +152,7 @@ Regeln:
 }
 
 // notes/profile: what the team knows about the person (composer, extension); address overrides the auto rule
-export type DraftOpts = { runId?: string | null; cfg?: AgentConfig['first_message']; notes?: string | null; profile?: string | null; address?: 'auto' | 'du' | 'Sie' }
+export type DraftOpts = { runId?: string | null; cfg?: AgentConfig['first_message']; notes?: string | null; profile?: string | null; address?: 'auto' | 'du' | 'Sie'; segment?: SegmentKey | 'auto'; industry?: string | 'auto' }
 
 export async function draftFirstMessage(supabase: any, t: Target, opts: DraftOpts = {}): Promise<{ draft: Draft; itemId: string; costUsd: number }> {
   const key = apiKey()
@@ -156,7 +160,11 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: DraftOpt
   const cfg = opts.cfg ?? (await loadSettings(supabase, t.projectId)).first_message.config
   const [facts, sender] = await Promise.all([gather(supabase, t), senderName(supabase, t)])
   if (!facts) throw new Error('Firma nicht gefunden')
-  const segment = segmentOf(facts.text)
+  // Segment: agency or company size (manual choice wins); industry from name + job titles
+  const sizeSeg: SegmentKey = opts.segment && opts.segment !== 'auto' ? opts.segment : segmentFor(segmentOf(facts.text) === 'agency', facts.size, facts.openJobs)
+  const segment: Segment = sizeSeg === 'agency' ? 'agency' : 'company'
+  const industryKey = opts.industry && opts.industry !== 'auto' ? opts.industry : facts.industryKey
+  const industry = cfg.industries.find(i => i.key === industryKey && i.active) ?? null
 
   // Personalisation: persona (manual wins) → playbook → least used variant → strongest signal
   const p = facts.person as any
@@ -175,11 +183,14 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: DraftOpt
     profile ? `LinkedIn-Profil der Person (Info/Headline, nur Fakten daraus nutzen):\n${profile}` : '',
     notes ? `Infos vom Team über Person/Firma (zuverlässig, bevorzugt nutzen):\n${notes}` : '',
   ].filter(Boolean).join('\n\n')
-  const base = cfg.useBaseText && segment !== 'agency' && cfg.baseText?.trim()
-    ? `\n\nBasistext – hat Vorrang vor dem allgemeinen Aufbau: Aufbau und alle festen Sätze wörtlich übernehmen, nur die {{…}}-Stellen passend zu dieser Person ausformulieren ({{anrede}} nach den Anrede-Regeln, {{absender}} = ${sender}). Bei Sie die festen Sätze grammatisch auf Sie umstellen. Länge darf vom Basistext abhängen.\n---\n${cfg.baseText.trim()}\n---`
+  const baseText = cfg.baseTexts?.[sizeSeg]?.trim()
+  const base = cfg.useBaseText && baseText
+    ? `\n\nBasistext für „${SEGMENTS[sizeSeg]}“ – hat Vorrang vor dem allgemeinen Aufbau: Aufbau und alle festen Sätze wörtlich übernehmen, nur die {{…}}-Stellen passend zu dieser Person ausformulieren ({{anrede}} nach den Anrede-Regeln, {{absender}} = ${sender}; {{schmerz}} = Problem der Branche aus Sicht dieser Rolle, ein Satz). Bei Sie die festen Sätze grammatisch auf Sie umstellen. Länge darf vom Basistext abhängen.\n---\n${baseText}\n---`
     : ''
   const brief = [
     `Zielperson: ${PERSONAS[persona]}`,
+    `Segment: ${SEGMENTS[sizeSeg]}${sizeSeg === 'large' ? ' – sachlich, strukturiert, Prozess und Vergleichbarkeit über Teams' : sizeSeg === 'small' ? ' – persönlich, von Gründer zu Inhaber, sehr kurz' : sizeSeg === 'agency' ? ' – von Recruiting-Leuten für Recruiting-Leute, Tempo zur Shortlist' : ''}`,
+    ...(industry ? [`Branche: ${industry.label} – typisches Problem dort: ${industry.pain}`] : []),
     `Playbook „${playbook.name}“, Variante ${variant.key}${variant.angle ? `: ${variant.angle}` : ''}`,
     `Typischer Schmerz dieser Zielperson: ${playbook.pain}`,
     `Das eine Ergebnis, das wir nennen: ${playbook.outcome}`,
@@ -206,7 +217,7 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: DraftOpt
     project_id: t.projectId, agent_key: 'first_message', kind: 'message_draft', channel: 'linkedin', status: 'pending',
     title: `Erstnachricht an ${facts.personName || facts.companyName}${facts.personName ? ` (${facts.companyName})` : ''}`,
     body: draft.message, run_id: opts.runId ?? null,
-    data: { connect_note: draft.connect_note?.slice(0, 300), hook: draft.hook, research: draft.research, segment, model: MODEL, cost_usd: costUsd, persona, persona_label: PERSONAS[persona], playbook: playbook.key, playbook_name: playbook.name, variant: variant.key, signal: signal.key, signal_label: SIGNALS[signal.key], score, ...(notes ? { notes } : {}), ...(profile ? { profile } : {}), base_text: !!base, address },
+    data: { connect_note: draft.connect_note?.slice(0, 300), hook: draft.hook, research: draft.research, segment, model: MODEL, cost_usd: costUsd, persona, persona_label: PERSONAS[persona], playbook: playbook.key, playbook_name: playbook.name, variant: variant.key, signal: signal.key, signal_label: SIGNALS[signal.key], score, size_segment: sizeSeg, overrides: { segment: opts.segment ?? 'auto', industry: opts.industry ?? 'auto' }, size_label: SEGMENTS[sizeSeg], industry: industry?.key ?? null, industry_label: industry?.label ?? null, ...(notes ? { notes } : {}), ...(profile ? { profile } : {}), base_text: !!base, address },
     company_id: t.companyId, person_id: t.personId ?? null, lead_id: t.leadId ?? null,
   }
   // One open draft per contact/lead: rewrite replaces it
