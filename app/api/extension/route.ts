@@ -222,7 +222,20 @@ export async function POST(req: Request) {
         if (error) throw new Error(error.message)
       }
       // Sent message moves Prospect → Outreach (database trigger); move the sequence on right away
-      if (rows.some(r => r.direction === 'outbound')) await advanceSequences(supabase, PROJECT_ID).catch(() => null)
+      const outbound = rows.filter(r => r.direction === 'outbound')
+      if (outbound.length) {
+        // The open draft for this person counts as sent – with the text that really went out (original kept for comparison)
+        const sentText = String(outbound[0].extracted_intel.body)
+        const { data: open } = await supabase.from('automation_items').select('id, body, data').eq('person_id', person.id).eq('agent_key', 'first_message').eq('status', 'pending').limit(1)
+        if (open?.length) {
+          const it = open[0]
+          await supabase.from('automation_items').update({
+            status: 'approved', decided_at: new Date().toISOString(), decided_by: user.id, body: sentText.slice(0, 5000),
+            data: { ...it.data, sent_via: 'extension', ...(it.body !== sentText ? { original: it.data?.original ?? it.body, edited: true } : {}) },
+          }).eq('id', it.id)
+        }
+        await advanceSequences(supabase, PROJECT_ID).catch(() => null)
+      }
       const inbound = rows.some(r => r.direction === 'inbound')
       if (inbound) {
         const latest = rows.filter(r => r.direction === 'inbound').map(r => r.occurred_at).sort().pop()
