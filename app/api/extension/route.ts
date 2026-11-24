@@ -11,6 +11,7 @@ import { enrollLead, afterFirstContact, advanceSequences } from '@/lib/agents/se
 import { loadSettings } from '@/lib/agents/registry'
 import { personaOf, roleCategoryOf } from '@/lib/outreach/persona'
 import { draftOnEvent, draftFirstMessage } from '@/lib/agents/firstMessage'
+import { PAINS, GOALS, type Goal } from '@/lib/outreach/pains'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -69,6 +70,7 @@ async function status(supabase: any, person: any) {
       id: drafts[0].id, message: drafts[0].body, connectNote: drafts[0].data?.connect_note ?? null, hook: drafts[0].data?.hook ?? null,
       relevance: drafts[0].data?.relevance ?? null, urgency: drafts[0].data?.urgency ?? null, painKey: drafts[0].data?.pain_key ?? null, painLabel: drafts[0].data?.pain_label ?? null,
       pain: drafts[0].data?.pain ?? null, painEvidence: drafts[0].data?.pain_evidence ?? null,
+      email: drafts[0].data?.overrides?.channel === 'email', goal: drafts[0].data?.goal_label ?? null,
     } : null,
   }
 }
@@ -178,7 +180,13 @@ export async function POST(req: Request) {
       const { data: lead } = await supabase.from('leads').select('id').eq('company_id', person.company_id).in('stage', ['prospect', 'outreach', 'contacted']).order('created_at', { ascending: false }).limit(1)
       const target = { projectId: PROJECT_ID, companyId: person.company_id, personId: person.id, leadId: lead?.[0]?.id ?? null }
       const pain = str(body.pain, 40)
-      const extra = { notes: str(body.notes, 1500) || null, profile: str(body.profile, 2500) || null, connected: body.connected === true, pain: (pain || 'auto') as any, anyway: body.anyway === true }
+      const extra = {
+        notes: str(body.notes, 1500) || null, profile: str(body.profile, 2500) || null, connected: body.connected === true, pain: (pain || 'auto') as any, anyway: body.anyway === true,
+        pains: (Array.isArray(body.pains) ? body.pains : []).filter((k: unknown) => typeof k === 'string' && k in PAINS).slice(0, 3),
+        goal: (typeof body.goal === 'string' && body.goal in GOALS ? body.goal : 'first') as Goal,
+        channel: (body.channel === 'email' ? 'email' : 'linkedin') as 'linkedin' | 'email',
+        role: str(body.role, 160) || null, draftText: str(body.draftText, 3000) || null,
+      }
       const r = body.force ? await draftFirstMessage(supabase, target, extra) : await draftOnEvent(supabase, target, extra)
       if (!r) return NextResponse.json({ error: 'Der Erstnachricht-Agent ist ausgeschaltet.' }, { status: 409 })
       return NextResponse.json(await status(supabase, person))

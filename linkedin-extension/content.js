@@ -297,14 +297,20 @@
     .draft{background:#f6f8fc;border:1px solid #e3e8f2;border-radius:10px;padding:10px 12px;font-size:13.5px;line-height:1.45;white-space:pre-wrap;margin-bottom:6px}
     .row2{display:flex;gap:14px;align-items:center;margin:2px 0 12px}
     .small{font-size:12px;color:#5f6368;margin-bottom:6px}
+    .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+    .chip{border:1px solid #dadce0;border-radius:16px;background:#fff;padding:5px 10px;font-size:12.5px;cursor:pointer;color:#3c4043}
+    .chip.on{background:#f3e8ff;border-color:#c4b5fd;color:#4c1d95;font-weight:600}
     .diag{display:block;margin:0 auto 10px;background:none;border:none;color:#9aa0a6;font-size:11px;cursor:pointer}
   </style><div id="root"></div>`
   const root = shadow.getElementById('root')
 
   let open = false, page = '', ctx = null, crm = null, msg = '', busy = false
-  let form = {}, taskOpen = false, drafting = false, draftMsg = '', draftHint = '', draftPain = 'auto', noReason = false
-  // Same keys as lib/outreach/relevance.ts
-  const PAIN_OPTIONS = [['auto', 'Automatisch aus den Stellen'], ['too_many_applications', 'Zu viele Bewerbungen'], ['specialist_interview', 'Fachgespräch nur mit Fachbereich'], ['slow_process', 'Langsamer Prozess'], ['drop_off', 'Kandidaten springen ab'], ['reposted', 'Stelle erneut ausgeschrieben'], ['long_open', 'Stelle lange offen'], ['builds_recruiting', 'Sucht selbst HR/Recruiting'], ['repeated_role', 'Mehrere gleiche Stellen'], ['no_hr', 'Kein HR – Leitung macht es selbst'], ['new_jobs', 'Wachstum, viele neue Stellen'], ['volume', 'Volumen-Rollen (Schicht, Service …)'], ['many_jobs', 'Viele offene Stellen']]
+  let form = {}, taskOpen = false, drafting = false, draftMsg = '', draftHint = '', noReason = false
+  // Inputs for the message agent: pains (up to 3, first = main point), goal, channel, role, own text
+  let draftPains = [], draftGoal = 'first', draftChannel = 'linkedin', draftRole = '', draftText = '', adjustOpen = false
+  // Same keys as lib/outreach/pains.ts
+  const PAIN_CHIPS = [['too_many_applications', 'Zu viele Bewerbungen'], ['many_jobs', 'Viele Stellen gleichzeitig'], ['specialist_interview', 'Fachgespräch nur mit Fachbereich'], ['no_hr', 'Kein HR-Team'], ['slow_process', 'Langsamer Prozess'], ['drop_off', 'Kandidaten springen ab'], ['reposted', 'Stelle erneut ausgeschrieben'], ['long_open', 'Stelle lange offen'], ['builds_recruiting', 'Sucht selbst HR/Recruiting']]
+  const GOALS = [['first', 'Erstkontakt'], ['followup', 'Nachfassen (keine Antwort)'], ['meeting', 'Termin vorschlagen'], ['reactivate', 'Alten Kontakt reaktivieren']]
 
   const kind = () => location.pathname.startsWith('/in/') ? 'profile' : location.pathname.startsWith('/messaging/') ? 'thread' : null
   const addDays = n => { const d = new Date(Date.now() + n * 86400000); return d.toISOString().slice(0, 10) }
@@ -348,17 +354,24 @@
     if (!crm?.known || !crm.company) return ''
     const d = crm.draft
     if (drafting) return '<div class="sec muted">✍️ Entwurf wird geschrieben … (ca. 10–20 s)</div>'
-    const painSel = `<div class="f"><label>Pain</label><select id="draft-pain">${PAIN_OPTIONS.map(([k, l]) => `<option value="${k}" ${draftPain === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`
-    const hint = `<div class="f"><label>Was weißt du über die Person? (optional)</label><textarea id="draft-hint" rows="2" placeholder="z. B. Post über Fachkräftemangel, kennen uns von …">${esc(draftHint)}</textarea></div>${painSel}`
+    const chips = `<div class="small">Pain – bis zu 3, der erste ist der Hauptpunkt. Nichts gewählt = aus den offenen Stellen.</div>
+      <div class="chips">${PAIN_CHIPS.map(([k, l]) => { const i = draftPains.indexOf(k); return `<button class="chip ${i >= 0 ? 'on' : ''}" data-pain="${k}">${i >= 0 ? `${i + 1}. ` : ''}${esc(l)}</button>` }).join('')}</div>`
+    const sel = (id, value, options) => `<select id="${id}">${options.map(([k, l]) => `<option value="${k}" ${value === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`
+    const inputs = `${chips}
+      <div class="row"><div class="f"><label>Ziel</label>${sel('draft-goal', draftGoal, GOALS)}</div><div class="f"><label>Kanal</label>${sel('draft-channel', draftChannel, [['linkedin', 'LinkedIn'], ['email', 'E-Mail']])}</div></div>
+      <div class="f"><label>Um welche Stelle geht es? (optional)</label><input id="draft-role" value="${esc(draftRole)}" placeholder="z. B. Mechatroniker:in" autocomplete="off"></div>
+      <div class="f"><label>Was weißt du über die Person? (optional)</label><textarea id="draft-hint" rows="2" placeholder="z. B. Post über Fachkräftemangel, kennen uns von …">${esc(draftHint)}</textarea></div>
+      <div class="f"><label>Deine Nachricht / Stichpunkte (optional)</label><textarea id="draft-text" rows="3" placeholder="Der Agent übernimmt den Inhalt und formuliert aus">${esc(draftText)}</textarea></div>`
+    const hint = d ? `<details id="adjust" ${adjustOpen ? 'open' : ''}><summary class="small" style="cursor:pointer">Anpassen: Pain, Ziel, eigener Text</summary>${inputs}</details>` : inputs
     const info = draftMsg ? `<div class="msg">${draftMsg}${noReason ? `<br><button class="link" id="draft-anyway">Trotzdem schreiben</button>` : ''}</div>` : ''
-    if (!d) return `<div class="sec">${hint}<button class="link" id="draft-new">✍️ Erstnachricht schreiben lassen</button>${info}</div>`
+    if (!d) return `<div class="sec">${hint}<button class="link" id="draft-new">✍️ Nachricht schreiben lassen</button>${info}</div>`
     return `<div class="sec">
       <div class="h">✍️ Entwurf</div>
       ${d.relevance ? `<div class="small"><b>🎯 Relevanz ${esc(d.relevance)}/5</b>${d.urgency ? ` · Dringlichkeit ${esc(d.urgency)}` : ''}${d.painLabel ? ` · ${esc(d.painLabel)}` : ''}</div>` : ''}
       ${d.pain ? `<div class="small"><b>Pain:</b> ${esc(d.pain)}</div>` : ''}
       ${d.painEvidence ? `<div class="small"><b>Beleg:</b> ${esc(d.painEvidence)}</div>` : d.hook ? `<div class="small">Anlass: ${esc(d.hook)}</div>` : ''}
-      ${d.connectNote ? `<div class="small">Vernetzungsnotiz</div><div class="draft">${esc(d.connectNote)}</div><div class="row2"><button class="link" id="copy-note">Notiz kopieren</button></div>` : ''}
-      <div class="small">Erste Nachricht</div><div class="draft">${esc(d.message)}</div>
+      ${d.connectNote ? `<div class="small">${d.email ? 'Betreff' : 'Vernetzungsnotiz'}</div><div class="draft">${esc(d.connectNote)}</div><div class="row2"><button class="link" id="copy-note">${d.email ? 'Betreff' : 'Notiz'} kopieren</button></div>` : ''}
+      <div class="small">${d.email ? 'E-Mail' : d.goal && d.goal !== 'Erstkontakt' ? `Nachricht · ${esc(d.goal)}` : 'Erste Nachricht'}</div><div class="draft">${esc(d.message)}</div>
       ${hint}
       <div class="row2"><button class="link" id="copy-msg">Nachricht kopieren</button><button class="link" id="draft-new">Neu schreiben</button><a class="link" href="${esc(APP)}/agents" target="_blank">Bearbeiten ↗</a></div>
       ${info}
@@ -367,7 +380,7 @@
 
   async function writeDraft(force, anyway = false) {
     drafting = true; draftMsg = ''; noReason = false; render()
-    const res = await api({ action: 'draftMessage', profileUrl: profileUrl(), name: ctx.name, force, notes: draftHint, profile: profileText(), connected: !!ctx.connected, pain: draftPain, anyway })
+    const res = await api({ action: 'draftMessage', profileUrl: profileUrl(), name: ctx.name, force, notes: draftHint, profile: profileText(), connected: !!ctx.connected, pains: draftPains, goal: draftGoal, channel: draftChannel, role: draftRole, draftText, anyway })
     drafting = false
     // No evidence → say why and offer to write anyway (also after an automatic draft)
     if (res.error && res.noReason) { noReason = true; draftMsg = esc(res.error) }
@@ -476,7 +489,16 @@
     if ($('log')) $('log').onclick = log
     if ($('draft-new')) $('draft-new').onclick = () => writeDraft(true)
     if ($('draft-hint')) $('draft-hint').oninput = e => { draftHint = e.target.value }
-    if ($('draft-pain')) $('draft-pain').onchange = e => { draftPain = e.target.value }
+    root.querySelectorAll('[data-pain]').forEach(b => b.onclick = () => {
+      const k = b.dataset.pain
+      draftPains = draftPains.includes(k) ? draftPains.filter(x => x !== k) : draftPains.length >= 3 ? draftPains : [...draftPains, k]
+      render()
+    })
+    if ($('draft-goal')) $('draft-goal').onchange = e => { draftGoal = e.target.value }
+    if ($('draft-channel')) $('draft-channel').onchange = e => { draftChannel = e.target.value }
+    if ($('draft-role')) $('draft-role').oninput = e => { draftRole = e.target.value }
+    if ($('draft-text')) $('draft-text').oninput = e => { draftText = e.target.value }
+    if ($('adjust')) $('adjust').ontoggle = e => { adjustOpen = e.target.open }
     if ($('draft-anyway')) $('draft-anyway').onclick = () => writeDraft(true, true)
     const copy = (id, text) => { if ($(id)) $(id).onclick = async () => { try { await navigator.clipboard.writeText(text); $(id).textContent = 'Kopiert ✓' } catch { $(id).textContent = 'Kopieren nicht möglich' } } }
     copy('copy-note', crm?.draft?.connectNote || '')
@@ -496,7 +518,7 @@
         await new Promise(r => setTimeout(r, 1000))
       }
     }
-    msg = ''; draftMsg = ''; draftHint = ''; draftPain = 'auto'; noReason = false; crm = null; taskOpen = false; render()
+    msg = ''; draftMsg = ''; draftHint = ''; draftPains = []; draftGoal = 'first'; draftChannel = 'linkedin'; draftRole = ''; draftText = ''; adjustOpen = false; noReason = false; crm = null; taskOpen = false; render()
     crm = await api({ action: 'lookup', profileUrl: profileUrl(), name: ctx.name })
     resetForm()
     render()

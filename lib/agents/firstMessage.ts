@@ -305,7 +305,7 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: DraftOpt
 }
 
 // Single draft triggered by an event (LinkedIn import, Heiße Firma taken) – logged as its own run
-export async function draftOnEvent(supabase: any, t: Target, extra: Pick<DraftOpts, 'notes' | 'profile' | 'connected' | 'pain' | 'anyway'> = {}) {
+export async function draftOnEvent(supabase: any, t: Target, extra: Pick<DraftOpts, 'notes' | 'profile' | 'connected' | 'pain' | 'anyway' | 'pains' | 'goal' | 'channel' | 'role' | 'draftText'> = {}) {
   const settings = await loadSettings(supabase, t.projectId)
   if (!settings.first_message.enabled || !settings.first_message.config.autoDraft) return null
   const runId = await startRun(supabase, t.projectId, 'first_message', 'event')
