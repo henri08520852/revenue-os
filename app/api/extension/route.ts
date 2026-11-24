@@ -65,7 +65,11 @@ async function status(supabase: any, person: any) {
     leads: (leads || []).map((l: any) => ({ id: l.id, name: l.name, stage: LEAD_STAGES[l.stage] ?? l.stage, url: `${APP_URL}/pipeline?focus=${l.id}` })),
     deals: (deals || []).map((d: any) => ({ id: d.id, name: d.name, stage: (OPPORTUNITY_STAGE_LABELS as Record<string, string>)[d.stage] ?? d.stage, url: `${APP_URL}/opportunities/${d.id}` })),
     nextTask: tasks?.[0] ?? null,
-    draft: drafts?.[0] ? { id: drafts[0].id, message: drafts[0].body, connectNote: drafts[0].data?.connect_note ?? null, hook: drafts[0].data?.hook ?? null } : null,
+    draft: drafts?.[0] ? {
+      id: drafts[0].id, message: drafts[0].body, connectNote: drafts[0].data?.connect_note ?? null, hook: drafts[0].data?.hook ?? null,
+      relevance: drafts[0].data?.relevance ?? null, urgency: drafts[0].data?.urgency ?? null, painKey: drafts[0].data?.pain_key ?? null, painLabel: drafts[0].data?.pain_label ?? null,
+      pain: drafts[0].data?.pain ?? null, painEvidence: drafts[0].data?.pain_evidence ?? null,
+    } : null,
   }
 }
 
@@ -173,7 +177,8 @@ export async function POST(req: Request) {
       if (!person?.company_id) return NextResponse.json({ error: 'Kontakt mit Firma zuerst in Revenue OS anlegen.' }, { status: 404 })
       const { data: lead } = await supabase.from('leads').select('id').eq('company_id', person.company_id).in('stage', ['prospect', 'outreach', 'contacted']).order('created_at', { ascending: false }).limit(1)
       const target = { projectId: PROJECT_ID, companyId: person.company_id, personId: person.id, leadId: lead?.[0]?.id ?? null }
-      const extra = { notes: str(body.notes, 1500) || null, profile: str(body.profile, 2500) || null, connected: body.connected === true }
+      const pain = str(body.pain, 40)
+      const extra = { notes: str(body.notes, 1500) || null, profile: str(body.profile, 2500) || null, connected: body.connected === true, pain: (pain || 'auto') as any, anyway: body.anyway === true }
       const r = body.force ? await draftFirstMessage(supabase, target, extra) : await draftOnEvent(supabase, target, extra)
       if (!r) return NextResponse.json({ error: 'Der Erstnachricht-Agent ist ausgeschaltet.' }, { status: 409 })
       return NextResponse.json(await status(supabase, person))
@@ -267,6 +272,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ error: 'Unbekannte Aktion' }, { status: 400 })
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Fehler' }, { status: 400 })
+    return NextResponse.json({ error: err?.message || 'Fehler', ...(err?.noReason ? { noReason: true } : {}) }, { status: err?.noReason ? 422 : 400 })
   }
 }

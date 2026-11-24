@@ -171,7 +171,7 @@ export async function redraftItem(id: string): Promise<Result> {
     const target = { projectId: PROJECT_ID, companyId: item.company_id, personId: item.person_id, leadId: item.lead_id }
     if (item.kind === 'letter') await draftLetter(supabase, target)
     // Keep what the team typed in (composer / extension) for the rewrite
-    else await draftFirstMessage(supabase, target, { notes: item.data?.notes, profile: item.data?.profile, address: item.data?.address, segment: item.data?.overrides?.segment, industry: item.data?.overrides?.industry })
+    else await draftFirstMessage(supabase, target, { notes: item.data?.notes, profile: item.data?.profile, address: item.data?.address, segment: item.data?.overrides?.segment, industry: item.data?.overrides?.industry, pain: item.data?.overrides?.pain, anyway: true })
     revalidatePath('/agents')
     return { error: null }
   } catch (e) { return fail(e) }

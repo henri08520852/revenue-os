@@ -205,7 +205,7 @@ export function contactFromText(text: string, job: string | null, source: string
   return null
 }
 
-const descriptionOf = (d: any): string => {
+export const descriptionOf = (d: any): string => {
   const parts: string[] = []
   const walk = (x: any, depth: number) => {
     if (!x || depth > 5) return

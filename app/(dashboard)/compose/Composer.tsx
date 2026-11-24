@@ -12,6 +12,7 @@ import { PERSONAS, personaOf, type Persona } from '@/lib/outreach/persona'
 import { SEGMENTS, type SegmentKey } from '@/lib/outreach/segments'
 import { DraftCard, QueueItem } from '../agents/AgentsBoard'
 import { composeMessage, loadItem } from './actions'
+import { PAINS, type PainKey } from '@/lib/outreach/pains'
 import { cn } from '@/lib/utils'
 
 export type ContactOption = { id: string; name: string; title: string | null; company: string | null; persona: string | null; linkedin: string | null }
@@ -36,6 +37,8 @@ export default function Composer({ contacts, sent, preselect, baseTexts, industr
   const [persona, setPersona] = useState<Persona | 'auto'>('auto')
   const [segment, setSegment] = useState<SegmentKey | 'auto'>('auto')
   const [industry, setIndustry] = useState('auto')
+  const [pain, setPain] = useState<PainKey | 'auto'>('auto')
+  const [noReason, setNoReason] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [item, setItem] = useState<QueueItem | null>(null)
   const [version, setVersion] = useState(0)
@@ -51,13 +54,14 @@ export default function Composer({ contacts, sent, preselect, baseTexts, industr
   const set = (patch: Partial<typeof f>) => setF(x => ({ ...x, ...patch }))
   const canGo = mode === 'pick' ? !!picked : !!f.company.trim() && !!(f.first.trim() || f.last.trim())
 
-  const generate = async () => {
-    setBusy(true)
+  const generate = async (anyway = false) => {
+    setBusy(true); setNoReason(null)
     const r = await composeMessage({
       ...(mode === 'pick' ? { personId: picked!.id } : f),
-      notes, profile, address, persona, segment, industry,
+      notes, profile, address, persona, segment, industry, pain, anyway,
     })
     setBusy(false)
+    if (r.noReason) return setNoReason(r.error)
     if (r.error) return toast.error(r.error)
     setItem(r.item); setVersion(v => v + 1)
   }
@@ -156,6 +160,13 @@ export default function Composer({ contacts, sent, preselect, baseTexts, industr
               </L>
             </div>
 
+            <L label="Pain (sonst aus den offenen Stellen abgeleitet)">
+              <Select value={pain} onChange={e => setPain(e.target.value as any)}>
+                <option value="auto">Automatisch aus den Stellen</option>
+                {(Object.keys(PAINS) as PainKey[]).map(k => <option key={k} value={k}>{PAINS[k].label}</option>)}
+              </Select>
+            </L>
+
             <L label="Was weißt du über die Person oder Firma? (optional, macht die Nachricht persönlich)">
               <Textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)}
                 placeholder="z. B. hat gestern über Fachkräftemangel gepostet · wir kennen uns von der Messe · sucht 3 Pflegekräfte · gleiche Uni" />
@@ -165,9 +176,15 @@ export default function Composer({ contacts, sent, preselect, baseTexts, industr
               <Textarea rows={5} className="mt-2" value={profile} onChange={e => setProfile(e.target.value)} placeholder="Text aus dem Profil hier hineinkopieren – der Agent nutzt nur Fakten daraus." />
             </details>
 
-            <Button className="w-full" onClick={generate} disabled={!canGo || busy}>
+            <Button className="w-full" onClick={() => generate()} disabled={!canGo || busy}>
               {busy ? <Loader2 className="animate-spin" /> : <Sparkles />} {busy ? 'Schreibt … (ca. 10–20 s)' : 'Nachricht erzeugen'}
             </Button>
+            {noReason && (
+              <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+                <div>{noReason}</div>
+                <Button size="sm" variant="outline" onClick={() => generate(true)} disabled={busy}>Trotzdem schreiben</Button>
+              </div>
+            )}
             {mode === 'new' && <p className="text-[12px] text-muted-foreground"><UserPlus className="mr-1 inline size-3.5" />Kontakt und Firma werden angelegt, die Firma landet als Prospect in der Pipeline.</p>}
           </Card>
 

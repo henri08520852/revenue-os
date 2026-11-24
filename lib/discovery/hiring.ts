@@ -70,7 +70,7 @@ const PUBLIC_ANY = /(landesbetrieb|\baör\b|anstalt des öffentlichen rechts|kö
 const LARGE_ANY = /(dormakaba|nestl[eé]|infineon|bechtle|knorr-bremse|media-?saturn|mediamarkt|\bdpd\b|\btüv\b|\bdekra\b|lkw walter|\badesso\b|nagel-group|autobahn gmbh|deutsche bahn|siemens|\bbosch\b|\bbmw\b|\bsap\b|\bdhl\b|\bups\b|hermes|fedex|accenture|deloitte|\bpwc\b|\bkpmg\b|ernst & young|\bey\b|capgemini|\bibm\b|t-systems|telekom)/i
 export const excluded = (name: string) => LARGE_ANY.test(name) || AGENCY.test(name) || PUBLIC.test(name.trim()) || PUBLIC_ANY.test(name) || LARGE.test(name.trim())
 
-const VOLUME = /werkstudent|trainee|ausbildung|azubi|lehrling|lehrstelle|duales studium|dual|praktik|aushilfe|minijob|kundenservice|kundenberat|call ?center|vertrieb|sales|verkäuf|sachbearbeit|kaufm|empfang|assistenz|lager|logistik|fahrer|pflege|erzieh|service/i
+export const VOLUME = /werkstudent|trainee|ausbildung|azubi|lehrling|lehrstelle|duales studium|dual|praktik|aushilfe|minijob|kundenservice|kundenberat|call ?center|vertrieb|sales|verkäuf|sachbearbeit|kaufm|empfang|assistenz|lager|logistik|fahrer|pflege|erzieh|service/i
 
 const ATS: [RegExp, string][] = [
   [/personio\./, 'Personio'], [/softgarden\./, 'softgarden'], [/greenhouse\.io/, 'Greenhouse'], [/lever\.co/, 'Lever'],

@@ -7,6 +7,7 @@ import { draftFirstMessage } from '@/lib/agents/firstMessage'
 import { enrollLead } from '@/lib/agents/sequence'
 import { PERSONAS, roleCategoryOf, type Persona } from '@/lib/outreach/persona'
 import type { SegmentKey } from '@/lib/outreach/segments'
+import type { PainKey } from '@/lib/outreach/pains'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID!
 
@@ -18,6 +19,8 @@ export type ComposeInput = {
   segment?: SegmentKey | 'auto'
   industry?: string
   persona?: Persona | 'auto'
+  pain?: PainKey | 'auto'
+  anyway?: boolean
 }
 
 const ITEM_COLS = 'id, agent_key, kind, channel, title, body, data, created_at, company_id, person_id, lead_id, companies(name), people(full_name, job_title, linkedin_url)'
@@ -28,7 +31,7 @@ const cleanUrl = (u: string) => {
   return m ? `https://www.linkedin.com/in/${m[1]}` : u || null
 }
 
-export async function composeMessage(input: ComposeInput): Promise<{ error: string | null; item?: any }> {
+export async function composeMessage(input: ComposeInput): Promise<{ error: string | null; item?: any; noReason?: boolean }> {
   try {
     const { me, denied } = await getTeamContext()
     if (!me || denied) return { error: 'Nicht angemeldet' }
@@ -104,14 +107,14 @@ export async function composeMessage(input: ComposeInput): Promise<{ error: stri
     }
 
     const r = await draftFirstMessage(supabase, { projectId: PROJECT_ID, companyId: companyId!, personId, leadId }, {
-      notes: s(input.notes, 1500) || null, profile: s(input.profile, 2500) || null, address: input.address ?? 'auto', segment: input.segment ?? 'auto', industry: input.industry || 'auto',
+      notes: s(input.notes, 1500) || null, profile: s(input.profile, 2500) || null, address: input.address ?? 'auto', segment: input.segment ?? 'auto', industry: input.industry || 'auto', pain: input.pain ?? 'auto', anyway: !!input.anyway,
     })
     const { data: item } = await supabase.from('automation_items').select(ITEM_COLS).eq('id', r.itemId).single()
     revalidatePath('/agents')
     revalidatePath('/compose')
     return { error: null, item }
   } catch (e: any) {
-    return { error: e?.message || 'Fehler' }
+    return { error: e?.message || 'Fehler', ...(e?.noReason ? { noReason: true } : {}) }
   }
 }
 

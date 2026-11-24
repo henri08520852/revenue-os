@@ -14,7 +14,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       let json = null
       try { json = JSON.parse(text) } catch { /* login page instead of JSON → not signed in */ }
       if (!json) return reply({ error: 'Bitte in Revenue OS anmelden.', login: API.replace('/api/extension', '/login') })
-      reply(res.ok ? json : { error: json.error || `Fehler ${res.status}`, login: json.login })
+      reply(res.ok ? json : { error: json.error || `Fehler ${res.status}`, login: json.login, noReason: json.noReason })
     })
     .catch(() => reply({ error: 'Revenue OS nicht erreichbar.' }))
   return true // async reply

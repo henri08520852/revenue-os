@@ -243,7 +243,16 @@ export function DraftCard({ item, onDone }: { item: QueueItem; onDone?: (kind: s
             {item.data.industry_label && <Badge tone="outline">{item.data.industry_label}</Badge>}
           </div>
         )}
-        {item.data?.hook && (
+        {item.data?.pain ? (
+          <div className="space-y-1 rounded-md bg-violet-50 px-3 py-2 text-[13px] text-violet-900">
+            <div className="flex items-center gap-2 font-medium">
+              <Sparkles className="size-3.5 shrink-0" />
+              {[item.data.relevance ? `Relevanz ${item.data.relevance}/5` : null, item.data.urgency ? `Dringlichkeit ${item.data.urgency}` : null, item.data.pain_label].filter(Boolean).join(' · ') || 'Pain'}
+            </div>
+            <div><span className="font-medium">Pain:</span> {item.data.pain}</div>
+            {item.data.pain_evidence && <div><span className="font-medium">Beleg:</span> {item.data.pain_evidence}</div>}
+          </div>
+        ) : item.data?.hook && (
           <div className="flex items-start gap-2 rounded-md bg-violet-50 px-3 py-2 text-[13px] text-violet-900">
             <Sparkles className="mt-0.5 size-3.5 shrink-0" /><span><span className="font-medium">Anlass:</span> {item.data.hook}</span>
           </div>

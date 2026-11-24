@@ -302,7 +302,9 @@
   const root = shadow.getElementById('root')
 
   let open = false, page = '', ctx = null, crm = null, msg = '', busy = false
-  let form = {}, taskOpen = false, drafting = false, draftMsg = '', draftHint = ''
+  let form = {}, taskOpen = false, drafting = false, draftMsg = '', draftHint = '', draftPain = 'auto', noReason = false
+  // Same keys as lib/outreach/relevance.ts
+  const PAIN_OPTIONS = [['auto', 'Automatisch aus den Stellen'], ['reposted', 'Stelle erneut ausgeschrieben'], ['long_open', 'Stelle lange offen'], ['builds_recruiting', 'Sucht selbst HR/Recruiting'], ['repeated_role', 'Mehrere gleiche Stellen'], ['no_hr', 'Kein HR – Leitung macht es selbst'], ['new_jobs', 'Wachstum, viele neue Stellen'], ['volume', 'Volumen-Rollen (Schicht, Service …)'], ['many_jobs', 'Viele offene Stellen']]
 
   const kind = () => location.pathname.startsWith('/in/') ? 'profile' : location.pathname.startsWith('/messaging/') ? 'thread' : null
   const addDays = n => { const d = new Date(Date.now() + n * 86400000); return d.toISOString().slice(0, 10) }
@@ -346,24 +348,30 @@
     if (!crm?.known || !crm.company) return ''
     const d = crm.draft
     if (drafting) return '<div class="sec muted">✍️ Entwurf wird geschrieben … (ca. 10–20 s)</div>'
-    const hint = `<div class="f"><label>Was weißt du über die Person? (optional)</label><textarea id="draft-hint" rows="2" placeholder="z. B. Post über Fachkräftemangel, kennen uns von …">${esc(draftHint)}</textarea></div>`
-    if (!d) return `<div class="sec">${hint}<button class="link" id="draft-new">✍️ Erstnachricht schreiben lassen</button>${draftMsg ? `<div class="msg">${draftMsg}</div>` : ''}</div>`
+    const painSel = `<div class="f"><label>Pain</label><select id="draft-pain">${PAIN_OPTIONS.map(([k, l]) => `<option value="${k}" ${draftPain === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`
+    const hint = `<div class="f"><label>Was weißt du über die Person? (optional)</label><textarea id="draft-hint" rows="2" placeholder="z. B. Post über Fachkräftemangel, kennen uns von …">${esc(draftHint)}</textarea></div>${painSel}`
+    const info = draftMsg ? `<div class="msg">${draftMsg}${noReason ? `<br><button class="link" id="draft-anyway">Trotzdem schreiben</button>` : ''}</div>` : ''
+    if (!d) return `<div class="sec">${hint}<button class="link" id="draft-new">✍️ Erstnachricht schreiben lassen</button>${info}</div>`
     return `<div class="sec">
       <div class="h">✍️ Entwurf</div>
-      ${d.hook ? `<div class="small">Anlass: ${esc(d.hook)}</div>` : ''}
+      ${d.relevance ? `<div class="small"><b>🎯 Relevanz ${esc(d.relevance)}/5</b>${d.urgency ? ` · Dringlichkeit ${esc(d.urgency)}` : ''}${d.painLabel ? ` · ${esc(d.painLabel)}` : ''}</div>` : ''}
+      ${d.pain ? `<div class="small"><b>Pain:</b> ${esc(d.pain)}</div>` : ''}
+      ${d.painEvidence ? `<div class="small"><b>Beleg:</b> ${esc(d.painEvidence)}</div>` : d.hook ? `<div class="small">Anlass: ${esc(d.hook)}</div>` : ''}
       ${d.connectNote ? `<div class="small">Vernetzungsnotiz</div><div class="draft">${esc(d.connectNote)}</div><div class="row2"><button class="link" id="copy-note">Notiz kopieren</button></div>` : ''}
       <div class="small">Erste Nachricht</div><div class="draft">${esc(d.message)}</div>
       ${hint}
       <div class="row2"><button class="link" id="copy-msg">Nachricht kopieren</button><button class="link" id="draft-new">Neu schreiben</button><a class="link" href="${esc(APP)}/agents" target="_blank">Bearbeiten ↗</a></div>
-      ${draftMsg ? `<div class="msg">${draftMsg}</div>` : ''}
+      ${info}
     </div>`
   }
 
-  async function writeDraft(force) {
-    drafting = true; draftMsg = ''; render()
-    const res = await api({ action: 'draftMessage', profileUrl: profileUrl(), name: ctx.name, force, notes: draftHint, profile: profileText(), connected: !!ctx.connected })
+  async function writeDraft(force, anyway = false) {
+    drafting = true; draftMsg = ''; noReason = false; render()
+    const res = await api({ action: 'draftMessage', profileUrl: profileUrl(), name: ctx.name, force, notes: draftHint, profile: profileText(), connected: !!ctx.connected, pain: draftPain, anyway })
     drafting = false
-    if (res.error) draftMsg = force ? `<span class="err">${esc(res.error)}</span>` : ''
+    // No evidence → say why and offer to write anyway (also after an automatic draft)
+    if (res.error && res.noReason) { noReason = true; draftMsg = esc(res.error) }
+    else if (res.error) draftMsg = force ? `<span class="err">${esc(res.error)}</span>` : ''
     else crm = { ...res, companies: crm?.companies }
     render()
   }
@@ -468,6 +476,8 @@
     if ($('log')) $('log').onclick = log
     if ($('draft-new')) $('draft-new').onclick = () => writeDraft(true)
     if ($('draft-hint')) $('draft-hint').oninput = e => { draftHint = e.target.value }
+    if ($('draft-pain')) $('draft-pain').onchange = e => { draftPain = e.target.value }
+    if ($('draft-anyway')) $('draft-anyway').onclick = () => writeDraft(true, true)
     const copy = (id, text) => { if ($(id)) $(id).onclick = async () => { try { await navigator.clipboard.writeText(text); $(id).textContent = 'Kopiert ✓' } catch { $(id).textContent = 'Kopieren nicht möglich' } } }
     copy('copy-note', crm?.draft?.connectNote || '')
     copy('copy-msg', crm?.draft?.message || '')
@@ -486,7 +496,7 @@
         await new Promise(r => setTimeout(r, 1000))
       }
     }
-    msg = ''; draftMsg = ''; draftHint = ''; crm = null; taskOpen = false; render()
+    msg = ''; draftMsg = ''; draftHint = ''; draftPain = 'auto'; noReason = false; crm = null; taskOpen = false; render()
     crm = await api({ action: 'lookup', profileUrl: profileUrl(), name: ctx.name })
     resetForm()
     render()
