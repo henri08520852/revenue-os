@@ -188,3 +188,12 @@ export async function painsFor(ids: string[]): Promise<{ error: string | null; p
     return { error: e?.message || 'Fehler' }
   }
 }
+
+// Size class set by hand (e.g. after a look at LinkedIn) when the website gives no employee count
+export async function setCandidateSize(id: string, bucket: string | null): Promise<Result> {
+  const supabase = createClient() as any
+  const { data, error: readError } = await supabase.from('candidate_companies').select('enrichment_data').eq('id', id).single()
+  if (readError) return { error: readError.message }
+  const { error } = await supabase.from('candidate_companies').update({ enrichment_data: { ...(data?.enrichment_data || {}), sizeManual: bucket } }).eq('id', id)
+  return { error: error?.message ?? null }
+}

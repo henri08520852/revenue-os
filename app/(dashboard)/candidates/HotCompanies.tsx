@@ -5,12 +5,12 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Briefcase, Building2, Check, ExternalLink, Globe, Loader2, MapPin, RefreshCw, Search, UserRound, Users, X } from 'lucide-react'
 import { contactSearchLinks } from '@/lib/outreach/linkedin'
-import { enrichMissing, painsFor, rejectCandidate, searchNow, takeCandidate } from './actions'
+import { enrichMissing, painsFor, rejectCandidate, searchNow, setCandidateSize, takeCandidate } from './actions'
 import type { CandidatePain } from '@/lib/outreach/pains'
 import { draftForLead } from '../agents/actions'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Select } from '@/components/ui/input'
+import { Input, Select } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
 type Evidence = { title?: string; link?: string | null; source?: string }
@@ -28,6 +28,7 @@ type Candidate = {
   hiring: Hiring | null; evidence: Evidence[] | null; existing_company_id: string | null; updated_at: string | null; created_at: string
   enrichment_data?: {
     v?: number
+    sizeManual?: SizeKey | null
     northdata?: { employees?: number | null; signals?: string[] }
     hrContact?: { name: string | null; title: string | null; email: string | null; phone: string | null; job: string | null; source: string } | null
     impressum?: { website: string | null; domain: string | null; managers: string[]; register: string | null; email: string | null; phone: string | null; employees: number | null; checkedAt: string; note?: string; address?: { street: string; zip: string; city: string } | null }
@@ -38,6 +39,30 @@ export type SourceStatus = { name: string; area: string; active: boolean; note: 
 const ENRICH_VERSION = 2 // keep in sync with lib/discovery/enrich.ts
 const NEWS_LABEL: Record<string, string> = { news_funding: 'Funding', news_expansion: 'Expansion', news_leadership: 'Leadership' }
 const SOURCE_LABEL: Record<string, string> = { ba: 'BA-Jobbörse', google_jobs: 'Google Jobs', eures: 'EURES', personio: 'Personio', softgarden: 'softgarden', join: 'JOIN', onlyfy: 'onlyfy', dvinci: 'd.vinci', rexx: 'rexx', concludis: 'concludis', recruitee: 'Recruitee', greenhouse: 'Greenhouse', lever: 'Lever', workable: 'Workable', smartrecruiters: 'SmartRecruiters' }
+
+// Size classes. Known = employee count from website/Impressum, BA job ad or Northdata, or set by hand.
+// No guessing from the number of open jobs: in our data the same 4 open jobs belong to firms with 30 and with 100,000 people.
+type SizeKey = 'small' | 'mid' | 'large' | 'enterprise'
+const SIZES: { key: SizeKey; label: string; min: number; max: number }[] = [
+  { key: 'small', label: 'Klein · 1–49', min: 1, max: 49 },
+  { key: 'mid', label: 'Mittel · 50–249', min: 50, max: 249 },
+  { key: 'large', label: 'Groß · 250–999', min: 250, max: 999 },
+  { key: 'enterprise', label: 'Enterprise · ab 1.000', min: 1000, max: Infinity },
+]
+type Size = { n: number | null; key: SizeKey | null; manual: boolean }
+function sizeOf(c: Candidate): Size {
+  const n = c.enrichment_data?.impressum?.employees ?? c.enrichment_data?.northdata?.employees ?? null
+  if (n != null && n > 0) return { n, key: SIZES.find(x => n <= x.max)!.key, manual: false }
+  const m = c.enrichment_data?.sizeManual
+  return { n: null, key: m && SIZES.some(x => x.key === m) ? m : null, manual: !!m }
+}
+// Own range: known count must lie inside; a size set by hand counts when its whole class lies inside
+function inRange(s: Size, min: number | null, max: number | null) {
+  const lo = min ?? 0, hi = max ?? Infinity
+  if (s.n != null) return s.n >= lo && s.n <= hi
+  const b = SIZES.find(x => x.key === s.key)
+  return !!b && b.min >= lo && b.max <= hi
+}
 
 function scoreTone(s: number) {
   return s >= 70 ? 'bg-red-50 text-red-700 ring-red-200' : s >= 45 ? 'bg-orange-50 text-orange-700 ring-orange-200' : 'bg-muted text-muted-foreground ring-border'
@@ -66,6 +91,9 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
   const [tab, setTab] = useState<'hiring' | 'news'>('hiring')
   const [country, setCountry] = useState('all')
   const [industry, setIndustry] = useState('all')
+  const [size, setSize] = useState('all')
+  const [range, setRange] = useState<{ min: string; max: string }>({ min: '', max: '' })
+  const [manualSize, setManualSize] = useState<Record<string, SizeKey | null>>({})
   const [gone, setGone] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState<string | null>(null)
   const [searching, startSearch] = useTransition()
@@ -105,11 +133,27 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
     })()
   }, [hiring, router])
 
+  const sizeFor = (c: Candidate) => c.id in manualSize ? sizeOf({ ...c, enrichment_data: { ...(c.enrichment_data || {}), sizeManual: manualSize[c.id] } }) : sizeOf(c)
+  const num = (v: string) => (v.trim() === '' || !Number.isFinite(+v) ? null : +v)
+  const matchesSize = (c: Candidate) => {
+    if (size === 'all') return true
+    const s = sizeFor(c)
+    if (size === 'unknown') return s.key == null
+    if (size === 'range') return inRange(s, num(range.min), num(range.max))
+    return s.key === size
+  }
   const list = (tab === 'hiring' ? hiring : news)
     .filter(c => !gone.has(c.id))
     .filter(c => tab !== 'hiring' || country === 'all' || c.hiring?.countries?.includes(country))
+    .filter(c => tab !== 'hiring' || matchesSize(c))
     .filter(c => tab !== 'hiring' || industry === 'all' || (industry === 'none' ? !c.hiring?.industry : c.hiring?.industry?.key === industry))
     .sort((a, b) => tab !== 'hiring' || sort === 'score' ? 0 : (pains[b.id]?.strength ?? -1) - (pains[a.id]?.strength ?? -1) || (b.score ?? 0) - (a.score ?? 0))
+  const sizeCounts = hiring.filter(c => !gone.has(c.id)).reduce((m, c) => { const k = sizeFor(c).key ?? 'unknown'; m[k] = (m[k] || 0) + 1; return m }, {} as Record<string, number>)
+  async function saveSize(c: Candidate, key: SizeKey | null) {
+    setManualSize(prev => ({ ...prev, [c.id]: key }))
+    const r = await setCandidateSize(c.id, key)
+    if (r.error) toast.error(r.error)
+  }
   const countries = Array.from(new Set(hiring.flatMap(c => c.hiring?.countries || [])))
   const industries = Array.from(hiring.reduce((m, c) => {
     const ind = c.hiring?.industry
@@ -179,6 +223,20 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
               <option value="pain">Stärkster Pain zuerst</option>
               <option value="score">Höchster Score zuerst</option>
             </Select>
+            <Select value={size} onChange={e => setSize(e.target.value)} className="h-8 text-[13px]" title="Größe nach Mitarbeitenden (aus Website/Impressum, Stellenanzeige oder von Hand eingetragen)">
+              <option value="all">Alle Größen</option>
+              {SIZES.map(x => <option key={x.key} value={x.key}>{x.label} ({sizeCounts[x.key] || 0})</option>)}
+              <option value="unknown">Größe unbekannt ({sizeCounts.unknown || 0})</option>
+              <option value="range">Eigene Spanne …</option>
+            </Select>
+            {size === 'range' && (
+              <div className="flex items-center gap-1 text-[13px] text-muted-foreground">
+                <Input type="number" min={0} inputMode="numeric" placeholder="von" value={range.min} onChange={e => setRange(r => ({ ...r, min: e.target.value }))} className="h-8 w-20 px-2 text-[13px]" />
+                –
+                <Input type="number" min={0} inputMode="numeric" placeholder="bis" value={range.max} onChange={e => setRange(r => ({ ...r, max: e.target.value }))} className="h-8 w-20 px-2 text-[13px]" />
+                <span>MA</span>
+              </div>
+            )}
             {industries.length > 0 && (
               <Select value={industry} onChange={e => setIndustry(e.target.value)} className="h-8 text-[13px]">
                 <option value="all">Alle Branchen</option>
@@ -208,7 +266,7 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
             const jobs = Array.isArray(c.evidence) ? c.evidence : []
             const imp = c.enrichment_data?.impressum
             const hr = c.enrichment_data?.hrContact?.name ? c.enrichment_data.hrContact : null
-            const employees = imp?.employees ?? c.enrichment_data?.northdata?.employees ?? null
+            const sz = sizeFor(c)
             return (
               <article key={c.id} className={cn('rounded-lg border border-border bg-card shadow-card transition-opacity', busy === c.id && 'opacity-60')}>
                 <div className="flex gap-4 p-5">
@@ -217,7 +275,15 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
                       <h3 className="text-[16px] font-semibold tracking-tight">{c.name}</h3>
                       {!h && <Badge tone="brand">{NEWS_LABEL[c.signal_hint || ''] ?? 'News'}</Badge>}
                       {c.existing_company_id && <Badge tone="violet"><Building2 />Im CRM</Badge>}
-                      {employees != null && <Badge tone={employees > 250 ? 'danger' : 'success'}><Users />~{employees.toLocaleString('de-DE')}{employees > 250 ? ' · größer als Zielgruppe' : ''}</Badge>}
+                      {h && (sz.n != null ? (
+                        <Badge tone={sz.n > 250 ? 'danger' : 'success'}><Users />~{sz.n.toLocaleString('de-DE')} MA · {SIZES.find(x => x.key === sz.key)!.label.split(' ·')[0]}{sz.n > 250 ? ' · größer als Zielgruppe' : ''}</Badge>
+                      ) : (
+                        <Select value={sz.key ?? ''} onChange={e => saveSize(c, (e.target.value || null) as SizeKey | null)} title="Keine Mitarbeiterzahl gefunden. Größe z. B. von LinkedIn hier eintragen."
+                          className={cn('h-6 rounded-full py-0 pl-2 pr-6 text-[11.5px] shadow-none', sz.key ? 'border-border text-foreground' : 'border-dashed text-muted-foreground')}>
+                          <option value="">Größe unbekannt</option>
+                          {SIZES.map(x => <option key={x.key} value={x.key}>{x.label} (von Hand)</option>)}
+                        </Select>
+                      ))}
                     </div>
 
                     {h && (
