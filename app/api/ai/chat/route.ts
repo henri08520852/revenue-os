@@ -1,6 +1,7 @@
 // AI assistant for a contact / company / deal: answers questions and writes briefings
 // from the CRM context (lib/ai/context.ts). Streams plain text back to the browser.
 import Anthropic from '@anthropic-ai/sdk'
+import { anthropicClient } from '@/lib/ai/client'
 import { createClient } from '@/lib/supabase/server'
 import { getTeamContext } from '@/lib/team'
 import { AiTarget, buildContext } from '@/lib/ai/context'
@@ -57,7 +58,7 @@ export async function POST(req: Request) {
   const context = await buildContext(target)
   if (!context) return new Response('Datensatz nicht gefunden', { status: 404 })
 
-  const client = new Anthropic({ apiKey })
+  const client = anthropicClient(apiKey)
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
     async start(controller) {

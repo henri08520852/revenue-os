@@ -1,6 +1,7 @@
 // First-message agent: researches company + contact and drafts a LinkedIn connection note and first message.
 // Only drafts – the result waits in the approval queue (automation_items) and is never sent automatically.
 import Anthropic from '@anthropic-ai/sdk'
+import { anthropicClient } from '@/lib/ai/client'
 import { fetchHtml, textOf } from '@/lib/discovery/enrich'
 import { loadSettings, startRun, finishRun, AgentConfig, AGENCY_RE } from './registry'
 import { personaOf, roleCategoryOf, PERSONAS, type Persona } from '@/lib/outreach/persona'
@@ -198,7 +199,7 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: DraftOpt
     `Aufhänger (warum gerade jetzt): ${signal.text}`,
   ].join('\n')
 
-  const client = new Anthropic({ apiKey: key })
+  const client = anthropicClient(key)
   const res = await client.messages.create({
     model: MODEL,
     max_tokens: 4000,

@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import { anthropicClient } from '@/lib/ai/client'
 import { registry } from './types'
 import type { Connector, ConnectorContext, ConnectorResult, Observation } from './types'
 
@@ -10,7 +11,7 @@ import Anthropic from '@anthropic-ai/sdk'
 // LLM relevance filter  (only runs when subConfig.priority === 'high')
 // ---------------------------------------------------------------------------
 
-const _anthropic = new Anthropic()
+const _anthropic = anthropicClient()
 
 async function isRelevantArticle(
   title: string,

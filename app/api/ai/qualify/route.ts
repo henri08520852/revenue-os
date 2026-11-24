@@ -1,6 +1,7 @@
 // Suggests the qualification checklist for a lead or deal from its CRM history.
 // The user reviews the suggestion before saving.
 import Anthropic from '@anthropic-ai/sdk'
+import { anthropicClient } from '@/lib/ai/client'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getTeamContext } from '@/lib/team'
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
   if (!context) return NextResponse.json({ error: 'Datensatz nicht gefunden' }, { status: 404 })
 
   try {
-    const client = new Anthropic({ apiKey })
+    const client = anthropicClient(apiKey)
     const res = await client.messages.create({
       model: MODEL,
       max_tokens: 4000,

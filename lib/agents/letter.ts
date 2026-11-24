@@ -2,6 +2,7 @@
 // addressed to the management) and writes the company-specific paragraph. Result is a printable
 // DIN 5008 letter in the approval queue – printing and posting stays manual.
 import Anthropic from '@anthropic-ai/sdk'
+import { anthropicClient } from '@/lib/ai/client'
 import { readCompany } from '@/lib/discovery/enrich'
 import { gather, apiKey, costOf, MODEL, Target } from './firstMessage'
 import { loadSettings, startRun, finishRun, LetterConfig } from './registry'
@@ -53,7 +54,7 @@ export async function draftLetter(supabase: any, t: Target, opts: { runId?: stri
     }
   }
 
-  const client = new Anthropic({ apiKey: key })
+  const client = anthropicClient(key)
   const res = await client.messages.create({
     model: MODEL,
     max_tokens: 3000,
