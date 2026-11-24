@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Briefcase, Building2, Check, ExternalLink, Globe, Loader2, MapPin, RefreshCw, Search, UserRound, Users, X } from 'lucide-react'
 import { contactSearchLinks } from '@/lib/outreach/linkedin'
-import { enrichMissing, rejectCandidate, searchNow, takeCandidate } from './actions'
+import { enrichMissing, painsFor, rejectCandidate, searchNow, takeCandidate } from './actions'
+import type { CandidatePain } from '@/lib/outreach/pains'
 import { draftForLead } from '../agents/actions'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +21,7 @@ type Hiring = {
   sourceCount?: number
   open: number; new14: number; repeated: { role: string; count: number }[]; volumeRoles: number
   ats: string[]; locations: string[]; countries: string[]; sources: string[]; updatedAt: string
+  pain?: CandidatePain | null
 }
 type Candidate = {
   id: string; name: string; source_type: string; signal_hint: string | null; confidence: number | null; score: number | null
@@ -70,6 +72,23 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
   // Website & Impressum load by themselves: the top cards still missing them are read in small batches
   const [reading, setReading] = useState<Set<string>>(new Set())
   const started = useRef(false)
+  // Pain per company: stored ones (< 1 day old) right away, the rest is checked in the background
+  const fresh = (p?: CandidatePain | null) => !!p && Date.now() - Date.parse(p.at) < 86400000
+  const [pains, setPains] = useState<Record<string, CandidatePain | null>>(() =>
+    Object.fromEntries(hiring.filter(c => fresh(c.hiring?.pain)).map(c => [c.id, c.hiring!.pain!])))
+  const [sort, setSort] = useState<'score' | 'pain'>('pain')
+  const painsStarted = useRef(false)
+  useEffect(() => {
+    if (painsStarted.current) return
+    painsStarted.current = true
+    const missing = hiring.filter(c => !fresh(c.hiring?.pain)).map(c => c.id)
+    ;(async () => {
+      for (let i = 0; i < missing.length; i += 40) {
+        const r = await painsFor(missing.slice(i, i + 40)).catch(() => null)
+        if (r?.pains) setPains(prev => ({ ...prev, ...r.pains }))
+      }
+    })()
+  }, [hiring])
   useEffect(() => {
     if (started.current) return
     started.current = true
@@ -90,6 +109,7 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
     .filter(c => !gone.has(c.id))
     .filter(c => tab !== 'hiring' || country === 'all' || c.hiring?.countries?.includes(country))
     .filter(c => tab !== 'hiring' || industry === 'all' || (industry === 'none' ? !c.hiring?.industry : c.hiring?.industry?.key === industry))
+    .sort((a, b) => tab !== 'hiring' || sort === 'score' ? 0 : (pains[b.id]?.strength ?? -1) - (pains[a.id]?.strength ?? -1) || (b.score ?? 0) - (a.score ?? 0))
   const countries = Array.from(new Set(hiring.flatMap(c => c.hiring?.countries || [])))
   const industries = Array.from(hiring.reduce((m, c) => {
     const ind = c.hiring?.industry
@@ -155,6 +175,10 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
         </div>
         {tab === 'hiring' && (
           <div className="ml-auto flex gap-2">
+            <Select value={sort} onChange={e => setSort(e.target.value as any)} className="h-8 text-[13px]">
+              <option value="pain">Stärkster Pain zuerst</option>
+              <option value="score">Höchster Score zuerst</option>
+            </Select>
             {industries.length > 0 && (
               <Select value={industry} onChange={e => setIndustry(e.target.value)} className="h-8 text-[13px]">
                 <option value="all">Alle Branchen</option>
@@ -203,6 +227,28 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
                           {h.new14 > 0 && <> · {h.new14} neu in 14 Tagen</>}
                           {h.volumeRoles > 0 && <> · {h.volumeRoles} bewerberstarke Rollen</>}
                         </p>
+                        {pains[c.id] === undefined ? (
+                          <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" />Pain wird aus den Stellen geprüft …</p>
+                        ) : pains[c.id]?.key ? (
+                          <div className="mt-3 rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-[13px] text-violet-950">
+                            <div className="font-semibold">🎯 {pains[c.id]!.label}</div>
+                            <div className="mt-0.5">{pains[c.id]!.fact}</div>
+                            {pains[c.id]!.more.length > 0 && (
+                              <div className="mt-1 text-[12px] text-violet-900/75" title={pains[c.id]!.more.map(m => m.fact).join('\n')}>Außerdem: {pains[c.id]!.more.map(m => m.label).join(' · ')}</div>
+                            )}
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                              <span className="inline-flex items-center gap-1 text-[12px] text-violet-900/75"><Search className="size-3.5" />Person auf LinkedIn finden:</span>
+                              {contactSearchLinks(c.name, [...(hr?.name ? [{ name: hr.name, title: hr.title }] : []), ...(imp?.managers || []).slice(0, 2).map((m: string) => ({ name: m, title: 'Geschäftsführung' }))]).map(l => (
+                                <a key={l.href} href={l.href} target="_blank" rel="noreferrer" title={l.hint}
+                                  className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-card px-2 py-0.5 text-xs hover:bg-accent">
+                                  {l.label} <ExternalLink className="size-3 text-muted-foreground" />
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-xs text-muted-foreground">Kein klarer Pain aus den Stellen erkennbar – eher nicht anschreiben.</p>
+                        )}
                         <div className="mt-3 flex flex-wrap gap-1.5">
                           {h.industry && <Badge tone="sky">{h.industry.label}</Badge>}
                           {h.officeShare != null && <Badge title="Anteil kaufmännischer, IT- und Fachrollen an den offenen Stellen" tone={h.officeShare >= 60 ? 'success' : h.officeShare <= 25 ? 'danger' : 'neutral'}>Office-Anteil {h.officeShare} %</Badge>}
@@ -237,7 +283,7 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
                           </div>
                         )}
                         {(imp.email || imp.phone || imp.address) && <div className="truncate text-muted-foreground sm:col-span-2">{[imp.address ? `${imp.address.street}, ${imp.address.zip} ${imp.address.city}` : null, imp.phone].filter(Boolean).join(' · ')}</div>}
-                        <div className="flex flex-wrap items-center gap-1.5 pt-1 sm:col-span-2">
+                        {!pains[c.id]?.key && <div className="flex flex-wrap items-center gap-1.5 pt-1 sm:col-span-2">
                           <span className="inline-flex items-center gap-1 text-muted-foreground"><Search className="size-3.5" />LinkedIn:</span>
                           {contactSearchLinks(c.name, [...(hr?.name ? [{ name: hr.name, title: hr.title }] : []), ...imp.managers.slice(0, 2).map((m: string) => ({ name: m, title: 'Geschäftsführung' }))]).map(l => (
                             <a key={l.href} href={l.href} target="_blank" rel="noreferrer" title={l.hint}
@@ -245,7 +291,7 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
                               {l.label} <ExternalLink className="size-3 text-muted-foreground" />
                             </a>
                           ))}
-                        </div>
+                        </div>}
                       </div>
                     )}
 

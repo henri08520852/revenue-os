@@ -52,3 +52,6 @@ export const PAINS: Record<PainKey, { label: string; pain: string; angle: string
     question: 'Wie behaltet ihr bei so vielen Stellen den Überblick über die Vorauswahl?',
   },
 }
+
+// Summary stored on a Heiße Firma (candidate_companies.hiring.pain)
+export type CandidatePain = { key: PainKey | null; label: string; fact: string; strength: number; more: { key: PainKey; label: string; fact: string }[]; at: string }

@@ -8,26 +8,51 @@ export { PAINS, type PainKey }
 
 export type Evidence = { key: PainKey; fact: string; strength: number; job?: Job | null }
 export type Relevance = { evidence: Evidence[]; open: number; hasHr: boolean; jobAd: { title: string; text: string } | null }
-type Job = { title: string; role_key: string | null; url: string | null; source: string; external_id: string; published_at: string | null; first_seen_at: string; last_seen_at: string }
+export type Job = { title: string; role_key: string | null; url: string | null; source: string; external_id: string; published_at: string | null; first_seen_at: string; last_seen_at: string }
 
 const DAY = 86400000
 const EVERGREEN = /initiativ|talent ?pool|spontan|blindbewerbung|open application/i
 const start = (j: Job) => Date.parse(j.published_at || j.first_seen_at)
 const fmt = (ms: number) => new Date(ms).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })
 
+type Hiring = { open?: number; new14?: number; repeated?: { role: string; count: number }[]; hrRoles?: string[] } | null
+const COLS = 'employer_key, title, role_key, url, source, external_id, published_at, first_seen_at, last_seen_at'
+const since = () => new Date(Date.now() - 365 * DAY).toISOString()
+
 export async function collectEvidence(supabase: any, a: {
   projectId: string; companyId: string; companyName: string; hiringKey?: string | null
-  hiring?: { open?: number; new14?: number; repeated?: { role: string; count: number }[]; hrRoles?: string[] } | null
-  isTeam?: (email: unknown) => boolean
+  hiring?: Hiring; isTeam?: (email: unknown) => boolean
 }): Promise<Relevance> {
   const key = a.hiringKey || employerKey(a.companyName)
   const [{ data: rows }, { data: people }] = await Promise.all([
-    supabase.from('job_postings').select('title, role_key, url, source, external_id, published_at, first_seen_at, last_seen_at')
-      .eq('project_id', a.projectId).eq('employer_key', key).gte('last_seen_at', new Date(Date.now() - 365 * DAY).toISOString())
+    supabase.from('job_postings').select(COLS).eq('project_id', a.projectId).eq('employer_key', key).gte('last_seen_at', since())
       .order('last_seen_at', { ascending: false }).limit(1000),
     supabase.from('people').select('job_title, persona, email').eq('company_id', a.companyId),
   ])
-  const all = ((rows || []) as Job[]).filter(j => j.title && !EVERGREEN.test(j.title))
+  const team = a.isTeam ?? (() => false)
+  const hrPerson = (people || []).some((p: any) => !team(p.email) && (HR_ROLE.test(p.job_title || '') || ['hr_lead', 'recruiter'].includes(p.persona)))
+  const r = evidenceFrom(rows || [], { hiring: a.hiring, hrPerson })
+  return { evidence: r.evidence, open: r.open, hasHr: r.hasHr, jobAd: r.job ? await jobAdText(r.job) : null }
+}
+
+// Postings of many employers at once (Heiße Firmen list) – paged, PostgREST returns at most 1000 rows per call
+export async function loadPostings(supabase: any, projectId: string, keys: string[]): Promise<Map<string, Job[]>> {
+  const out = new Map<string, Job[]>()
+  for (let i = 0; i < keys.length; i += 25) {
+    const chunk = keys.slice(i, i + 25)
+    for (let from = 0; from < 20000; from += 1000) {
+      const { data } = await supabase.from('job_postings').select(COLS).eq('project_id', projectId).in('employer_key', chunk)
+        .gte('last_seen_at', since()).order('id').range(from, from + 999)
+      for (const r of data || []) out.set(r.employer_key, [...(out.get(r.employer_key) || []), r])
+      if (!data || data.length < 1000) break
+    }
+  }
+  return out
+}
+
+// Pure: postings → evidence, strongest first
+export function evidenceFrom(rows: Job[], a: { hiring?: Hiring; hrPerson?: boolean } = {}): { evidence: Evidence[]; open: number; hasHr: boolean; job: Job | null } {
+  const all = rows.filter(j => j.title && !EVERGREEN.test(j.title))
   const openCut = Date.now() - 14 * DAY
   // Same title on several boards = one job
   const seen = new Set<string>()
@@ -66,14 +91,12 @@ export async function collectEvidence(supabase: any, a: {
   if (vol.length >= 3 || (open.length >= 3 && vol.length / open.length >= 0.4)) ev.push({ key: 'volume', strength: 50, job: vol[0], fact: `${vol.length} Stellen mit hohem Bewerbungsvolumen, z. B. „${vol[0].title}“.` })
 
   const openCount = open.length || a.hiring?.open || 0
-  const team = a.isTeam ?? (() => false)
-  const hasHr = !!hrRoles.length || (people || []).some((p: any) => !team(p.email) && (HR_ROLE.test(p.job_title || '') || ['hr_lead', 'recruiter'].includes(p.persona)))
+  const hasHr = !!hrRoles.length || !!a.hrPerson
   if (!hasHr && openCount >= 2) ev.push({ key: 'no_hr', strength: 55, fact: `${openCount} offene Stellen, aber keine HR-Stelle und kein HR-Kontakt bekannt – die Vorauswahl liegt vermutlich bei Leitung oder Fachbereich.` })
   if (openCount >= 8 && !ev.some(e => e.key === 'repeated_role' || e.key === 'new_jobs')) ev.push({ key: 'many_jobs', strength: 40, fact: `${openCount} offene Stellen gleichzeitig.` })
 
   ev.sort((x, y) => y.strength - x.strength)
-  const job = ev.find(e => e.job)?.job ?? oldest ?? open[0] ?? null
-  return { evidence: ev, open: openCount, hasHr, jobAd: job ? await jobAdText(job) : null }
+  return { evidence: ev, open: openCount, hasHr, job: ev.find(e => e.job)?.job ?? oldest ?? open[0] ?? null }
 }
 
 // Text of one job ad (BA details or the posting page) – shows urgency words like "ab sofort", shifts, career changers

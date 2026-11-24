@@ -2,7 +2,9 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getTeamContext } from '@/lib/team'
-import { baSample, logRun, runHiringDiscovery } from '@/lib/discovery/hiring'
+import { baSample, employerKey, logRun, runHiringDiscovery } from '@/lib/discovery/hiring'
+import { evidenceFrom, loadPostings } from '@/lib/outreach/relevance'
+import { PAINS, type CandidatePain } from '@/lib/outreach/pains'
 import { discoverAtsAccounts, pollAtsAccounts } from '@/lib/discovery/ats-feeds'
 import { enrichCandidates } from '@/lib/discovery/enrich'
 import { enrollLead } from '@/lib/agents/sequence'
@@ -158,4 +160,31 @@ export async function enrichMissing(ids: string[]): Promise<{ error: string | nu
   await enrichCandidates(createServiceClient(), PROJECT_ID, { ids: ids.slice(0, 8), budgetMs: 50_000 })
   revalidatePath('/candidates')
   return { error: null }
+}
+
+// Pain per Heiße Firma (evidence from its postings), stored in hiring.pain – the daily scoring overwrites hiring,
+// so the page fills it again in the background. Called in batches by the page.
+export async function painsFor(ids: string[]): Promise<{ error: string | null; pains?: Record<string, CandidatePain | null> }> {
+  try {
+    const { me, denied } = await getTeamContext()
+    if (!me || denied) return { error: 'Nicht berechtigt' }
+    const supabase = createClient() as any
+    const { data: rows } = await supabase.from('candidate_companies').select('id, name, hiring, enrichment_data').in('id', ids.slice(0, 60))
+    const keyOf = (c: any) => c.hiring?.key || employerKey(c.name)
+    const postings = await loadPostings(supabase, PROJECT_ID, Array.from(new Set((rows || []).map(keyOf))) as string[])
+    const out: Record<string, CandidatePain | null> = {}
+    for (const c of rows || []) {
+      const r = evidenceFrom(postings.get(keyOf(c)) || [], { hiring: c.hiring, hrPerson: !!c.enrichment_data?.hrContact?.name })
+      const [top, ...rest] = r.evidence
+      const pain: CandidatePain | null = top ? {
+        key: top.key, label: PAINS[top.key].label, fact: top.fact, strength: top.strength,
+        more: rest.slice(0, 3).map(e => ({ key: e.key, label: PAINS[e.key].label, fact: e.fact })), at: new Date().toISOString(),
+      } : { key: null, label: 'Kein klarer Pain', fact: '', strength: 0, more: [], at: new Date().toISOString() }
+      out[c.id] = pain
+      if (c.hiring) await supabase.from('candidate_companies').update({ hiring: { ...c.hiring, pain } }).eq('id', c.id)
+    }
+    return { error: null, pains: out }
+  } catch (e: any) {
+    return { error: e?.message || 'Fehler' }
+  }
 }
