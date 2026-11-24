@@ -12,7 +12,7 @@ import { PERSONAS, personaOf, type Persona } from '@/lib/outreach/persona'
 import { SEGMENTS, type SegmentKey } from '@/lib/outreach/segments'
 import { DraftCard, QueueItem } from '../agents/AgentsBoard'
 import { composeMessage, loadItem } from './actions'
-import { PAINS, type PainKey } from '@/lib/outreach/pains'
+import { PAINS, PAIN_CHIPS, GOALS, type PainKey, type Goal } from '@/lib/outreach/pains'
 import { cn } from '@/lib/utils'
 
 export type ContactOption = { id: string; name: string; title: string | null; company: string | null; persona: string | null; linkedin: string | null }
@@ -37,7 +37,11 @@ export default function Composer({ contacts, sent, preselect, baseTexts, industr
   const [persona, setPersona] = useState<Persona | 'auto'>('auto')
   const [segment, setSegment] = useState<SegmentKey | 'auto'>('auto')
   const [industry, setIndustry] = useState('auto')
-  const [pain, setPain] = useState<PainKey | 'auto'>('auto')
+  const [pains, setPains] = useState<PainKey[]>([])
+  const [goal, setGoal] = useState<Goal>('first')
+  const [channel, setChannel] = useState<'linkedin' | 'email'>('linkedin')
+  const [role, setRole] = useState('')
+  const [draftText, setDraftText] = useState('')
   const [noReason, setNoReason] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [item, setItem] = useState<QueueItem | null>(null)
@@ -58,7 +62,7 @@ export default function Composer({ contacts, sent, preselect, baseTexts, industr
     setBusy(true); setNoReason(null)
     const r = await composeMessage({
       ...(mode === 'pick' ? { personId: picked!.id } : f),
-      notes, profile, address, persona, segment, industry, pain, anyway,
+      notes, profile, address, persona, segment, industry, pains, goal, channel, role, draftText, anyway,
     })
     setBusy(false)
     if (r.noReason) return setNoReason(r.error)
@@ -67,7 +71,7 @@ export default function Composer({ contacts, sent, preselect, baseTexts, industr
   }
   const reload = async (kind: string) => {
     if (kind === 'redraft' && item) { const fresh = await loadItem(item.id); if (fresh) { setItem(fresh); setVersion(v => v + 1) } }
-    else { setItem(null); setNotes(''); setProfile('') }
+    else { setItem(null); setNotes(''); setProfile(''); setDraftText('') }
   }
 
   const replied = sent.filter(s => s.leads?.replied_at).length
@@ -77,7 +81,7 @@ export default function Composer({ contacts, sent, preselect, baseTexts, industr
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Nachricht schreiben</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Person wählen oder kurz eingeben, optional sagen, was du weißt – der Agent schreibt auf Basis eures Basistexts. Kopieren, auf LinkedIn senden, als gesendet markieren.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Person wählen, Pain und Ziel antippen, optional ergänzen, was du weißt oder schon geschrieben hast – daraus entsteht die Nachricht. Kopieren, senden, als gesendet markieren.</p>
         </div>
         <Link href="/agents" className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"><Settings2 className="size-4" /> Basistext &amp; Playbooks</Link>
       </div>
@@ -131,12 +135,39 @@ export default function Composer({ contacts, sent, preselect, baseTexts, industr
               </div>
             )}
 
+            <div>
+              <div className="mb-1.5 flex items-baseline justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Welcher Pain? (bis zu 3, der erste ist der Hauptpunkt)</span>
+                {pains.length > 0 && <button type="button" className="text-[12px] text-muted-foreground underline" onClick={() => setPains([])}>zurücksetzen</button>}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {PAIN_CHIPS.map(k => {
+                  const i = pains.indexOf(k)
+                  return (
+                    <button key={k} type="button" title={PAINS[k].pain}
+                      onClick={() => setPains(p => i >= 0 ? p.filter(x => x !== k) : p.length >= 3 ? p : [...p, k])}
+                      className={cn('rounded-full border px-2.5 py-1 text-[12.5px] transition-colors', i >= 0 ? 'border-violet-300 bg-violet-50 font-medium text-violet-900' : 'border-border bg-card text-muted-foreground hover:text-foreground')}>
+                      {i >= 0 && <span className="mr-1 tabular">{i + 1}.</span>}{PAINS[k].label}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mt-1.5 text-[12px] text-muted-foreground">{pains.length ? PAINS[pains[0]].pain : 'Nichts gewählt: der Pain wird aus den offenen Stellen der Firma abgeleitet.'}</p>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
-              <L label="Persona">
-                <Select value={persona} onChange={e => setPersona(e.target.value as any)}>
-                  <option value="auto">Automatisch{title ? ` (${PERSONAS[mode === 'pick' && picked?.persona ? picked.persona as Persona : detected]})` : ''}</option>
-                  {(Object.keys(PERSONAS) as Persona[]).map(p => <option key={p} value={p}>{PERSONAS[p]}</option>)}
+              <L label="Ziel der Nachricht">
+                <Select value={goal} onChange={e => setGoal(e.target.value as Goal)}>
+                  {(Object.keys(GOALS) as Goal[]).map(g => <option key={g} value={g}>{GOALS[g].label}</option>)}
                 </Select>
+              </L>
+              <L label="Kanal">
+                <Select value={channel} onChange={e => setChannel(e.target.value as any)}>
+                  <option value="linkedin">LinkedIn</option><option value="email">E-Mail</option>
+                </Select>
+              </L>
+              <L label="Um welche Stelle geht es? (optional)">
+                <Input value={role} placeholder="z. B. Mechatroniker:in, Pflegefachkraft" onChange={e => setRole(e.target.value)} />
               </L>
               <L label="Anrede">
                 <Select value={address} onChange={e => setAddress(e.target.value as any)}>
@@ -145,35 +176,42 @@ export default function Composer({ contacts, sent, preselect, baseTexts, industr
               </L>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <L label="Firmentyp / Größe">
-                <Select value={segment} onChange={e => setSegment(e.target.value as any)}>
-                  <option value="auto">Automatisch</option>
-                  {(Object.keys(SEGMENTS) as SegmentKey[]).map(k => <option key={k} value={k}>{SEGMENTS[k]}</option>)}
-                </Select>
-              </L>
-              <L label="Branche">
-                <Select value={industry} onChange={e => setIndustry(e.target.value)}>
-                  <option value="auto">Automatisch</option>
-                  {industries.map(i => <option key={i.key} value={i.key}>{i.label}</option>)}
-                </Select>
-              </L>
-            </div>
-
-            <L label="Pain (sonst aus den offenen Stellen abgeleitet)">
-              <Select value={pain} onChange={e => setPain(e.target.value as any)}>
-                <option value="auto">Automatisch aus den Stellen</option>
-                {(Object.keys(PAINS) as PainKey[]).map(k => <option key={k} value={k}>{PAINS[k].label}</option>)}
-              </Select>
-            </L>
-
             <L label="Was weißt du über die Person oder Firma? (optional, macht die Nachricht persönlich)">
               <Textarea rows={3} value={notes} onChange={e => setNotes(e.target.value)}
                 placeholder="z. B. hat gestern über Fachkräftemangel gepostet · wir kennen uns von der Messe · sucht 3 Pflegekräfte · gleiche Uni" />
             </L>
+            <L label="Deine Nachricht oder Stichpunkte (optional – der Agent übernimmt den Inhalt und formuliert aus)">
+              <Textarea rows={4} value={draftText} onChange={e => setDraftText(e.target.value)}
+                placeholder="z. B. Hallo Anna, habe gesehen, dass ihr 5 Pflegekräfte sucht … / oder nur Stichpunkte" />
+            </L>
+
             <details className="text-[13px]">
-              <summary className="cursor-pointer select-none text-muted-foreground hover:text-foreground">LinkedIn-Profiltext einfügen (Info, Headline, letzter Post)</summary>
-              <Textarea rows={5} className="mt-2" value={profile} onChange={e => setProfile(e.target.value)} placeholder="Text aus dem Profil hier hineinkopieren – der Agent nutzt nur Fakten daraus." />
+              <summary className="cursor-pointer select-none text-muted-foreground hover:text-foreground">Weitere Einstellungen (Persona, Firmentyp, Branche, Profiltext)</summary>
+              <div className="mt-3 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <L label="Persona">
+                    <Select value={persona} onChange={e => setPersona(e.target.value as any)}>
+                      <option value="auto">Automatisch{title ? ` (${PERSONAS[mode === 'pick' && picked?.persona ? picked.persona as Persona : detected]})` : ''}</option>
+                      {(Object.keys(PERSONAS) as Persona[]).map(p => <option key={p} value={p}>{PERSONAS[p]}</option>)}
+                    </Select>
+                  </L>
+                  <L label="Firmentyp / Größe">
+                    <Select value={segment} onChange={e => setSegment(e.target.value as any)}>
+                      <option value="auto">Automatisch</option>
+                      {(Object.keys(SEGMENTS) as SegmentKey[]).map(k => <option key={k} value={k}>{SEGMENTS[k]}</option>)}
+                    </Select>
+                  </L>
+                  <L label="Branche" className="col-span-2">
+                    <Select value={industry} onChange={e => setIndustry(e.target.value)}>
+                      <option value="auto">Automatisch</option>
+                      {industries.map(i => <option key={i.key} value={i.key}>{i.label}</option>)}
+                    </Select>
+                  </L>
+                </div>
+                <L label="LinkedIn-Profiltext (Info, Headline, letzter Post)">
+                  <Textarea rows={4} value={profile} onChange={e => setProfile(e.target.value)} placeholder="Text aus dem Profil hier hineinkopieren – der Agent nutzt nur Fakten daraus." />
+                </L>
+              </div>
             </details>
 
             <Button className="w-full" onClick={() => generate()} disabled={!canGo || busy}>

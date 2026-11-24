@@ -265,16 +265,16 @@ export function DraftCard({ item, onDone }: { item: QueueItem; onDone?: (kind: s
         )}
         <div>
           <div className="mb-1 flex items-center justify-between text-xs font-medium text-muted-foreground">
-            <span>Vernetzungsnotiz</span>
-            <span className={cn('tabular', note.length > 200 && 'text-red-600')}>{note.length}/200</span>
+            <span>{item.channel === 'email' ? 'Betreff' : 'Vernetzungsnotiz'}</span>
+            <span className={cn('tabular', note.length > (item.channel === 'email' ? 70 : 200) && 'text-red-600')}>{note.length}/{item.channel === 'email' ? 70 : 200}</span>
           </div>
           <Textarea rows={3} value={note} onChange={e => setNote(e.target.value)} onBlur={persist} />
           <Button size="sm" variant="ghost" className="mt-1 h-7 px-2" onClick={() => copy('note')}>
-            {copied === 'note' ? <Check /> : <Copy />} {copied === 'note' ? 'Kopiert' : 'Notiz kopieren'}
+            {copied === 'note' ? <Check /> : <Copy />} {copied === 'note' ? 'Kopiert' : item.channel === 'email' ? 'Betreff kopieren' : 'Notiz kopieren'}
           </Button>
         </div>
         <div>
-          <div className="mb-1 text-xs font-medium text-muted-foreground">Erste Nachricht</div>
+          <div className="mb-1 text-xs font-medium text-muted-foreground">{item.channel === 'email' ? 'E-Mail' : item.data?.goal_label && item.data.goal_label !== 'Erstkontakt' ? `Nachricht · ${item.data.goal_label}` : 'Erste Nachricht'}</div>
           <Textarea rows={7} value={body} onChange={e => setBody(e.target.value)} onBlur={persist} />
           <Button size="sm" variant="ghost" className="mt-1 h-7 px-2" onClick={() => copy('body')}>
             {copied === 'body' ? <Check /> : <Copy />} {copied === 'body' ? 'Kopiert' : 'Nachricht kopieren'}

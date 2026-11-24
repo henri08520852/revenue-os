@@ -139,6 +139,12 @@ export async function approveItem(id: string, body: string, connectNote: string 
         channel: 'post', source: 'manual', occurred_at: now, created_by: me.email ?? null, summary: 'Brief verschickt', extracted_intel: { body: item.body },
       })
     }
+    if ((item?.person_id || item?.company_id) && item.channel === 'email') {
+      await supabase.from('activities').insert({
+        project_id: PROJECT_ID, company_id: item.company_id, person_id: item.person_id, activity_type: 'email', direction: 'outbound',
+        channel: 'email', source: 'manual', occurred_at: now, created_by: me.email ?? null, summary: 'E-Mail (Entwurf aus Revenue OS)', extracted_intel: { body: item.body },
+      })
+    }
     if ((item?.person_id || item?.company_id) && item.channel === 'linkedin') {
       await supabase.from('activities').insert({
         project_id: PROJECT_ID, company_id: item.company_id, person_id: item.person_id, activity_type: 'linkedin_message', direction: 'outbound',
@@ -171,7 +177,7 @@ export async function redraftItem(id: string): Promise<Result> {
     const target = { projectId: PROJECT_ID, companyId: item.company_id, personId: item.person_id, leadId: item.lead_id }
     if (item.kind === 'letter') await draftLetter(supabase, target)
     // Keep what the team typed in (composer / extension) for the rewrite
-    else await draftFirstMessage(supabase, target, { notes: item.data?.notes, profile: item.data?.profile, address: item.data?.address, segment: item.data?.overrides?.segment, industry: item.data?.overrides?.industry, pain: item.data?.overrides?.pain, anyway: true })
+    else await draftFirstMessage(supabase, target, { notes: item.data?.notes, profile: item.data?.profile, address: item.data?.address, segment: item.data?.overrides?.segment, industry: item.data?.overrides?.industry, pain: item.data?.overrides?.pain, pains: item.data?.overrides?.pains, goal: item.data?.overrides?.goal, channel: item.data?.overrides?.channel, role: item.data?.overrides?.role, draftText: item.data?.draft_text, anyway: true })
     revalidatePath('/agents')
     return { error: null }
   } catch (e) { return fail(e) }

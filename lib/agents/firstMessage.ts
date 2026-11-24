@@ -9,6 +9,7 @@ import { segmentFor, SEGMENTS, type SegmentKey } from '@/lib/outreach/segments'
 import { classify } from '@/lib/discovery/industry'
 import { playbookFor, pickVariant, pickSignal, personalizationScore, SIGNALS, type SignalKey } from '@/lib/outreach/playbooks'
 import { collectEvidence, PAINS, NoReasonError, type PainKey } from '@/lib/outreach/relevance'
+import { GOALS, type Goal } from '@/lib/outreach/pains'
 
 export const MODEL = process.env.AI_MODEL || 'claude-haiku-5-5'
 // USD per million tokens (input, output) for the cost counter
@@ -180,7 +181,9 @@ ${RATING}${a.examples ? `\n\nNachrichten von uns an Personalvermittlungen – Au
 
 // notes/profile: what the team knows about the person (composer, extension); address overrides the auto rule
 // pain: evidence picked by hand; anyway: write even without any evidence
-export type DraftOpts = { runId?: string | null; cfg?: AgentConfig['first_message']; notes?: string | null; profile?: string | null; address?: 'auto' | 'du' | 'Sie'; segment?: SegmentKey | 'auto'; industry?: string | 'auto'; connected?: boolean; pain?: PainKey | 'auto' | null; anyway?: boolean }
+export type DraftOpts = { runId?: string | null; cfg?: AgentConfig['first_message']; notes?: string | null; profile?: string | null; address?: 'auto' | 'du' | 'Sie'; segment?: SegmentKey | 'auto'; industry?: string | 'auto'; connected?: boolean; pain?: PainKey | 'auto' | null; anyway?: boolean
+  // "Nachricht schreiben": pains picked by hand (first = main), goal, channel, the role it is about, the team's own draft
+  pains?: PainKey[]; goal?: Goal; channel?: 'linkedin' | 'email'; role?: string | null; draftText?: string | null }
 
 export async function draftFirstMessage(supabase: any, t: Target, opts: DraftOpts = {}): Promise<{ draft: Draft; itemId: string; costUsd: number }> {
   const key = apiKey()
@@ -208,9 +211,14 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: DraftOpt
 
   // Relevance check: evidence from the job postings → pain. No evidence and nothing known = no reason to write.
   const rel = await collectEvidence(supabase, { projectId: t.projectId, companyId: t.companyId, companyName: facts.companyName, hiringKey: facts.hiringKey, hiring: facts.hiring, isTeam: facts.isTeam })
-  const forced = opts.pain && opts.pain !== 'auto' && opts.pain in PAINS ? opts.pain : null
+  const chosen = (opts.pains?.length ? opts.pains : opts.pain && opts.pain !== 'auto' ? [opts.pain] : []).filter(k => k in PAINS).slice(0, 3) as PainKey[]
+  const forced = chosen[0] ?? null
   const ev = forced ? rel.evidence.find(e => e.key === forced) ?? { key: forced, fact: '', strength: 0 } : rel.evidence[0] ?? null
-  if (!ev && !notes && !facts.signalFacts.hasHistory && segment !== 'agency' && !opts.anyway) {
+  const draftText = (opts.draftText || '').trim().slice(0, 3000)
+  const role = (opts.role || '').trim().slice(0, 160)
+  const goal: Goal = opts.goal && opts.goal in GOALS ? opts.goal : 'first'
+  const email = opts.channel === 'email'
+  if (!ev && !notes && !draftText && !facts.signalFacts.hasHistory && segment !== 'agency' && !opts.anyway) {
     throw new NoReasonError(`Kein Anlass gefunden: ${rel.open ? `${rel.open} offene Stelle${rel.open > 1 ? 'n' : ''}, aber kein Beleg für Recruiting-Druck` : 'keine offenen Stellen bekannt'}. Trag ein, was du über die Person weißt, wähl einen Pain aus oder schreib trotzdem.`)
   }
   const pain = ev ? PAINS[ev.key] : null
@@ -221,6 +229,12 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: DraftOpt
   const extraFacts = [
     profile ? `LinkedIn-Profil der Person (Info/Headline, nur Fakten daraus nutzen):\n${profile}` : '',
     notes ? `Infos vom Team über Person/Firma (zuverlässig, bevorzugt nutzen):\n${notes}` : '',
+  ].filter(Boolean).join('\n\n')
+  const team = [
+    goal !== 'first' ? `Ziel: ${GOALS[goal].brief}` : '',
+    role ? `Es geht um die Stelle/Rolle: ${role}` : '',
+    draftText ? `Entwurf vom Team – Inhalt, Kernaussagen und Ton übernehmen und nach den Regeln ausformulieren; wenn er schon gut ist, nur leicht glätten. Hat Vorrang vor Basistext und Aufbau:\n---\n${draftText}\n---` : '',
+    email ? 'Kanal: E-Mail statt LinkedIn. connect_note = Betreffzeile (höchstens 70 Zeichen, konkret, kein Clickbait). message = E-Mail-Text mit Anrede und Grußzeile, gern etwas ausführlicher (bis ca. 900 Zeichen).' : '',
   ].filter(Boolean).join('\n\n')
   const adText = rel.jobAd ? `\n\nAuszug aus der Stellenanzeige „${rel.jobAd.title}“ (auf Dringlichkeit achten: „ab sofort“, Schicht, Quereinsteiger, Anforderungen):\n${rel.jobAd.text}` : ''
   const baseText = cfg.baseTexts?.[sizeSeg]?.trim()
@@ -234,7 +248,8 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: DraftOpt
     `Playbook „${playbook.name}“, Variante ${variant.key}${variant.angle ? `: ${variant.angle}` : ''}`,
     ...(pain && ev
       ? [`Pain (aus den Belegen abgeleitet – als Frage oder Vermutung formulieren, nicht behaupten): ${pain.pain}`,
-         ...(ev.fact ? [`Beleg dafür (als Anlass nennen): ${ev.fact}`] : [`Beleg: vom Team gewählt, ohne Daten – nur vorsichtig andeuten`]),
+         ...(ev.fact ? [`Beleg dafür (als Anlass nennen): ${ev.fact}`] : [`Beleg: vom Team vermutet, ohne Daten – als Frage oder Erfahrungswert formulieren („oft ist es so, dass …“), nie als Tatsache über diese Firma${rel.evidence[0] ? `; falls passend diesen echten Fakt als Anlass nutzen: ${rel.evidence[0].fact}` : ''}`]),
+         ...(chosen.length > 1 ? [`Weitere vermutete Pains (höchstens einen davon in einem Halbsatz anreißen): ${chosen.slice(1).map(k => PAINS[k].label).join(', ')}`] : []),
          `Das eine Ergebnis, das wir nennen: ${pain.angle}`,
          `Offene Frage am Ende in diese Richtung: ${pain.question}`]
       : [`Typischer Schmerz dieser Zielperson: ${playbook.pain}`,
@@ -250,22 +265,22 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: DraftOpt
     max_tokens: 4000,
     output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
     system: systemPrompt({ ...cfg, address }, sender, segment),
-    messages: [{ role: 'user', content: `Fakten:\n${facts.text}${extraFacts ? `\n\n${extraFacts}` : ''}${adText}\n\nVorgaben für diese Nachricht (Beleg als Anlass, Pain als Frage/Vermutung, Ergebnis und Frage hieraus übernehmen):\n${brief}${base}${opts.connected ? '\n\nIhr seid auf LinkedIn schon vernetzt: connect_note als leeren String zurückgeben, die Nachricht nicht mit einer Vorstellung wie unter Fremden beginnen.' : ''}\n\nSchreibe ${opts.connected ? '' : 'Vernetzungsnotiz und '}erste Nachricht${facts.firstName ? ` an ${facts.personName}` : ' an die zuständige Person (ohne Namen, neutrale Anrede)'}.` }],
+    messages: [{ role: 'user', content: `Fakten:\n${facts.text}${extraFacts ? `\n\n${extraFacts}` : ''}${adText}\n\nVorgaben für diese Nachricht (Beleg als Anlass, Pain als Frage/Vermutung, Ergebnis und Frage hieraus übernehmen):\n${brief}${draftText ? '' : base}${team ? `\n\nVorgaben vom Team:\n${team}` : ''}${opts.connected && !email ? '\n\nIhr seid auf LinkedIn schon vernetzt: connect_note als leeren String zurückgeben, die Nachricht nicht mit einer Vorstellung wie unter Fremden beginnen.' : ''}\n\nSchreibe ${email ? 'Betreff und E-Mail' : opts.connected ? 'die Nachricht' : 'Vernetzungsnotiz und erste Nachricht'}${facts.firstName ? ` an ${facts.personName}` : ' an die zuständige Person (ohne Namen, neutrale Anrede)'}.` }],
   } as any)
   if (res.stop_reason === 'refusal') throw new Error('Die KI hat die Anfrage abgelehnt.')
   const block = res.content.find(b => b.type === 'text')
   const draft = JSON.parse(block && block.type === 'text' ? block.text : '{}') as Draft
-  if (opts.connected) draft.connect_note = ''
+  if (opts.connected && !email) draft.connect_note = ''
   if (!draft.message) throw new Error('KI-Antwort unvollständig')
   const costUsd = costOf(MODEL, res.usage)
   const score = personalizationScore(draft.message, { signal: signalKey, firstName: facts.firstName, facts: [...facts.factWords, ...(ev?.job ? [ev.job.title] : [])] })
   const relevance = Math.max(1, Math.min(5, Math.round(Number(draft.relevance) || 0))) || null
 
   const row = {
-    project_id: t.projectId, agent_key: 'first_message', kind: 'message_draft', channel: 'linkedin', status: 'pending',
+    project_id: t.projectId, agent_key: 'first_message', kind: 'message_draft', channel: email ? 'email' : 'linkedin', status: 'pending',
     title: `Erstnachricht an ${facts.personName || facts.companyName}${facts.personName ? ` (${facts.companyName})` : ''}`,
     body: draft.message, run_id: opts.runId ?? null,
-    data: { connect_note: draft.connect_note?.slice(0, 300), hook: draft.hook, research: draft.research, segment, model: MODEL, cost_usd: costUsd, persona, persona_label: PERSONAS[persona], playbook: playbook.key, playbook_name: playbook.name, variant: variant.key, signal: signalKey, signal_label: SIGNALS[signalKey], score, relevance, urgency: draft.urgency ?? null, pain_key: ev?.key ?? null, pain_label: pain?.label ?? null, pain: draft.pain || pain?.pain || null, pain_evidence: draft.evidence || ev?.fact || null, evidence: rel.evidence.slice(0, 5).map(e => ({ key: e.key, fact: e.fact })), job_ad: rel.jobAd?.title ?? null, size_segment: sizeSeg, overrides: { segment: opts.segment ?? 'auto', industry: opts.industry ?? 'auto', pain: forced ?? 'auto', anyway: !!opts.anyway }, size_label: SEGMENTS[sizeSeg], industry: industry?.key ?? null, industry_label: industry?.label ?? null, ...(notes ? { notes } : {}), ...(profile ? { profile } : {}), base_text: !!base, address },
+    data: { connect_note: draft.connect_note?.slice(0, 300), hook: draft.hook, research: draft.research, segment, model: MODEL, cost_usd: costUsd, persona, persona_label: PERSONAS[persona], playbook: playbook.key, playbook_name: playbook.name, variant: variant.key, signal: signalKey, signal_label: SIGNALS[signalKey], score, relevance, urgency: draft.urgency ?? null, pain_key: ev?.key ?? null, pain_label: pain?.label ?? null, pain: draft.pain || pain?.pain || null, pain_evidence: draft.evidence || ev?.fact || null, evidence: rel.evidence.slice(0, 5).map(e => ({ key: e.key, fact: e.fact })), job_ad: rel.jobAd?.title ?? null, size_segment: sizeSeg, overrides: { segment: opts.segment ?? 'auto', industry: opts.industry ?? 'auto', pain: forced ?? 'auto', pains: chosen, anyway: !!opts.anyway, goal, channel: email ? 'email' : 'linkedin', role: role || null }, ...(draftText ? { draft_text: draftText } : {}), goal_label: GOALS[goal].label, size_label: SEGMENTS[sizeSeg], industry: industry?.key ?? null, industry_label: industry?.label ?? null, ...(notes ? { notes } : {}), ...(profile ? { profile } : {}), base_text: !!base, address },
     company_id: t.companyId, person_id: t.personId ?? null, lead_id: t.leadId ?? null,
   }
   // One open draft per contact/lead: rewrite replaces it

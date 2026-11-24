@@ -1,5 +1,7 @@
 // Pain catalogue for the relevance check (pure data, safe for client components)
+// The first eight come from job-posting evidence; the last four are pains the team guesses and picks by hand
 export type PainKey = 'reposted' | 'long_open' | 'builds_recruiting' | 'repeated_role' | 'no_hr' | 'new_jobs' | 'volume' | 'many_jobs'
+  | 'too_many_applications' | 'specialist_interview' | 'slow_process' | 'drop_off'
 
 // Evidence → typical pain → the HireFlow result that answers it → the question at the end
 export const PAINS: Record<PainKey, { label: string; pain: string; angle: string; question: string }> = {
@@ -51,6 +53,41 @@ export const PAINS: Record<PainKey, { label: string; pain: string; angle: string
     angle: 'Eine einheitliche Vorauswahl für alle Stellen, vergleichbar und ohne Mehraufwand.',
     question: 'Wie behaltet ihr bei so vielen Stellen den Überblick über die Vorauswahl?',
   },
+  too_many_applications: {
+    label: 'Zu viele Bewerbungen',
+    pain: 'Auf eine Stelle kommen so viele Bewerbungen, dass das Sichten Tage frisst und die Guten im Stapel untergehen.',
+    angle: 'Aus 20 Bewerbungen die drei relevantesten, bevor jemand eine Bewerbung lesen muss.',
+    question: 'Wie viele Bewerbungen kommen bei euch im Schnitt auf eine Stelle, und wer sichtet die?',
+  },
+  specialist_interview: {
+    label: 'Fachgespräch nur mit Fachbereich',
+    pain: 'Ob jemand fachlich passt, klärt erst der Fachbereich im Gespräch – dessen Zeit ist knapp und geht auch für Unpassende drauf.',
+    angle: 'Das Vorinterview stellt die fachlichen Fragen vorab, der Fachbereich spricht nur noch mit den Passenden.',
+    question: 'Wie viele Gespräche führt euer Fachbereich, bis jemand wirklich passt?',
+  },
+  slow_process: {
+    label: 'Langsamer Prozess',
+    pain: 'Von der Bewerbung bis zum ersten Gespräch vergehen Tage oder Wochen – gute Leute sind dann schon woanders.',
+    angle: 'Das Vorinterview startet direkt nach der Bewerbung, rund um die Uhr – die Passenden sind nach Stunden sichtbar.',
+    question: 'Wie lange dauert es bei euch von der Bewerbung bis zum ersten Gespräch?',
+  },
+  drop_off: {
+    label: 'Kandidaten springen ab',
+    pain: 'Passende Kandidat:innen springen im Prozess ab, weil sie mehrere Angebote haben und die Rückmeldung zu lange dauert.',
+    angle: 'Sofortige, strukturierte Rückmeldung nach dem Vorinterview hält die Passenden im Prozess.',
+    question: 'An welcher Stelle im Prozess verliert ihr aktuell die meisten guten Leute?',
+  },
+}
+
+// Chips on "Nachricht schreiben", in Henri's order
+export const PAIN_CHIPS: PainKey[] = ['too_many_applications', 'many_jobs', 'specialist_interview', 'no_hr', 'slow_process', 'drop_off', 'reposted', 'long_open', 'builds_recruiting']
+
+export type Goal = 'first' | 'followup' | 'meeting' | 'reactivate'
+export const GOALS: Record<Goal, { label: string; brief: string }> = {
+  first: { label: 'Erstkontakt', brief: 'Erste Nachricht an die Person.' },
+  followup: { label: 'Nachfassen (keine Antwort)', brief: 'Nachfassen: wir haben schon geschrieben, aber keine Antwort bekommen. Kurz, freundlich, ohne Vorwurf, mit einem neuen Gedanken zum Pain statt einer Wiederholung.' },
+  meeting: { label: 'Termin vorschlagen', brief: 'Ziel ist ein kurzer Austausch (15–20 Minuten): hier ausnahmsweise konkret einen kurzen Termin vorschlagen, ohne Druck.' },
+  reactivate: { label: 'Alten Kontakt reaktivieren', brief: 'Reaktivierung: es gab früher schon Kontakt, der eingeschlafen ist. Daran anknüpfen und einen neuen Anlass geben.' },
 }
 
 // Summary stored on a Heiße Firma (candidate_companies.hiring.pain)

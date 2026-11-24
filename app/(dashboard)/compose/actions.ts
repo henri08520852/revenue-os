@@ -7,7 +7,7 @@ import { draftFirstMessage } from '@/lib/agents/firstMessage'
 import { enrollLead } from '@/lib/agents/sequence'
 import { PERSONAS, roleCategoryOf, type Persona } from '@/lib/outreach/persona'
 import type { SegmentKey } from '@/lib/outreach/segments'
-import type { PainKey } from '@/lib/outreach/pains'
+import { PAINS, GOALS, type PainKey, type Goal } from '@/lib/outreach/pains'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID!
 
@@ -20,6 +20,7 @@ export type ComposeInput = {
   industry?: string
   persona?: Persona | 'auto'
   pain?: PainKey | 'auto'
+  pains?: PainKey[]; goal?: Goal; channel?: 'linkedin' | 'email'; role?: string; draftText?: string
   anyway?: boolean
 }
 
@@ -108,6 +109,8 @@ export async function composeMessage(input: ComposeInput): Promise<{ error: stri
 
     const r = await draftFirstMessage(supabase, { projectId: PROJECT_ID, companyId: companyId!, personId, leadId }, {
       notes: s(input.notes, 1500) || null, profile: s(input.profile, 2500) || null, address: input.address ?? 'auto', segment: input.segment ?? 'auto', industry: input.industry || 'auto', pain: input.pain ?? 'auto', anyway: !!input.anyway,
+      pains: (input.pains || []).filter(k => k in PAINS).slice(0, 3), goal: input.goal && input.goal in GOALS ? input.goal : 'first',
+      channel: input.channel === 'email' ? 'email' : 'linkedin', role: s(input.role, 160) || null, draftText: s(input.draftText, 3000) || null,
     })
     const { data: item } = await supabase.from('automation_items').select(ITEM_COLS).eq('id', r.itemId).single()
     revalidatePath('/agents')

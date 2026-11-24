@@ -304,7 +304,7 @@
   let open = false, page = '', ctx = null, crm = null, msg = '', busy = false
   let form = {}, taskOpen = false, drafting = false, draftMsg = '', draftHint = '', draftPain = 'auto', noReason = false
   // Same keys as lib/outreach/relevance.ts
-  const PAIN_OPTIONS = [['auto', 'Automatisch aus den Stellen'], ['reposted', 'Stelle erneut ausgeschrieben'], ['long_open', 'Stelle lange offen'], ['builds_recruiting', 'Sucht selbst HR/Recruiting'], ['repeated_role', 'Mehrere gleiche Stellen'], ['no_hr', 'Kein HR – Leitung macht es selbst'], ['new_jobs', 'Wachstum, viele neue Stellen'], ['volume', 'Volumen-Rollen (Schicht, Service …)'], ['many_jobs', 'Viele offene Stellen']]
+  const PAIN_OPTIONS = [['auto', 'Automatisch aus den Stellen'], ['too_many_applications', 'Zu viele Bewerbungen'], ['specialist_interview', 'Fachgespräch nur mit Fachbereich'], ['slow_process', 'Langsamer Prozess'], ['drop_off', 'Kandidaten springen ab'], ['reposted', 'Stelle erneut ausgeschrieben'], ['long_open', 'Stelle lange offen'], ['builds_recruiting', 'Sucht selbst HR/Recruiting'], ['repeated_role', 'Mehrere gleiche Stellen'], ['no_hr', 'Kein HR – Leitung macht es selbst'], ['new_jobs', 'Wachstum, viele neue Stellen'], ['volume', 'Volumen-Rollen (Schicht, Service …)'], ['many_jobs', 'Viele offene Stellen']]
 
   const kind = () => location.pathname.startsWith('/in/') ? 'profile' : location.pathname.startsWith('/messaging/') ? 'thread' : null
   const addDays = n => { const d = new Date(Date.now() + n * 86400000); return d.toISOString().slice(0, 10) }

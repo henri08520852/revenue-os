@@ -114,7 +114,7 @@ export function pickVariant(pb: Playbook, used: Record<string, number>): Playboo
 
 // ---------- signals: why now ----------
 
-export type SignalKey = 'personal' | 'repeated_role' | 'builds_recruiting' | 'long_open' | 'new_jobs' | 'many_jobs' | 'news' | 'history' | 'none' | 'reposted' | 'no_hr' | 'volume'
+export type SignalKey = 'personal' | 'repeated_role' | 'builds_recruiting' | 'long_open' | 'new_jobs' | 'many_jobs' | 'news' | 'history' | 'none' | 'reposted' | 'no_hr' | 'volume' | 'too_many_applications' | 'specialist_interview' | 'slow_process' | 'drop_off'
 
 export const SIGNALS: Record<SignalKey, string> = {
   personal: 'Persönlicher Bezug',
@@ -129,6 +129,10 @@ export const SIGNALS: Record<SignalKey, string> = {
   reposted: 'Stelle erneut ausgeschrieben',
   no_hr: 'Kein HR – Leitung macht es selbst',
   volume: 'Volumen-Rollen',
+  too_many_applications: 'Zu viele Bewerbungen',
+  specialist_interview: 'Fachgespräch nur mit Fachbereich',
+  slow_process: 'Langsamer Prozess',
+  drop_off: 'Kandidaten springen ab',
 }
 
 export type Signal = { key: SignalKey; text: string }
