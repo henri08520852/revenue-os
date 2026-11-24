@@ -435,7 +435,7 @@ function SettingsSheet({ agentKey, settings, onClose }: { agentKey: AgentKey; se
               </Field>
               <Field label="Anrede">
                 <Select value={cfg.address} onChange={e => set({ address: e.target.value })}>
-                  <option value="auto">Automatisch (du bei Start-ups/Tech, Sie im Mittelstand)</option><option value="du">immer du</option><option value="Sie">immer Sie</option>
+                  <option value="auto">Standard: du (einzelne Playbooks können abweichen)</option><option value="du">immer du</option><option value="Sie">immer Sie</option>
                 </Select>
               </Field>
               <Field label="Link in der Nachricht (optional)">

@@ -64,10 +64,15 @@
     }
 
     const split = splitHeadline(headline)
-    const jobTitle = split.jobTitle
+    let jobTitle = split.jobTitle
     if (!company) company = split.company
+    // Headline "Firma | Claim" → the first part is the company, not a role
+    const norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9äöüß]/g, '')
+    if (jobTitle && company && (norm(jobTitle) === norm(company) || norm(company).startsWith(norm(jobTitle)))) jobTitle = ''
+    // "· 1st" / "· 1." next to the name = already connected → no connection note needed
+    const connected = /·\s*(1st|1\.)(?=\s|$)/m.test(String(card.innerText || ''))
     const parts = name.split(' ')
-    return { slug, name, firstName: parts.slice(0, -1).join(' ') || name, lastName: parts.length > 1 ? parts[parts.length - 1] : '', jobTitle: jobTitle.slice(0, 160), company: company.slice(0, 120) }
+    return { slug, name, firstName: parts.slice(0, -1).join(' ') || name, lastName: parts.length > 1 ? parts[parts.length - 1] : '', jobTitle: jobTitle.slice(0, 160), company: company.slice(0, 120), connected }
   }
 
   // Headline + "Info"/"About" text of the open profile – context for the message agent (only read, never stored on LinkedIn)
@@ -356,7 +361,7 @@
 
   async function writeDraft(force) {
     drafting = true; draftMsg = ''; render()
-    const res = await api({ action: 'draftMessage', profileUrl: profileUrl(), name: ctx.name, force, notes: draftHint, profile: profileText() })
+    const res = await api({ action: 'draftMessage', profileUrl: profileUrl(), name: ctx.name, force, notes: draftHint, profile: profileText(), connected: !!ctx.connected })
     drafting = false
     if (res.error) draftMsg = force ? `<span class="err">${esc(res.error)}</span>` : ''
     else crm = { ...res, companies: crm?.companies }

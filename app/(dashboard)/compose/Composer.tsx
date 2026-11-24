@@ -136,7 +136,7 @@ export default function Composer({ contacts, sent, preselect, baseTexts, industr
               </L>
               <L label="Anrede">
                 <Select value={address} onChange={e => setAddress(e.target.value as any)}>
-                  <option value="auto">Automatisch</option><option value="du">du</option><option value="Sie">Sie</option>
+                  <option value="auto">Standard (du)</option><option value="du">du</option><option value="Sie">Sie</option>
                 </Select>
               </L>
             </div>

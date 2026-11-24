@@ -68,7 +68,12 @@ export async function gather(supabase: any, t: Target) {
   if (company.city || company.country) lines.push(`Ort: ${[company.city, company.country].filter(Boolean).join(', ')}`)
   const size = company.employee_estimate || company.employee_range || c?.enrichment_data?.impressum?.employees
   if (size) lines.push(`Größe: ${size} Mitarbeitende`)
-  if (person) lines.push(`Kontakt: ${person.full_name || [person.first_name, person.last_name].filter(Boolean).join(' ')}${person.job_title ? ` – ${person.job_title}` : ''}`)
+  // A "job title" that is just the company name (LinkedIn headline "Firma | …") says nothing about the role
+  const norm = (x: unknown) => String(x || '').toLowerCase().replace(/[^a-z0-9äöüß]/g, '')
+  const roleTitle = person?.job_title && norm(person.job_title) !== norm(company.name) && !norm(company.name).startsWith(norm(person.job_title)) ? person.job_title as string : null
+  if (person) lines.push(`Kontakt: ${person.full_name || [person.first_name, person.last_name].filter(Boolean).join(' ')}${roleTitle ? ` – ${roleTitle}` : ' (Rolle unbekannt)'}`)
+  const last = String(person?.last_name || '').trim()
+  if (last.length >= 3 && norm(company.name).includes(norm(last))) lines.push(`Der Nachname steckt im Firmennamen – wahrscheinlich Inhaber:in bzw. Gründer:in.`)
   const h = c?.hiring
   if (h) {
     lines.push(`Offene Stellen: ${h.open}${h.new14 ? ` (davon ${h.new14} neu in 14 Tagen)` : ''}`)
@@ -85,7 +90,7 @@ export async function gather(supabase: any, t: Target) {
   const evidence = (c?.evidence || []) as any[]
   return {
     text: lines.join('\n'), companyName: company.name as string, personName: (person?.full_name as string) || null, firstName: (person?.first_name as string) || null,
-    jobTitle: (person?.job_title as string) || null, size: size ?? null, person,
+    jobTitle: roleTitle, size: size ?? null, person,
     signalFacts: {
       hiring: h ?? null, jobs: evidence.filter(e => e?.title && (e.published_at || e.first_seen_at)),
       signalReasons: (signals || []).map((s: any) => ({ reason: s.reason, created_at: s.created_at, type: s.signal_type })),
@@ -116,7 +121,7 @@ function systemPrompt(cfg: AgentConfig['first_message'], sender: string, segment
 Produkt: ${cfg.pitch}
 
 Aufbau der Nachricht (message, 350–550 Zeichen ohne Grußzeile, 3–4 kurze Absätze):
-1. Anrede mit Vornamen („Hallo …,“ / „Guten Tag Frau/Herr …“ nur wenn Sie und das Geschlecht eindeutig im Titel steht, sonst „Guten Tag Vorname Nachname,“). Ohne bekannten Namen: „Hallo zusammen,“.
+1. Anrede: bei Du „Hallo Vorname,“; bei Sie „Hallo Herr Nachname,“ / „Hallo Frau Nachname,“ (Geschlecht aus dem Vornamen; nur wenn das wirklich unklar ist, „Hallo Vorname,“). Nie Vor- und Nachname zusammen, nie „Guten Tag Vorname Nachname“. Ohne bekannten Namen: „Hallo zusammen,“.
 2. Der konkrete Anlass, wie wir auf sie gestoßen sind – möglichst die echten offenen Stellen aus den Fakten (z. B. „ihr sucht gerade 4× Projektingenieur:in“), dazu in einem Satz, warum das Zeit bindet.
 3. Was HireFlow tut, mit genau einem greifbaren Ergebnis (z. B. aus 20 Bewerbungen die drei relevantesten). Höchstens zwei Sätze. Optional ein Satz zur Gründergeschichte, wenn er natürlich passt.
 4. ${cfg.link ? `Der Link ${cfg.link}, ` : ''}${cfg.offer ? `das Angebot „${cfg.offer}“ ` : ''}und eine offene Frage, wie sie das heute lösen.
@@ -125,7 +130,7 @@ Aufbau der Nachricht (message, 350–550 Zeichen ohne Grußzeile, 3–4 kurze Ab
 Regeln:
 - Deutsch, ${address}. Natürlich und auf Augenhöhe – wie eine Nachricht von Mensch zu Mensch, nicht wie Werbung.
 - Keine Floskeln, keine Superlative, keine Emojis, keine Aufzählungen, kein Fachjargon („Evidenz“, „belastbar“, „Pipeline“). Kein „kein Sales Pitch“, keine Terminforderung.
-- Erfinde nichts, was nicht in den Fakten steht. Gibt es bereits Kontakt im Verlauf, knüpfe daran an statt dich neu vorzustellen.
+- Erfinde nichts, was nicht in den Fakten steht – auch kein Problem, das die Firma angeblich hat. Gibt es keine offenen Stellen, steig mit etwas Konkretem aus Profil/Info der Person ein; kein konstruierter Einstieg wie „bei X stellt sich die Frage …“. Gibt es bereits Kontakt im Verlauf, knüpfe daran an statt dich neu vorzustellen.
 - connect_note: Vernetzungsnotiz, höchstens 200 Zeichen (LinkedIn-Limit), ohne Produkt und ohne Link – nur ein persönlicher, konkreter Grund für die Vernetzung.
 - hook: der gewählte Anlass in einem Satz.
 - research: 3–5 kurze Fakten über die Firma, die für das Gespräch nützlich sind (nur aus den Fakten).${cfg.style ? `\n\nTonalität des Teams:\n${cfg.style}` : ''}${cfg.examples ? `\n\nNachrichten von uns, die gut funktioniert haben – Aufbau, Länge und Ton übernehmen, nicht den Wortlaut:\n${cfg.examples}` : ''}`
@@ -162,7 +167,7 @@ Regeln:
 }
 
 // notes/profile: what the team knows about the person (composer, extension); address overrides the auto rule
-export type DraftOpts = { runId?: string | null; cfg?: AgentConfig['first_message']; notes?: string | null; profile?: string | null; address?: 'auto' | 'du' | 'Sie'; segment?: SegmentKey | 'auto'; industry?: string | 'auto' }
+export type DraftOpts = { runId?: string | null; cfg?: AgentConfig['first_message']; notes?: string | null; profile?: string | null; address?: 'auto' | 'du' | 'Sie'; segment?: SegmentKey | 'auto'; industry?: string | 'auto'; connected?: boolean }
 
 export async function draftFirstMessage(supabase: any, t: Target, opts: DraftOpts = {}): Promise<{ draft: Draft; itemId: string; costUsd: number }> {
   const key = apiKey()
@@ -187,8 +192,9 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: DraftOpt
   const notes = (opts.notes || '').trim().slice(0, 1500)
   const profile = (opts.profile || '').trim().slice(0, 2500)
   const signal = pickSignal({ ...facts.signalFacts, personal: notes || null })
-  const address = opts.address && opts.address !== 'auto' ? opts.address
-    : cfg.address === 'auto' && playbook.address !== 'auto' ? playbook.address : cfg.address
+  // Default is du; the composer/extension choice wins, then the playbook, then the global setting
+  const address: 'du' | 'Sie' = opts.address && opts.address !== 'auto' ? opts.address
+    : playbook.address !== 'auto' ? playbook.address : cfg.address !== 'auto' ? cfg.address : 'du'
   const extraFacts = [
     profile ? `LinkedIn-Profil der Person (Info/Headline, nur Fakten daraus nutzen):\n${profile}` : '',
     notes ? `Infos vom Team über Person/Firma (zuverlässig, bevorzugt nutzen):\n${notes}` : '',
@@ -214,11 +220,12 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: DraftOpt
     max_tokens: 4000,
     output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
     system: systemPrompt({ ...cfg, address }, sender, segment),
-    messages: [{ role: 'user', content: `Fakten:\n${facts.text}${extraFacts ? `\n\n${extraFacts}` : ''}\n\nVorgaben für diese Nachricht (Winkel, Ergebnis und Frage hieraus übernehmen, Aufhänger als Anlass nutzen):\n${brief}${base}\n\nSchreibe Vernetzungsnotiz und erste Nachricht${facts.firstName ? ` an ${facts.personName}` : ' an die zuständige Person (ohne Namen, neutrale Anrede)'}.` }],
+    messages: [{ role: 'user', content: `Fakten:\n${facts.text}${extraFacts ? `\n\n${extraFacts}` : ''}\n\nVorgaben für diese Nachricht (Winkel, Ergebnis und Frage hieraus übernehmen, Aufhänger als Anlass nutzen):\n${brief}${base}${opts.connected ? '\n\nIhr seid auf LinkedIn schon vernetzt: connect_note als leeren String zurückgeben, die Nachricht nicht mit einer Vorstellung wie unter Fremden beginnen.' : ''}\n\nSchreibe ${opts.connected ? '' : 'Vernetzungsnotiz und '}erste Nachricht${facts.firstName ? ` an ${facts.personName}` : ' an die zuständige Person (ohne Namen, neutrale Anrede)'}.` }],
   } as any)
   if (res.stop_reason === 'refusal') throw new Error('Die KI hat die Anfrage abgelehnt.')
   const block = res.content.find(b => b.type === 'text')
   const draft = JSON.parse(block && block.type === 'text' ? block.text : '{}') as Draft
+  if (opts.connected) draft.connect_note = ''
   if (!draft.message) throw new Error('KI-Antwort unvollständig')
   const costUsd = costOf(MODEL, res.usage)
   const score = personalizationScore(draft.message, { signal: signal.key, firstName: facts.firstName, facts: facts.factWords })
@@ -252,7 +259,7 @@ export async function draftFirstMessage(supabase: any, t: Target, opts: DraftOpt
 }
 
 // Single draft triggered by an event (LinkedIn import, Heiße Firma taken) – logged as its own run
-export async function draftOnEvent(supabase: any, t: Target, extra: Pick<DraftOpts, 'notes' | 'profile'> = {}) {
+export async function draftOnEvent(supabase: any, t: Target, extra: Pick<DraftOpts, 'notes' | 'profile' | 'connected'> = {}) {
   const settings = await loadSettings(supabase, t.projectId)
   if (!settings.first_message.enabled || !settings.first_message.config.autoDraft) return null
   const runId = await startRun(supabase, t.projectId, 'first_message', 'event')
