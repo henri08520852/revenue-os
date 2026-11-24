@@ -37,13 +37,22 @@ export type Target = { projectId: string; companyId: string; personId?: string |
 export const apiKey = () => process.env.ANTHROPIC_BRIEFING_API_KEY || process.env.ANTHROPIC_API_KEY
 
 export async function gather(supabase: any, t: Target) {
-  const [{ data: company }, { data: person }, { data: cand }, { data: signals }, { data: acts }] = await Promise.all([
+  const [{ data: company }, { data: person }, { data: cand }, { data: signals }, { data: allActs }, { data: members }] = await Promise.all([
     supabase.from('companies').select('name, domain, website_url, industry, city, country, employee_estimate, employee_range').eq('id', t.companyId).single(),
     t.personId ? supabase.from('people').select('full_name, first_name, last_name, job_title, persona, persona_source, role_category').eq('id', t.personId).single() : { data: null },
     supabase.from('candidate_companies').select('hiring, enrichment_data, evidence').eq('existing_company_id', t.companyId).order('updated_at', { ascending: false }).limit(1),
     supabase.from('signals').select('reason, created_at, signal_type').eq('company_id', t.companyId).order('created_at', { ascending: false }).limit(3),
-    supabase.from('activities').select('activity_type, direction, occurred_at, summary, extracted_intel').eq('company_id', t.companyId).order('occurred_at', { ascending: false }).limit(6),
+    supabase.from('activities').select('activity_type, direction, occurred_at, summary, extracted_intel, person_id, people(full_name, email)').eq('company_id', t.companyId).order('occurred_at', { ascending: false }).limit(20),
+    supabase.from('project_members').select('display_name, email').eq('project_id', t.projectId),
   ])
+  // History: only contact with the recipient counts. Activities of our own team (e.g. synced calendar meetings)
+  // or of other people at the company must not read as "we already spoke".
+  // Team members show up with other addresses too (henri.steckhan@… at another domain) → compare the part before the @
+  const local = (e: unknown) => String(e || '').toLowerCase().split('@')[0]
+  const teamLocals = new Set((members || []).map((m: any) => local(m.email)).filter(Boolean))
+  const internal = (a: any) => teamLocals.has(local(a.people?.email))
+  const external = (allActs || []).filter((a: any) => !internal(a))
+  const acts = t.personId ? external.filter((a: any) => a.person_id === t.personId).slice(0, 6) : external.slice(0, 6)
   if (!company) return null
   const c = cand?.[0]
   const site = company.website_url || (company.domain ? `https://${company.domain}` : null) || c?.enrichment_data?.impressum?.website || null
