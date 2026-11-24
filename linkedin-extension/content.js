@@ -5,7 +5,19 @@
   window.__revenueOs = true
 
   const APP = 'https://revenue-os-chi.vercel.app'
-  const api = body => new Promise(resolve => chrome.runtime.sendMessage({ type: 'api', body }, r => resolve(r || { error: 'Keine Antwort' })))
+  // After an extension update the old script on an open tab loses its connection → say so instead of waiting forever
+  const RELOAD = 'Erweiterung wurde aktualisiert – bitte diese LinkedIn-Seite neu laden (Cmd/Strg + R).'
+  const api = body => new Promise(resolve => {
+    const timer = setTimeout(() => resolve({ error: body?.action === 'draftMessage' ? 'Keine Antwort von Revenue OS (Zeitüberschreitung). Bitte nochmal versuchen.' : 'Keine Antwort von Revenue OS. Seite neu laden oder in Revenue OS anmelden.' }), body?.action === 'draftMessage' ? 90000 : 20000)
+    try {
+      if (!chrome.runtime?.id) { clearTimeout(timer); return resolve({ error: RELOAD }) }
+      chrome.runtime.sendMessage({ type: 'api', body }, r => {
+        clearTimeout(timer)
+        if (chrome.runtime.lastError) return resolve({ error: RELOAD })
+        resolve(r || { error: 'Keine Antwort' })
+      })
+    } catch { clearTimeout(timer); resolve({ error: RELOAD }) }
+  })
   const text = el => (el?.innerText || el?.textContent || '').replace(/\s+/g, ' ').trim()
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
   const slugFrom = href => (String(href || '').match(/\/in\/([^/?#]+)/) || [])[1] || null
