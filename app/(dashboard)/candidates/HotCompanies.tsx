@@ -26,6 +26,7 @@ type Hiring = {
 type Candidate = {
   id: string; name: string; source_type: string; signal_hint: string | null; confidence: number | null; score: number | null
   hiring: Hiring | null; evidence: Evidence[] | null; existing_company_id: string | null; updated_at: string | null; created_at: string
+  aliases?: string[]
   enrichment_data?: {
     v?: number
     sizeManual?: SizeKey | null
@@ -163,7 +164,8 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
 
   async function act(c: Candidate, what: 'lead' | 'company' | 'reject') {
     setBusy(c.id)
-    const res = what === 'reject' ? await rejectCandidate(c.id) : await takeCandidate(c.id, what === 'lead')
+    const res = await (what === 'reject' ? rejectCandidate(c.id) : takeCandidate(c.id, what === 'lead'))
+      .catch((e: any) => ({ error: `Nicht gespeichert: ${e?.message || 'Verbindung'} – Seite neu laden und nochmal versuchen` }))
     setBusy(null)
     if (res.error) { toast.error(res.error); return }
     setGone(prev => new Set(prev).add(c.id))
@@ -273,6 +275,7 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-[16px] font-semibold tracking-tight">{c.name}</h3>
+                      {!!c.aliases?.length && <span className="text-xs text-muted-foreground" title="Gleiche Website – als eine Firma zusammengefasst">auch als {c.aliases.join(', ')}</span>}
                       {!h && <Badge tone="brand">{NEWS_LABEL[c.signal_hint || ''] ?? 'News'}</Badge>}
                       {c.existing_company_id && <Badge tone="violet"><Building2 />Im CRM</Badge>}
                       {h && (sz.n != null ? (

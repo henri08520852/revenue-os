@@ -8,6 +8,7 @@ import { PAINS, type CandidatePain } from '@/lib/outreach/pains'
 import { discoverAtsAccounts, pollAtsAccounts } from '@/lib/discovery/ats-feeds'
 import { enrichCandidates } from '@/lib/discovery/enrich'
 import { enrollLead } from '@/lib/agents/sequence'
+import { mergeDomain } from '@/lib/discovery/dedupe'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID!
 type Result = { error: string | null; href?: string; leadId?: string }
@@ -117,9 +118,9 @@ export async function takeCandidate(id: string, asLead: boolean): Promise<Result
         expires_at: new Date(Date.now() + 21 * 86400000).toISOString(),
       })
     }
-    await supabase.from('candidate_companies').update({ status: 'accepted', existing_company_id: companyId, reviewed_at: new Date().toISOString(), reviewed_by: user.email ?? null }).eq('id', id)
+    const saveError = await review(supabase, id, { status: 'accepted', existing_company_id: companyId, reviewed_at: new Date().toISOString(), reviewed_by: user.email ?? null })
     revalidatePath('/candidates')
-    return { error: null, href, leadId: newLeadId }
+    return { error: saveError, href, leadId: newLeadId }
   } catch (e: any) {
     return { error: e?.message || 'Fehler' }
   }
@@ -128,9 +129,26 @@ export async function takeCandidate(id: string, asLead: boolean): Promise<Result
 export async function rejectCandidate(id: string): Promise<Result> {
   const supabase = createClient() as any
   const { data: { user } } = await supabase.auth.getUser()
-  const { error } = await supabase.from('candidate_companies').update({ status: 'rejected', reviewed_at: new Date().toISOString(), reviewed_by: user?.email ?? null }).eq('id', id)
+  if (!user) return { error: 'Nicht angemeldet – bitte neu einloggen, sonst wird nichts gespeichert' }
+  const error = await review(supabase, id, { status: 'rejected', reviewed_at: new Date().toISOString(), reviewed_by: user.email ?? null })
   revalidatePath('/candidates')
-  return { error: error?.message ?? null }
+  return { error }
+}
+
+// Writes the decision on the candidate and on its duplicates (same employer key or same website),
+// and checks that the row really changed – before, a write that hit no row looked like a success.
+async function review(supabase: any, id: string, patch: Record<string, unknown>): Promise<string | null> {
+  const { data: c } = await supabase.from('candidate_companies').select('id, name, hiring, enrichment_data').eq('id', id).single()
+  if (!c) return 'Firma nicht gefunden'
+  const { data: done, error } = await supabase.from('candidate_companies').update(patch).eq('id', id).select('id')
+  if (error) return error.message
+  if (!done?.length) return 'Konnte nicht gespeichert werden (keine Berechtigung?)'
+  const domain = c.enrichment_data?.impressum?.domain
+  const key = c.hiring?.key
+  const ors = [key ? `hiring->>key.eq.${JSON.stringify(key)}` : null, domain && mergeDomain(domain) ? `enrichment_data->impressum->>domain.eq.${JSON.stringify(domain)}` : null].filter(Boolean)
+  if (ors.length) await supabase.from('candidate_companies').update({ ...patch, notes: `Gleiche Firma wie ${c.name}` })
+    .eq('project_id', PROJECT_ID).eq('status', 'pending').neq('id', id).or(ors.join(','))
+  return null
 }
 
 // Manual run of the daily search (team members only; writes with the service role)

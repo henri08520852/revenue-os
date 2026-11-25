@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import HotCompanies, { SourceStatus } from './HotCompanies'
+import { cleanCandidates } from '@/lib/discovery/dedupe'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // "Jetzt suchen" runs the discovery inline
@@ -25,11 +26,15 @@ export default async function CandidatesPage() {
     if (status) q = q.eq('status', status)
     return q.then((r: any) => r.count ?? 0)
   }
-  const [{ data }, ba, google, ats, atsKnown, atsActive, eures] = await Promise.all([
+  const [{ data }, { data: reviewed }, { data: crm }, ba, google, ats, atsKnown, atsActive, eures] = await Promise.all([
     supabase.from('candidate_companies')
       .select('id, name, source_type, signal_hint, confidence, score, hiring, evidence, existing_company_id, enrichment_data, updated_at, created_at')
       .eq('project_id', PROJECT_ID).eq('status', 'pending')
-      .order('score', { ascending: false, nullsFirst: false }).order('confidence', { ascending: false }).limit(300),
+      .order('score', { ascending: false, nullsFirst: false }).order('confidence', { ascending: false }).limit(400),
+    // Already decided (verworfen / übernommen) → their duplicates under another name stay hidden too
+    supabase.from('candidate_companies').select('key:hiring->>key, domain:enrichment_data->impressum->>domain')
+      .eq('project_id', PROJECT_ID).in('status', ['rejected', 'accepted']).limit(5000),
+    supabase.from('companies').select('name, domain').eq('project_id', PROJECT_ID).limit(5000),
     sourceStats(['ba']), sourceStats(['google_jobs']), sourceStats(ATS_SOURCES), countAts(), countAts('active'), sourceStats(['eures']),
   ])
 
@@ -42,5 +47,6 @@ export default async function CandidatesPage() {
   ]
 
   const all = data || []
-  return <HotCompanies sources={sources} hiring={all.filter((c: any) => c.source_type === 'hiring')} news={all.filter((c: any) => c.source_type !== 'hiring')} />
+  const hiring = cleanCandidates<any>(all.filter((c: any) => c.source_type === 'hiring'), reviewed || [], crm || []).slice(0, 300)
+  return <HotCompanies sources={sources} hiring={hiring} news={all.filter((c: any) => c.source_type !== 'hiring')} />
 }
