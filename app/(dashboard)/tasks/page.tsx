@@ -3,6 +3,14 @@ import { loadTasks, TaskArea } from '@/lib/tasks'
 import { getMeetingData } from '@/lib/meetingData'
 import TaskBoard from './TaskBoard'
 
+// Short explanation per tab, shown under the heading
+const AREA_INFO: Record<string, string> = {
+  all: 'Alle Aufgaben aus Akquise, Sales und Operations an einem Ort',
+  akquise: 'Aufgaben zu konkreten Firmen, Leads und Deals – auch alles, was Akquise-Abfolgen und der Follow-up-Wächter automatisch anlegen',
+  sales: 'Eigene Vertriebsaufgaben ohne festen Kontakt, z. B. Pitch-Deck, Preise, Zielgruppenlisten – Verknüpfung optional',
+  operations: 'Interne Aufgaben rund um Firma und Betrieb, z. B. Verträge, Buchhaltung, Tools, Website – keine CRM-Verknüpfung nötig',
+}
+
 export default async function TasksPage({ searchParams }: { searchParams: { mine?: string; status?: string; area?: string } }) {
   const data = await getMeetingData()
   const mineOnly = searchParams.mine !== '0' && !!data.meId   // default: my tasks
@@ -18,11 +26,11 @@ export default async function TasksPage({ searchParams }: { searchParams: { mine
   const tab = (active: boolean) => ({ fontSize: 13, fontWeight: 500, padding: '5px 12px', borderRadius: 6, textDecoration: 'none', background: active ? '#fff' : 'transparent', color: active ? '#111827' : '#6b7280', boxShadow: active ? '0 1px 2px rgba(0,0,0,0.08)' : 'none' })
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 900 }}>
+    <div style={{ padding: '32px 40px', maxWidth: 1200 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, color: '#111827' }}>Aufgaben</h1>
-          <p style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>{area === 'operations' || area === 'sales' ? 'Interne Aufgaben – müssen nicht an Company, Lead oder Deal hängen' : 'Follow-ups, Anrufe, nächste Schritte – verknüpft mit Company, Kontakt, Lead oder Deal'}</p>
+          <p style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>{AREA_INFO[area ?? 'all']}</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 8, padding: 2 }}>
