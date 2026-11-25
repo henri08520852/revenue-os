@@ -22,7 +22,14 @@ export type EditableTask = {
   due_at: string | null
   has_time: boolean
   owner_id: string | null
+  area?: string
 }
+
+export const TASK_AREAS = [
+  { key: 'akquise', label: 'Akquise', color: '#2563eb', bg: '#eff6ff' },
+  { key: 'sales', label: 'Sales', color: '#16a34a', bg: '#f0fdf4' },
+  { key: 'operations', label: 'Operations', color: '#d97706', bg: '#fffbeb' },
+] as const
 
 export const TASK_TYPES = [
   { key: 'todo', label: 'To-do', icon: '☑️' },
@@ -46,16 +53,18 @@ export function dueToIso(date: string, time: string | null) {
   return time ? new Date(`${date}T${time}:00`).toISOString() : `${date}T10:00:00.000Z`
 }
 
-export default function TaskDialog({ open, onClose, data, link, task, defaultDate }: {
+export default function TaskDialog({ open, onClose, data, link, task, defaultDate, defaultArea }: {
   open: boolean
   onClose: () => void
   data: TaskPickData
   link?: TaskLink              // fixed context (record page); without it the user picks one
   task?: EditableTask | null   // edit mode
   defaultDate?: string
+  defaultArea?: string         // preselected area for new tasks (Aufgaben tab)
 }) {
   const [title, setTitle] = useState('')
   const [type, setType] = useState('todo')
+  const [area, setArea] = useState('akquise')
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
   const [ownerId, setOwnerId] = useState('')
@@ -70,11 +79,11 @@ export default function TaskDialog({ open, onClose, data, link, task, defaultDat
     if (!open) return
     setError(null)
     if (task) {
-      setTitle(task.title); setType(task.task_type); setNotes(task.notes ?? ''); setOwnerId(task.owner_id ?? '')
+      setTitle(task.title); setType(task.task_type); setNotes(task.notes ?? ''); setOwnerId(task.owner_id ?? ''); setArea(task.area ?? 'akquise')
       setDate(task.due_at ? dayKey(new Date(task.due_at)) : '')
       setTime(task.due_at && task.has_time ? new Date(task.due_at).toLocaleTimeString('de-DE', { timeZone: TZ, hour: '2-digit', minute: '2-digit' }) : '')
     } else {
-      setTitle(''); setType('todo'); setNotes(''); setOwnerId(data.meId ?? '')
+      setTitle(''); setType('todo'); setNotes(''); setOwnerId(data.meId ?? ''); setArea(fixed ? 'akquise' : defaultArea ?? 'akquise')
       setDate(defaultDate ?? nextWorkday()); setTime('')
       setLinkKind(data.deals.length ? 'deal' : 'company'); setLinkId('')
     }
@@ -91,7 +100,7 @@ export default function TaskDialog({ open, onClose, data, link, task, defaultDat
     startTransition(async () => {
       let res
       if (task) {
-        res = await updateTask(task.id, { title, taskType: type, dueIso, hasTime: !!time, ownerId: ownerId || null, notes })
+        res = await updateTask(task.id, { title, taskType: type, area, dueIso, hasTime: !!time, ownerId: ownerId || null, notes })
       } else {
         const l: TaskLink = fixed ? link! : {
           companyId: linkKind === 'company' ? linkId || null : null,
@@ -100,7 +109,7 @@ export default function TaskDialog({ open, onClose, data, link, task, defaultDat
           personId: linkKind === 'person' ? linkId || null : null,
         }
         res = await createTask({
-          title, taskType: type, dueIso, hasTime: !!time, ownerId: ownerId || null, notes,
+          title, taskType: type, area, dueIso, hasTime: !!time, ownerId: ownerId || null, notes,
           companyId: l.companyId ?? null, personId: l.personId ?? null, opportunityId: l.opportunityId ?? null, leadId: l.leadId ?? null,
         })
       }
@@ -123,6 +132,19 @@ export default function TaskDialog({ open, onClose, data, link, task, defaultDat
             <input autoFocus value={title} onChange={e => setTitle(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && title.trim()) submit() }}
               placeholder="z. B. Angebot nachfassen" style={input} />
           </div>
+          {!fixed && (
+            <div>
+              <label style={label}>Bereich</label>
+              <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 8, padding: 2 }}>
+                {TASK_AREAS.map(a => (
+                  <button key={a.key} type="button" onClick={() => setArea(a.key)}
+                    style={{ flex: 1, fontSize: 12, fontWeight: 600, padding: '6px 0', borderRadius: 6, border: 'none', cursor: 'pointer', background: area === a.key ? '#fff' : 'transparent', color: area === a.key ? a.color : '#6b7280', boxShadow: area === a.key ? '0 1px 2px rgba(0,0,0,0.08)' : 'none' }}>
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {TASK_TYPES.map(t => (
               <button key={t.key} type="button" onClick={() => setType(t.key)}
@@ -153,7 +175,7 @@ export default function TaskDialog({ open, onClose, data, link, task, defaultDat
             </div>
             {!fixed && !task && (
               <div>
-                <label style={label}>Verknüpft mit</label>
+                <label style={label}>Verknüpft mit{area !== 'akquise' ? ' (optional)' : ''}</label>
                 <select value={linkKind} onChange={e => { setLinkKind(e.target.value as any); setLinkId('') }} style={input}>
                   <option value="deal">Deal</option>
                   <option value="lead">Lead</option>
@@ -165,7 +187,7 @@ export default function TaskDialog({ open, onClose, data, link, task, defaultDat
           </div>
           {!fixed && !task && (
             <select value={linkId} onChange={e => setLinkId(e.target.value)} style={input}>
-              <option value="">{pickOptions.length ? '— optional wählen —' : 'nichts vorhanden'}</option>
+              <option value="">{area !== 'akquise' ? '— keine Verknüpfung (intern) —' : pickOptions.length ? '— optional wählen —' : 'nichts vorhanden'}</option>
               {pickOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
             </select>
           )}

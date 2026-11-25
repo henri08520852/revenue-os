@@ -5,12 +5,14 @@ import { advanceSequences } from '@/lib/agents/sequence'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
 const TYPES = ['todo', 'call', 'email', 'follow_up', 'meeting']
+const AREAS = ['akquise', 'operations', 'sales']
 
 type Result = { error: string | null }
 
 export type TaskInput = {
   title: string
   taskType: string
+  area?: string              // akquise (default) | operations | sales
   dueIso: string | null      // computed in the browser (date-only → 10:00 UTC of that day)
   hasTime: boolean
   ownerId: string | null
@@ -48,6 +50,7 @@ export async function createTask(input: TaskInput): Promise<Result> {
   const title = input.title.trim()
   if (!title) return { error: 'Bitte einen Titel eingeben' }
   if (!TYPES.includes(input.taskType)) return { error: 'Ungültiger Typ' }
+  if (input.area && !AREAS.includes(input.area)) return { error: 'Ungültiger Bereich' }
   const supabase = createClient() as any
   const { data: { user } } = await supabase.auth.getUser()
   const links = await completeLinks(supabase, input)
@@ -56,6 +59,7 @@ export async function createTask(input: TaskInput): Promise<Result> {
     title,
     notes: input.notes?.trim() || null,
     task_type: input.taskType,
+    area: input.area ?? 'akquise',
     due_at: input.dueIso,
     has_time: !!input.dueIso && input.hasTime,
     owner_id: input.ownerId ?? user?.id ?? null,
@@ -77,6 +81,10 @@ export async function updateTask(id: string, input: Partial<TaskInput>): Promise
     patch.title = input.title.trim()
   }
   if (input.taskType !== undefined) patch.task_type = input.taskType
+  if (input.area !== undefined) {
+    if (!AREAS.includes(input.area)) return { error: 'Ungültiger Bereich' }
+    patch.area = input.area
+  }
   if (input.dueIso !== undefined) { patch.due_at = input.dueIso; patch.has_time = !!input.dueIso && !!input.hasTime }
   if (input.ownerId !== undefined) patch.owner_id = input.ownerId
   if (input.notes !== undefined) patch.notes = input.notes?.trim() || null

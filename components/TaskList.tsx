@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import type { Task } from '@/lib/tasks'
-import TaskDialog, { TASK_TYPES, TaskLink, TaskPickData } from './TaskDialog'
+import TaskDialog, { TASK_AREAS, TASK_TYPES, TaskLink, TaskPickData } from './TaskDialog'
 import { deleteTask, setTaskDone } from '@/app/(dashboard)/tasks/actions'
 
 const TZ = 'Europe/Berlin'
@@ -25,12 +25,13 @@ export function isOverdue(t: Pick<Task, 'due_at' | 'has_time' | 'status'>) {
 }
 
 // One task row: checkbox, title, due badge, owner, linked record(s)
-export function TaskRow({ task, ownerName, hideLinks, onEdit }: { task: Task; ownerName?: string | null; hideLinks?: ('company' | 'person' | 'deal' | 'lead')[]; onEdit?: () => void }) {
+export function TaskRow({ task, ownerName, hideLinks, onEdit, showArea }: { task: Task; ownerName?: string | null; hideLinks?: ('company' | 'person' | 'deal' | 'lead')[]; onEdit?: () => void; showArea?: boolean }) {
   const [pending, startTransition] = useTransition()
   const [done, setDone] = useState(task.status === 'done')
   const overdue = isOverdue({ ...task, status: done ? 'done' : 'open' })
   const type = TASK_TYPES.find(t => t.key === task.task_type)
   const hide = new Set(hideLinks ?? [])
+  const area = showArea && task.area && task.area !== 'akquise' ? TASK_AREAS.find(a => a.key === task.area) : null
   const links = [
     !hide.has('deal') && task.deal ? { href: `/opportunities/${task.deal.id}`, label: `◆ ${task.deal.name || 'Deal'}`, color: '#16a34a' } : null,
     !hide.has('lead') && task.lead && !task.deal ? { href: `/pipeline?focus=${task.lead.id}`, label: `● Lead${task.lead.name ? ' ' + task.lead.name : ''}`, color: '#7c3aed' } : null,
@@ -50,8 +51,9 @@ export function TaskRow({ task, ownerName, hideLinks, onEdit }: { task: Task; ow
           </button>
           {task.due_at && <span style={{ fontSize: 11, fontWeight: 600, color: overdue ? '#dc2626' : '#6b7280', whiteSpace: 'nowrap' }}>{overdue ? '⚠ ' : ''}{dueLabel(task)}</span>}
         </div>
-        {(links.length > 0 || ownerName) && (
+        {(links.length > 0 || ownerName || area) && (
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 2, fontSize: 11 }}>
+            {area && <span style={{ color: area.color, background: area.bg, borderRadius: 4, padding: '0 6px', fontWeight: 600 }}>{area.label}</span>}
             {links.map(l => <Link key={l.href} href={l.href} style={{ color: l.color, textDecoration: 'none' }}>{l.label}</Link>)}
             {ownerName && <span style={{ color: '#9ca3af' }}>{ownerName}</span>}
           </div>

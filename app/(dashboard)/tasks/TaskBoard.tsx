@@ -14,11 +14,11 @@ const GROUPS = [
   { key: 'none',    label: 'Ohne Datum',  color: '#9ca3af' },
 ] as const
 
-export default function TaskBoard({ tasks, data, done, showOwner }: { tasks: Task[]; data: TaskPickData; done: boolean; showOwner: boolean }) {
+export default function TaskBoard({ tasks, data, done, showOwner, area }: { tasks: Task[]; data: TaskPickData; done: boolean; showOwner: boolean; area: string | null }) {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Task | null>(null)
   const ownerName = (id: string | null) => showOwner ? data.team.find(m => m.user_id === id)?.display_name ?? null : null
-  const row = (t: Task) => <TaskRow key={t.id} task={t} ownerName={ownerName(t.owner_id)} onEdit={() => setEditing(t)} />
+  const row = (t: Task) => <TaskRow key={t.id} task={t} ownerName={ownerName(t.owner_id)} onEdit={() => setEditing(t)} showArea={!area} />
   const groups = groupTasks(tasks)
 
   return (
@@ -27,7 +27,7 @@ export default function TaskBoard({ tasks, data, done, showOwner }: { tasks: Tas
         <span style={{ fontSize: 13, color: '#6b7280' }}>{tasks.length} {done ? 'erledigt' : 'offen'}</span>
         <button onClick={() => setCreating(true)} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, border: 'none', background: '#2563eb', color: '#fff', cursor: 'pointer' }}>+ Aufgabe</button>
       </div>
-      {!tasks.length && <p style={{ fontSize: 13, color: '#9ca3af', textAlign: 'center', padding: '24px 0' }}>{done ? 'Noch nichts erledigt' : 'Keine offenen Aufgaben 🎉'}</p>}
+      {!tasks.length && <p style={{ fontSize: 13, color: '#9ca3af', textAlign: 'center', padding: '24px 0' }}>{done ? 'Noch nichts erledigt' : area && area !== 'akquise' ? 'Noch keine internen Aufgaben – leg oben rechts eine an' : 'Keine offenen Aufgaben 🎉'}</p>}
       {done
         ? <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>{tasks.map(row)}</div>
         : GROUPS.filter(g => groups[g.key].length).map(g => (
@@ -39,7 +39,7 @@ export default function TaskBoard({ tasks, data, done, showOwner }: { tasks: Tas
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>{groups[g.key].map(row)}</div>
           </div>
         ))}
-      <TaskDialog open={creating} onClose={() => setCreating(false)} data={data} />
+      <TaskDialog open={creating} onClose={() => setCreating(false)} data={data} defaultArea={area ?? undefined} />
       <TaskDialog open={!!editing} onClose={() => setEditing(null)} data={data} task={editing} />
     </div>
   )

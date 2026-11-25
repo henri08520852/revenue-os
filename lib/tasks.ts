@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID
 
 export type TaskType = 'todo' | 'call' | 'email' | 'follow_up' | 'meeting'
+export type TaskArea = 'akquise' | 'operations' | 'sales'
 
 export type Task = {
   id: string
@@ -12,6 +13,7 @@ export type Task = {
   due_at: string | null
   has_time: boolean
   status: 'open' | 'done'
+  area: TaskArea
   owner_id: string | null
   company_id: string | null
   person_id: string | null
@@ -23,7 +25,7 @@ export type Task = {
   lead: { id: string; name: string | null } | null
 }
 
-const SELECT = 'id, title, notes, task_type, due_at, has_time, status, owner_id, company_id, person_id, opportunity_id, lead_id, company:companies(id, name), person:people(id, full_name, first_name, last_name), deal:opportunities(id, name), lead:leads(id, name)'
+const SELECT = 'id, title, notes, task_type, area, due_at, has_time, status, owner_id, company_id, person_id, opportunity_id, lead_id, company:companies(id, name), person:people(id, full_name, first_name, last_name), deal:opportunities(id, name), lead:leads(id, name)'
 
 function normalize(t: any): Task {
   const p = t.person
@@ -38,6 +40,7 @@ export async function loadTasks(f: {
   status?: 'open' | 'done' | 'all'
   companyId?: string; personId?: string; opportunityId?: string; leadId?: string
   ownerId?: string | null
+  area?: TaskArea | null
   dueBefore?: string; dueFrom?: string
   limit?: number
 } = {}): Promise<Task[]> {
@@ -50,6 +53,7 @@ export async function loadTasks(f: {
   if (f.opportunityId) q = q.eq('opportunity_id', f.opportunityId)
   if (f.leadId) q = q.eq('lead_id', f.leadId)
   if (f.ownerId) q = q.eq('owner_id', f.ownerId)
+  if (f.area) q = q.eq('area', f.area)
   if (f.dueFrom) q = q.gte('due_at', f.dueFrom)
   if (f.dueBefore) q = q.lt('due_at', f.dueBefore)
   q = status === 'done'
