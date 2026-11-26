@@ -15,6 +15,7 @@ export type Task = {
   status: 'open' | 'done'
   area: TaskArea
   owner_id: string | null
+  co_owner_ids: string[]
   company_id: string | null
   person_id: string | null
   opportunity_id: string | null
@@ -25,12 +26,13 @@ export type Task = {
   lead: { id: string; name: string | null } | null
 }
 
-const SELECT = 'id, title, notes, task_type, area, due_at, has_time, status, owner_id, company_id, person_id, opportunity_id, lead_id, company:companies(id, name), person:people(id, full_name, first_name, last_name), deal:opportunities(id, name), lead:leads(id, name)'
+const SELECT = 'id, title, notes, task_type, area, due_at, has_time, status, owner_id, co_owner_ids, company_id, person_id, opportunity_id, lead_id, company:companies(id, name), person:people(id, full_name, first_name, last_name), deal:opportunities(id, name), lead:leads(id, name)'
 
 function normalize(t: any): Task {
   const p = t.person
   return {
     ...t,
+    co_owner_ids: t.co_owner_ids ?? [],
     person: p ? { id: p.id, name: p.full_name || [p.first_name, p.last_name].filter(Boolean).join(' ') || 'Kontakt' } : null,
   }
 }
@@ -52,7 +54,7 @@ export async function loadTasks(f: {
   if (f.personId) q = q.eq('person_id', f.personId)
   if (f.opportunityId) q = q.eq('opportunity_id', f.opportunityId)
   if (f.leadId) q = q.eq('lead_id', f.leadId)
-  if (f.ownerId) q = q.eq('owner_id', f.ownerId)
+  if (f.ownerId) q = q.or(`owner_id.eq.${f.ownerId},co_owner_ids.cs.{${f.ownerId}}`)   // main or co-assignee
   if (f.area) q = q.eq('area', f.area)
   if (f.dueFrom) q = q.gte('due_at', f.dueFrom)
   if (f.dueBefore) q = q.lt('due_at', f.dueBefore)

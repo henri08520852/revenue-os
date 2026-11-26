@@ -9,6 +9,13 @@ import { deleteTask, setTaskDone } from '@/app/(dashboard)/tasks/actions'
 const TZ = 'Europe/Berlin'
 const dayKey = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: TZ })
 
+// "Henri & Simon" – everyone on the task, main owner first
+export function assigneeNames(t: Pick<Task, 'owner_id' | 'co_owner_ids'>, team: { user_id: string; display_name: string }[], skipId?: string | null) {
+  const ids = [t.owner_id, ...(t.co_owner_ids ?? [])].filter(id => id && id !== skipId) as string[]
+  const names = ids.map(id => team.find(m => m.user_id === id)?.display_name).filter(Boolean) as string[]
+  return names.length ? names.join(' & ') : null
+}
+
 export function dueLabel(t: Pick<Task, 'due_at' | 'has_time'>) {
   if (!t.due_at) return null
   const d = new Date(t.due_at)
@@ -78,11 +85,10 @@ export default function TaskList({ tasks, data, link, hideLinks, emptyText = 'Ke
 }) {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Task | null>(null)
-  const ownerName = (id: string | null) => data.team.find(m => m.user_id === id)?.display_name ?? null
   return (
     <div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {tasks.map(t => <TaskRow key={t.id} task={t} ownerName={ownerName(t.owner_id)} hideLinks={hideLinks} onEdit={() => setEditing(t)} />)}
+        {tasks.map(t => <TaskRow key={t.id} task={t} ownerName={assigneeNames(t, data.team)} hideLinks={hideLinks} onEdit={() => setEditing(t)} />)}
         {!tasks.length && <p style={{ fontSize: 12, color: '#9ca3af' }}>{emptyText}</p>}
       </div>
       <button onClick={() => setCreating(true)} style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ Aufgabe</button>

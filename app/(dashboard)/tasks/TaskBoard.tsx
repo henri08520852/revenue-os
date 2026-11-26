@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { Task } from '@/lib/tasks'
-import { TaskRow } from '@/components/TaskList'
+import { TaskRow, assigneeNames } from '@/components/TaskList'
 import TaskDialog, { TaskPickData } from '@/components/TaskDialog'
 import { groupTasks } from '../today/DueList'
 
@@ -17,8 +17,9 @@ const GROUPS = [
 export default function TaskBoard({ tasks, data, done, showOwner, area }: { tasks: Task[]; data: TaskPickData; done: boolean; showOwner: boolean; area: string | null }) {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Task | null>(null)
-  const ownerName = (id: string | null) => showOwner ? data.team.find(m => m.user_id === id)?.display_name ?? null : null
-  const row = (t: Task) => <TaskRow key={t.id} task={t} ownerName={ownerName(t.owner_id)} onEdit={() => setEditing(t)} showArea={!area} />
+  // In "Meine" show only the others on a shared task ("mit Simon")
+  const ownerName = (t: Task) => { const n = assigneeNames(t, data.team, showOwner ? null : data.meId); return n && !showOwner ? `mit ${n}` : n }
+  const row = (t: Task) => <TaskRow key={t.id} task={t} ownerName={ownerName(t)} onEdit={() => setEditing(t)} showArea={!area} />
   const groups = groupTasks(tasks)
 
   return (

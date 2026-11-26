@@ -16,6 +16,7 @@ export type TaskInput = {
   dueIso: string | null      // computed in the browser (date-only → 10:00 UTC of that day)
   hasTime: boolean
   ownerId: string | null
+  coOwnerIds?: string[]      // further assignees besides ownerId
   companyId: string | null
   personId: string | null
   opportunityId: string | null
@@ -46,6 +47,9 @@ async function completeLinks(supabase: any, i: Pick<TaskInput, 'companyId' | 'pe
   return { companyId, personId, opportunityId: i.opportunityId, leadId: i.leadId }
 }
 
+const cleanCoOwners = (ids: string[] | undefined, ownerId: string | null) =>
+  Array.from(new Set((ids ?? []).filter(id => id && id !== ownerId)))
+
 export async function createTask(input: TaskInput): Promise<Result> {
   const title = input.title.trim()
   if (!title) return { error: 'Bitte einen Titel eingeben' }
@@ -63,6 +67,7 @@ export async function createTask(input: TaskInput): Promise<Result> {
     due_at: input.dueIso,
     has_time: !!input.dueIso && input.hasTime,
     owner_id: input.ownerId ?? user?.id ?? null,
+    co_owner_ids: cleanCoOwners(input.coOwnerIds, input.ownerId ?? user?.id ?? null),
     created_by: user?.id ?? null,
     company_id: links.companyId,
     person_id: links.personId,
@@ -87,6 +92,7 @@ export async function updateTask(id: string, input: Partial<TaskInput>): Promise
   }
   if (input.dueIso !== undefined) { patch.due_at = input.dueIso; patch.has_time = !!input.dueIso && !!input.hasTime }
   if (input.ownerId !== undefined) patch.owner_id = input.ownerId
+  if (input.coOwnerIds !== undefined) patch.co_owner_ids = cleanCoOwners(input.coOwnerIds, input.ownerId ?? null)
   if (input.notes !== undefined) patch.notes = input.notes?.trim() || null
   const supabase = createClient() as any
   const { error } = await supabase.from('tasks').update(patch).eq('id', id)

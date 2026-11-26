@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import type { Task } from '@/lib/tasks'
-import { TaskRow } from '@/components/TaskList'
+import { TaskRow, assigneeNames } from '@/components/TaskList'
 import TaskDialog, { TaskPickData } from '@/components/TaskDialog'
 
 import { groupTasks } from '@/lib/due'
@@ -25,7 +25,7 @@ export default function DueList({ tasks, data, mineOnly, showToggle }: { tasks: 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const groups = groupTasks(tasks)
   const total = groups.overdue.length + groups.today.length + groups.week.length
-  const ownerName = (id: string | null) => data.team.find(m => m.user_id === id)?.display_name ?? null
+  const ownerName = (t: Task) => { const n = assigneeNames(t, data.team, mineOnly ? data.meId : null); return n && mineOnly ? `mit ${n}` : n }
 
   return (
     <div className="rounded-lg border border-border bg-card p-5 shadow-card">
@@ -66,7 +66,7 @@ export default function DueList({ tasks, data, mineOnly, showToggle }: { tasks: 
                 {list.length === 0
                   ? <p style={{ fontSize: 12, color: '#9ca3af' }}>Nichts fällig</p>
                   : <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {shown.map(t => <TaskRow key={t.id} task={t} ownerName={mineOnly ? null : ownerName(t.owner_id)} onEdit={() => setEditing(t)} />)}
+                      {shown.map(t => <TaskRow key={t.id} task={t} ownerName={ownerName(t)} onEdit={() => setEditing(t)} />)}
                       {(hidden > 0 || (isOpen && list.length > PREVIEW)) && (
                         <button
                           onClick={() => setExpanded(e => ({ ...e, [g.key]: !isOpen }))}

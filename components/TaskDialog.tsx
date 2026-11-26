@@ -22,6 +22,7 @@ export type EditableTask = {
   due_at: string | null
   has_time: boolean
   owner_id: string | null
+  co_owner_ids?: string[]
   area?: string
 }
 
@@ -67,7 +68,7 @@ export default function TaskDialog({ open, onClose, data, link, task, defaultDat
   const [area, setArea] = useState('akquise')
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
-  const [ownerId, setOwnerId] = useState('')
+  const [assignees, setAssignees] = useState<string[]>([])   // first = main owner
   const [notes, setNotes] = useState('')
   const [linkKind, setLinkKind] = useState<'company' | 'deal' | 'lead' | 'person'>('deal')
   const [linkId, setLinkId] = useState('')
@@ -79,11 +80,11 @@ export default function TaskDialog({ open, onClose, data, link, task, defaultDat
     if (!open) return
     setError(null)
     if (task) {
-      setTitle(task.title); setType(task.task_type); setNotes(task.notes ?? ''); setOwnerId(task.owner_id ?? ''); setArea(task.area ?? 'akquise')
+      setTitle(task.title); setType(task.task_type); setNotes(task.notes ?? ''); setAssignees([task.owner_id, ...(task.co_owner_ids ?? [])].filter(Boolean) as string[]); setArea(task.area ?? 'akquise')
       setDate(task.due_at ? dayKey(new Date(task.due_at)) : '')
       setTime(task.due_at && task.has_time ? new Date(task.due_at).toLocaleTimeString('de-DE', { timeZone: TZ, hour: '2-digit', minute: '2-digit' }) : '')
     } else {
-      setTitle(''); setType('todo'); setNotes(''); setOwnerId(data.meId ?? ''); setArea(fixed ? 'akquise' : defaultArea ?? 'akquise')
+      setTitle(''); setType('todo'); setNotes(''); setAssignees(data.meId ? [data.meId] : []); setArea(fixed ? 'akquise' : defaultArea ?? 'akquise')
       setDate(defaultDate ?? nextWorkday()); setTime('')
       setLinkKind(data.deals.length ? 'deal' : 'company'); setLinkId('')
     }
@@ -94,13 +95,16 @@ export default function TaskDialog({ open, onClose, data, link, task, defaultDat
     : linkKind === 'lead' ? data.leads
     : data.people.map(p => ({ id: p.id, label: p.name }))
 
+  const toggleAssignee = (id: string) => setAssignees(a => a.includes(id) ? a.filter(x => x !== id) : [...a, id])
+
   function submit() {
+    const ownerId = assignees[0] ?? null, coOwnerIds = assignees.slice(1)
     setError(null)
     const dueIso = dueToIso(date, time || null)
     startTransition(async () => {
       let res
       if (task) {
-        res = await updateTask(task.id, { title, taskType: type, area, dueIso, hasTime: !!time, ownerId: ownerId || null, notes })
+        res = await updateTask(task.id, { title, taskType: type, area, dueIso, hasTime: !!time, ownerId, coOwnerIds, notes })
       } else {
         const l: TaskLink = fixed ? link! : {
           companyId: linkKind === 'company' ? linkId || null : null,
@@ -109,7 +113,7 @@ export default function TaskDialog({ open, onClose, data, link, task, defaultDat
           personId: linkKind === 'person' ? linkId || null : null,
         }
         res = await createTask({
-          title, taskType: type, area, dueIso, hasTime: !!time, ownerId: ownerId || null, notes,
+          title, taskType: type, area, dueIso, hasTime: !!time, ownerId, coOwnerIds, notes,
           companyId: l.companyId ?? null, personId: l.personId ?? null, opportunityId: l.opportunityId ?? null, leadId: l.leadId ?? null,
         })
       }
@@ -167,11 +171,19 @@ export default function TaskDialog({ open, onClose, data, link, task, defaultDat
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: fixed || task ? '1fr' : '1fr 1fr', gap: 10 }}>
             <div>
-              <label style={label}>Zuständig</label>
-              <select value={ownerId} onChange={e => setOwnerId(e.target.value)} style={input}>
-                <option value="">— niemand —</option>
-                {data.team.map(m => <option key={m.user_id} value={m.user_id}>{m.display_name}{m.user_id === data.meId ? ' (du)' : ''}</option>)}
-              </select>
+              <label style={label}>Zuständig{assignees.length > 1 ? ` (${assignees.length})` : ''}</label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {data.team.map(m => {
+                  const on = assignees.includes(m.user_id)
+                  return (
+                    <button key={m.user_id} type="button" onClick={() => toggleAssignee(m.user_id)} title={on ? 'Entfernen' : 'Hinzufügen'}
+                      style={{ fontSize: 12, padding: '6px 10px', borderRadius: 20, cursor: 'pointer', border: `1px solid ${on ? '#2563eb' : '#e5e7eb'}`, background: on ? '#eff6ff' : '#fff', color: on ? '#1d4ed8' : '#4b5563' }}>
+                      {on ? '✓ ' : ''}{m.display_name}{m.user_id === data.meId ? ' (du)' : ''}
+                    </button>
+                  )
+                })}
+                {!data.team.length && <span style={{ fontSize: 12, color: '#9ca3af' }}>Kein Team</span>}
+              </div>
             </div>
             {!fixed && !task && (
               <div>
