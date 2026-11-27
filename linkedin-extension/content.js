@@ -121,7 +121,43 @@
       while (el.parentElement && el.parentElement !== document.body && !(list && el.parentElement.contains(list))) el = el.parentElement
       return el
     }
-    return document.querySelector('.msg-thread') || document.querySelector('main') || document.body
+    // No reply box (sponsored / InMail / read-only threads): the detail pane, else the first message's container
+    const pane = document.querySelector('.msg-thread, [class*="msg-thread"], [class*="conversation-detail"], [class*="msg-convo-wrapper"], .scaffold-layout__detail')
+    if (pane && !inList(pane) && !(list && pane.contains(list))) return pane
+    const msg = document.querySelector('.msg-s-event-listitem__body, [class*="event-listitem__body"], [class*="message-bubble"]')
+    if (msg && !inList(msg)) {
+      let el = msg
+      while (el.parentElement && el.parentElement !== document.body && !(list && el.parentElement.contains(list))) el = el.parentElement
+      return el
+    }
+    return document.querySelector('main') || document.body
+  }
+
+  // Lines of visible text outside the conversation list, in page order
+  function threadLines(root) {
+    const out = [], walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const t = n.textContent.replace(/\s+/g, ' ').trim()
+      if (t && visible(n.parentElement) && !inList(n.parentElement)) out.push(t)
+    }
+    return out
+  }
+
+  // Own name (nav "Me" photo) – so a sender name that is mine is never taken as the partner
+  const myName = () => (document.querySelector('img.global-nav__me-photo, [class*="global-nav__me"] img, .global-nav__me img')?.getAttribute('alt') || '').replace(/^(photo of|foto von)\s+/i, '').trim()
+
+  // Fallbacks for the partner's name when the thread header can't be found
+  function fallbackName(root) {
+    const active = document.querySelector('[class*="conversation-listitem--active"], [class*="convo-item-link--active"], [class*="conversation-listitem"] [aria-current="page"], [class*="conversation-listitem"] [aria-current="true"]')
+    const item = active?.closest('[class*="conversation-listitem"]') || active
+    const fromList = item ? [firstLine(item.querySelector('[class*="participant-names"], h3, h2')), ...visibleLines(item)].find(looksLikeName) : ''
+    if (fromList) return fromList
+    const t = titleName()
+    if (looksLikeName(t)) return t
+    const me = myName()
+    const senders = [...root.querySelectorAll('.msg-s-message-group__name, [class*="message-group__name"], [class*="message-group__profile-link"]')]
+      .map(firstLine).filter(n => looksLikeName(n) && (!me || !n.startsWith(me.split(' ')[0])))
+    return senders[0] || ''
   }
 
   // ---------- message timestamps ("WEDNESDAY" / "Oct 2" / "Heute" headings + "10:00 AM" per group) ----------
@@ -178,7 +214,7 @@
     let nameEl = [...root.querySelectorAll('.msg-entity-lockup__entity-title, #thread-detail-jump-target, .msg-title-bar h2, .msg-thread__link-to-profile, h1, h2, h3')]
       .find(el => visible(el) && !inList(el) && looksLikeName(firstLine(el)))
     if (!nameEl) nameEl = [...root.querySelectorAll('a[href*="/in/"]')].find(a => visible(a) && !inList(a) && looksLikeName(firstLine(a)))
-    const name = firstLine(nameEl).replace(/\s*\(.*?\)\s*$/, '')
+    const name = (firstLine(nameEl) || fallbackName(root)).replace(/\s*\(.*?\)\s*$/, '')
 
     // Profile link: one whose text / label carries the name, else the header's link
     const links = [...root.querySelectorAll('a[href*="/in/"]')].filter(a => !inList(a))
@@ -194,6 +230,12 @@
       const lines = box ? visibleLines(box) : []
       const at = lines.findIndex(l => l.startsWith(name))
       if (at >= 0) headline = lines.slice(at + 1).find(l => l.length >= 10 && !l.startsWith(name) && !GENERIC.test(l) && !/^(active|aktiv|online|·)/i.test(l)) || ''
+    }
+    // No header element: the line right after the name in the conversation pane
+    if (!headline && name) {
+      const lines = threadLines(root), at = lines.findIndex(l => l === name || l.startsWith(name))
+      const next = at >= 0 ? lines.slice(at + 1, at + 4).find(l => l.length >= 10 && !GENERIC.test(l) && !/^(active|aktiv|online|·)/i.test(l) && !parseDay(l)) : ''
+      if (next && !/^(hi|hallo|hello|hey|guten)\b/i.test(next)) headline = next
     }
 
     // Messages with sender (sender name sits on the first bubble of a group)
