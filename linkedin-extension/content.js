@@ -55,24 +55,63 @@
       headline = lines.slice(at + 1).find(l => l.length >= 12 && l !== name && !/followers|follower|connections|kontakte|contact info|kontaktinfo|^·|^\d/i.test(l)) || ''
     }
 
+    // Company: the current-company entry beside the headline ("MBG … GmbH + 16 more"), else the top experience entry
+    const MORE = /\s*\+\s*\d+\s*(more|weitere|mehr)\s*$/i
     let company = ''
     const cur = document.querySelector('[aria-label*="Current company" i], [aria-label*="Aktuelles Unternehmen" i], [aria-label*="Aktuelle Firma" i]')
     if (cur) company = (cur.getAttribute('aria-label').split(':')[1] || '').split(/\.\s/)[0].replace(/\.$/, '').trim()
     if (!company) {
-      const link = card.querySelector('a[href*="/company/"], button img[alt], a[href*="#experience"]')
-      company = text(link?.closest('a, button')) || (link?.getAttribute?.('alt') || '').replace(/\s*logo$/i, '')
+      const link = card.querySelector('a[href*="/company/"], a[href*="#experience"], button img[alt]')
+      company = firstLine(link?.closest('a, button')) || (link?.getAttribute?.('alt') || '').replace(/\s*(logo|company logo)$/i, '')
     }
+    if (!company) {
+      const lines = String(card.innerText || '').split('\n').map(l => l.trim()).filter(Boolean)
+      company = lines.find(l => MORE.test(l) && l.replace(MORE, '').length >= 2) || ''
+    }
+    const exp = topExperience()
+    if (!company) company = exp.company
+    company = company.replace(MORE, '').trim()
 
     const split = splitHeadline(headline)
-    let jobTitle = split.jobTitle
     if (!company) company = split.company
-    // Headline "Firma | Claim" → the first part is the company, not a role
-    const norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9äöüß]/g, '')
-    if (jobTitle && company && (norm(jobTitle) === norm(company) || norm(company).startsWith(norm(jobTitle)))) jobTitle = ''
+    let jobTitle = cleanTitle(split.jobTitle, company)
+    // Headline without a usable role (a claim, or very long) → title of the top experience entry
+    const ROLE = /ceo|cto|cfo|coo|cmo|founder|gründer|inhaber|owner|geschäftsf|managing|director|direktor|head|leiter|leitung|manager|recruit|talent|\bhr\b|people|personal|consultant|berater|partner|vp\b|vice|president|chief|lead|specialist|spezialist|referent|engineer|ingenieur|entwickler|developer|sales|vertrieb|officer|assist|vorstand|prokurist|meister|koordinat|coordinat/i
+    if (exp.title && (!jobTitle || jobTitle.length > 70 || !ROLE.test(jobTitle))) jobTitle = cleanTitle(exp.title, company)
     // "· 1st" / "· 1." next to the name = already connected → no connection note needed
     const connected = /·\s*(1st|1\.)(?=\s|$)/m.test(String(card.innerText || ''))
     const parts = name.split(' ')
     return { slug, name, firstName: parts.slice(0, -1).join(' ') || name, lastName: parts.length > 1 ? parts[parts.length - 1] : '', jobTitle: jobTitle.slice(0, 160), company: company.slice(0, 120), connected }
+  }
+
+  // First entry of "Experience"/"Berufserfahrung": single role = [title, "Firma · Vollzeit", dates],
+  // several roles at one firm = [Firma, total duration, title, …]
+  function topExperience() {
+    const anchor = document.getElementById('experience')
+    const sec = anchor?.closest('section') || [...document.querySelectorAll('main section')].find(x => /^(Experience|Berufserfahrung|Erfahrung)\b/.test(text(x.querySelector('h2'))))
+    if (!sec) return { title: '', company: '' }
+    const lines = String(sec.innerText || '').split('\n').map(l => l.trim()).filter(Boolean)
+      .filter(l => !/^(Experience|Berufserfahrung|Erfahrung)$/i.test(l))
+    const uniq = lines.filter((l, i) => l !== lines[i - 1]) // LinkedIn repeats text for screen readers
+    const TYPE = /\s·\s*(Vollzeit|Teilzeit|Full-time|Part-time|Selbstständig|Self-employed|Freiberuflich|Freelance|Praktikum|Internship|Contract|Befristet)/i
+    const DATES = /\b(19|20)\d{2}\b|heute|present|\d+\s*(yrs?|mos?|jahre?|mon\.?)\b/i
+    const [a = '', b = ''] = uniq
+    if (TYPE.test(b)) return { title: a, company: b.split(' · ')[0].trim() }
+    if (DATES.test(b) && !DATES.test(a)) return { title: uniq[2] && !DATES.test(uniq[2]) ? uniq[2] : '', company: a } // grouped roles
+    return { title: a, company: DATES.test(b) ? '' : b.split(' · ')[0].trim() }
+  }
+
+  // "CEO / FOUNDER MBG INTERNATIONAL PREMIUM BRANDS" + company "MBG International Premium Brands GmbH" → "CEO / Founder"
+  function cleanTitle(title, company) {
+    let t = String(title || '').trim()
+    const core = String(company || '').replace(/\b(gmbh\s*&\s*co\.?\s*kg|gmbh|mbh|ag|se|kg|ug|ohg|e\.?\s?k\.?|inc\.?|ltd\.?|llc|holding)\b\.?/gi, '').replace(/\s+/g, ' ').trim()
+    if (core.length >= 3) t = t.replace(new RegExp(core.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'ig'), ' ')
+    t = t.replace(/\s+/g, ' ').replace(/^[\s,;:/|·–-]+|[\s,;:/|·–@-]+$/g, '').replace(/\s+(bei|at|@|von|of)$/i, '').trim()
+    const norm = x => String(x || '').toLowerCase().replace(/[^a-z0-9äöüß]/g, '')
+    if (!t || (company && (norm(t) === norm(company) || norm(company).startsWith(norm(t))))) return ''
+    // ALL CAPS → "CEO / Founder" (short acronyms stay)
+    if (t === t.toUpperCase() && /[A-ZÄÖÜ]{5}/.test(t)) t = t.split(' ').map(w => w.length <= 4 ? w : w[0] + w.slice(1).toLowerCase()).join(' ')
+    return t.slice(0, 160)
   }
 
   // Headline + "Info"/"About" text of the open profile – context for the message agent (only read, never stored on LinkedIn)
