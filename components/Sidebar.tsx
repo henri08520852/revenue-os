@@ -3,14 +3,14 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Bot, PenLine, Building2, CalendarDays, CheckSquare, CircleHelp, Flame, LayoutDashboard, Search, Settings, Users, Workflow, type LucideIcon } from 'lucide-react'
+import { Bot, PenLine, Building2, CalendarDays, CheckSquare, CircleHelp, Flame, History, LayoutDashboard, SlidersHorizontal, Search, Settings, Users, Workflow, type LucideIcon } from 'lucide-react'
 import AppSwitcher from './AppSwitcher'
 import { NewMenu } from './CreateRecord'
 import { CommandMenu } from './CommandMenu'
 import { Kbd } from './ui/kbd'
 import { cn } from '@/lib/utils'
 
-const SECTIONS: { title: string | null; items: { href: string; label: string; Icon: LucideIcon }[] }[] = [
+const SECTIONS: { title: string | null; items: { href: string; label: string; Icon: LucideIcon; exact?: boolean }[] }[] = [
   { title: null, items: [
     { href: '/today', label: 'Heute', Icon: LayoutDashboard },
     { href: '/tasks', label: 'Aufgaben', Icon: CheckSquare },
@@ -23,7 +23,11 @@ const SECTIONS: { title: string | null; items: { href: string; label: string; Ic
   ] },
   { title: 'Akquise', items: [
     { href: '/candidates', label: 'Heiße Firmen', Icon: Flame },
-    { href: '/compose', label: 'Nachricht schreiben', Icon: PenLine },
+  ] },
+  { title: 'Nachrichten', items: [
+    { href: '/compose', label: 'Schreiben', Icon: PenLine, exact: true },
+    { href: '/compose/drafts', label: 'Entwürfe & Verlauf', Icon: History },
+    { href: '/compose/settings', label: 'Stimmen & Playbooks', Icon: SlidersHorizontal },
     { href: '/agents', label: 'Agents', Icon: Bot },
   ] },
 ]
@@ -63,7 +67,7 @@ export default function Sidebar({ userName, userEmail }: { userName: string | nu
         {SECTIONS.map(section => (
           <div key={section.title ?? 'main'} className="space-y-0.5">
             {section.title && <p className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{section.title}</p>}
-            {section.items.map(item => <NavLink key={item.href} {...item} active={isActive(item.href)} />)}
+            {section.items.map(({ exact, ...item }) => <NavLink key={item.href} {...item} active={exact ? path === item.href : isActive(item.href)} />)}
           </div>
         ))}
       </nav>

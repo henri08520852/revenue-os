@@ -604,7 +604,7 @@ function OutreachStats({ rows, playbooks }: { rows: StatRow[]; playbooks: Playbo
   )
 }
 
-function PlaybooksEditor({ playbooks, onChange }: { playbooks: Playbook[]; onChange: (p: Playbook[]) => void }) {
+export function PlaybooksEditor({ playbooks, onChange }: { playbooks: Playbook[]; onChange: (p: Playbook[]) => void }) {
   const [open, setOpen] = useState<string | null>(null)
   const upd = (i: number, patch: Partial<Playbook>) => onChange(playbooks.map((p, j) => j === i ? { ...p, ...patch } : p))
   return (
@@ -652,7 +652,7 @@ function PlaybooksEditor({ playbooks, onChange }: { playbooks: Playbook[]; onCha
   )
 }
 
-function BaseTextsEditor({ texts, onChange }: { texts: Partial<Record<SegmentKey, string>>; onChange: (t: Record<SegmentKey, string>) => void }) {
+export function BaseTextsEditor({ texts, onChange }: { texts: Partial<Record<SegmentKey, string>>; onChange: (t: Record<SegmentKey, string>) => void }) {
   const [seg, setSeg] = useState<SegmentKey>('mid')
   const keys = Object.keys(SEGMENTS) as SegmentKey[]
   return (
@@ -673,7 +673,7 @@ function BaseTextsEditor({ texts, onChange }: { texts: Partial<Record<SegmentKey
   )
 }
 
-function IndustriesEditor({ industries, onChange }: { industries: IndustryBlock[]; onChange: (i: IndustryBlock[]) => void }) {
+export function IndustriesEditor({ industries, onChange }: { industries: IndustryBlock[]; onChange: (i: IndustryBlock[]) => void }) {
   const [open, setOpen] = useState<string | null>(null)
   const upd = (i: number, patch: Partial<IndustryBlock>) => onChange(industries.map((x, j) => j === i ? { ...x, ...patch } : x))
   return (
