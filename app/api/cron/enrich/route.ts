@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import { enrichCandidates } from '@/lib/discovery/enrich'
-import { logRun } from '@/lib/discovery/hiring'
+import { logRun, rescorePending } from '@/lib/discovery/hiring'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -15,7 +15,9 @@ export async function GET(request: NextRequest) {
   }
   const svc = createServiceClient()
   const projectId = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID!
-  const result = await enrichCandidates(svc, projectId, { budgetMs: 52_000 })
-  await logRun(svc, projectId, 'enrich', result)
-  return NextResponse.json({ ok: true, ...result })
+  // Scoring rules changed → catch up on pending candidates first (each run takes a share)
+  const rescore = await rescorePending(svc, projectId, 20_000)
+  const result = await enrichCandidates(svc, projectId, { budgetMs: 32_000 })
+  await logRun(svc, projectId, 'enrich', { ...result, ...rescore })
+  return NextResponse.json({ ok: true, ...result, ...rescore })
 }

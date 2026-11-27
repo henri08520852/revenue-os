@@ -9,6 +9,7 @@ import { discoverAtsAccounts, pollAtsAccounts } from '@/lib/discovery/ats-feeds'
 import { enrichCandidates } from '@/lib/discovery/enrich'
 import { enrollLead } from '@/lib/agents/sequence'
 import { mergeDomain } from '@/lib/discovery/dedupe'
+import { finalScore } from '@/lib/discovery/icp'
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_DEFAULT_PROJECT_ID!
 type Result = { error: string | null; href?: string; leadId?: string }
@@ -210,8 +211,11 @@ export async function painsFor(ids: string[]): Promise<{ error: string | null; p
 // Size class set by hand (e.g. after a look at LinkedIn) when the website gives no employee count
 export async function setCandidateSize(id: string, bucket: string | null): Promise<Result> {
   const supabase = createClient() as any
-  const { data, error: readError } = await supabase.from('candidate_companies').select('enrichment_data').eq('id', id).single()
+  const { data, error: readError } = await supabase.from('candidate_companies').select('enrichment_data, hiring').eq('id', id).single()
   if (readError) return { error: readError.message }
-  const { error } = await supabase.from('candidate_companies').update({ enrichment_data: { ...(data?.enrichment_data || {}), sizeManual: bucket } }).eq('id', id)
+  const enrichment_data = { ...(data?.enrichment_data || {}), sizeManual: bucket }
+  const base = data?.hiring?.baseScore
+  const score = base != null ? finalScore(base, enrichment_data) : null
+  const { error } = await supabase.from('candidate_companies').update({ enrichment_data, ...(score != null ? { score, confidence: score } : {}) }).eq('id', id)
   return { error: error?.message ?? null }
 }

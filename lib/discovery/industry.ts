@@ -44,11 +44,13 @@ export function classify(name: string, domain: string | null, titles: string[]) 
   return { industry, officeShare }
 }
 
-// Score adjustment for the ICP: knowledge/office work and people-heavy services up, car dealers and shop floor down
+// Score adjustment for the ICP: established SMEs (industry first) over purely digital firms;
+// office roles still fit HireFlow best, pure shop floor, car dealers and gastronomy less
 export function icpAdjust(industry: string | null, officeShare: number | null) {
   let d = 0
-  if (officeShare != null) d += officeShare >= 60 ? 10 : officeShare <= 25 ? -15 : 0
-  if (industry === 'consulting' || industry === 'it' || industry === 'finance') d += 5
+  if (officeShare != null) d += officeShare >= 60 ? 8 : officeShare <= 25 ? -10 : 0
+  if (industry === 'industry') d += 10
+  if (industry === 'consulting' || industry === 'finance' || industry === 'energy' || industry === 'construction' || industry === 'logistics') d += 5
   if (industry === 'automotive' || industry === 'hospitality') d -= 15
   return d
 }

@@ -6,6 +6,7 @@
 // Server-only, service role client.
 import { feedOf, fetchAtsJobs } from './ats'
 import { classify, icpAdjust } from './industry'
+import { AGENCY_SOFT, CORPORATE, finalScore } from './icp'
 
 const BA_URL = process.env.BA_JOBS_URL || 'https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4/jobs'
 const BA_KEY = 'jobboerse-jobsuche' // public key of the BA job search
@@ -277,7 +278,7 @@ function openRoles(all: Row[]) {
 }
 
 // Bump when scoring changes → pending candidates are scored again from their stored postings
-const SCORE_VERSION = 2
+const SCORE_VERSION = 3 // 3: ICP – SMEs/startups up, groups, corporates and agencies down, size counts
 
 // Roles that build up recruiting itself — the strongest trigger for HireFlow
 export const HR_ROLE = /recruit|talent acquisition|talent ?(manager|partner|scout)|personal ?(referent|leit|sachbearbeit|manager|berater|entwickl|koordinat)|personalwesen|hr[- ]?(manager|business ?partner|generalist|leitung|lead|specialist|spezialist|referent|assistenz|coordinator|koordinator)|head of (people|hr|talent)|people ?(&|and|und) ?culture|people (partner|manager|lead)|employer branding|human resources/i
@@ -296,9 +297,15 @@ export function scoreEmployer(all: Row[]) {
   const hrRoles = Array.from(new Set(rows.filter(r => HR_ROLE.test(r.title)).map(r => r.title))).slice(0, 4)
   const count = (xs: (string | null)[]) => Array.from(xs.reduce((m, x) => x ? m.set(x, (m.get(x) || 0) + 1) : m, new Map<string, number>()).entries()).sort((a, b) => b[1] - a[1]).map(([x]) => x)
 
-  let score = Math.min(50, open * 3)
-  // Legal form / branch wording of a large group → likely outside 10–200 employees
-  if (/\b(ag|se|kgaa)\b|zentrale|depot|niederlassung|filiale/i.test(rows[0]?.employer_name || '')) score -= 20
+  // Hiring pressure counts, but many open jobs alone mostly means "big company" → capped early
+  let score = Math.min(36, open * 3)
+  const employer = rows[0]?.employer_name || ''
+  // Legal form / branch wording of a large group → likely outside the ICP (SMEs, growing startups)
+  if (/\b(ag|se|kgaa)\b|zentrale|depot|niederlassung|filiale/i.test(employer)) score -= 20
+  if (CORPORATE.test(employer)) score -= 20 // international group or its German subsidiary
+  if (open >= 40) score -= 10
+  if (AGENCY_SOFT.test(employer)) score -= 40 // staffing/placement: later, first talk to industry
+  if (open >= 4 && new14 / open >= 0.5) score += 5 // most jobs are new → growing right now
   score += Math.min(20, repeated.length * 7)
   if (volume / open >= 0.3) score += 10
   if (new14 >= 3) score += 10
@@ -319,7 +326,7 @@ export function scoreEmployer(all: Row[]) {
   return {
     score, reason: parts.join(' · '),
     hiring: {
-      open, new14, repeated: repeated.slice(0, 5), volumeRoles: volume, ats, hrRoles, industry, officeShare, sourceCount, scoredV: SCORE_VERSION,
+      open, new14, repeated: repeated.slice(0, 5), volumeRoles: volume, ats, hrRoles, industry, officeShare, sourceCount, scoredV: SCORE_VERSION, baseScore: score,
       locations: count(rows.map(r => r.location)).slice(0, 4), countries: count(rows.map(r => r.country)),
       sources: count(all.map(r => r.source)), feed, updatedAt: new Date().toISOString(),
     },
@@ -360,11 +367,8 @@ export async function runHiringDiscovery(svc: any, projectId: string, opts: { bu
   const { data: pending } = await svc.from('candidate_companies').select('id, name').eq('project_id', projectId).eq('source_type', 'hiring').eq('status', 'pending')
   const drop = (pending || []).filter((c: any) => excluded(c.name)).map((c: any) => c.id)
   if (drop.length) await svc.from('candidate_companies').update({ status: 'rejected', notes: 'Automatisch aussortiert (Agentur/Konzern/Behörde)', reviewed_at: new Date().toISOString() }).in('id', drop)
-  // Candidates scored before industry/ICP fit existed → score again from the stored postings
-  const { data: old } = await svc.from('candidate_companies').select('hiring').eq('project_id', projectId).eq('source_type', 'hiring')
-    .eq('status', 'pending').or(`hiring->>scoredV.is.null,hiring->>scoredV.lt.${SCORE_VERSION}`).limit(150)
-  const oldKeys = (old || []).map((c: any) => c.hiring?.key).filter(Boolean)
-  if (oldKeys.length) await storeScores(svc, projectId, await loadEmployers(svc, projectId, oldKeys), { employers: 0, candidates: 0, signals: 0 })
+  // Candidates scored with older rules → score again from the stored postings
+  await rescorePending(svc, projectId, Math.min(15_000, left() - 30_000))
 
   // 1) Broad search: role keywords across Germany (+ AT/CH via Google Jobs)
   const fetched: Posting[] = []
@@ -452,8 +456,33 @@ export async function loadEmployers(svc: any, projectId: string, keys: string[])
   return byEmployer
 }
 
-// Impressum/website says "über 300 Mitarbeitende" → most likely outside the ICP (10–200)
-const sized = (score: number, c?: any) => (c?.enrichment_data?.impressum?.employees ?? 0) > 300 ? Math.max(0, score - 30) : score
+// Pending candidates scored with older rules → new score from their stored postings (within a time budget)
+export async function rescorePending(svc: any, projectId: string, budgetMs: number) {
+  const started = Date.now()
+  let done = 0
+  while (Date.now() - started < budgetMs - 4_000) {
+    const { data: old } = await svc.from('candidate_companies').select('id, hiring, enrichment_data').eq('project_id', projectId).eq('source_type', 'hiring')
+      .eq('status', 'pending').or(`hiring->>scoredV.is.null,hiring->>scoredV.lt.${SCORE_VERSION}`).limit(100)
+    if (!old?.length) break
+    const byEmployer = await loadEmployers(svc, projectId, old.map((c: any) => c.hiring?.key).filter(Boolean))
+    await Promise.all(Array.from({ length: 8 }, async (_, w) => {
+      for (let i = w; i < old.length; i += 8) {
+        const c = old[i], list = byEmployer.get(c.hiring?.key)
+        if (!list?.length) {
+          // No postings left in the window: keep the numbers, only the size rule applies
+          const base = c.hiring?.baseScore ?? 0
+          await svc.from('candidate_companies').update({ hiring: { ...c.hiring, scoredV: SCORE_VERSION, baseScore: base }, score: finalScore(base, c.enrichment_data), confidence: finalScore(base, c.enrichment_data) }).eq('id', c.id)
+        } else {
+          const s = scoreEmployer(list)
+          const score = finalScore(s.score, c.enrichment_data)
+          await svc.from('candidate_companies').update({ hiring: { ...s.hiring, key: c.hiring.key }, evidence: s.evidence, score, confidence: score }).eq('id', c.id)
+        }
+        done++
+      }
+    }))
+  }
+  return { rescored: done }
+}
 
 // Score employers → candidate_companies ("Heiße Firmen") + signal on known CRM companies
 export async function storeScores(svc: any, projectId: string, byEmployer: Map<string, Row[]>, stats: { employers: number; candidates: number; signals: number }) {
@@ -471,7 +500,7 @@ export async function storeScores(svc: any, projectId: string, byEmployer: Map<s
     const { data: existing } = await svc.from('candidate_companies').select('id, status, enrichment_data')
       .eq('project_id', projectId).eq('hiring->>key', key).limit(1)
     const patch = {
-      hiring: { ...s.hiring, key }, score: sized(s.score, existing?.[0]), confidence: sized(s.score, existing?.[0]), signal_hint: 'hiring_pressure', evidence: s.evidence,
+      hiring: { ...s.hiring, key }, score: finalScore(s.score, existing?.[0]?.enrichment_data), confidence: finalScore(s.score, existing?.[0]?.enrichment_data), signal_hint: 'hiring_pressure', evidence: s.evidence,
       existing_company_id: companyId, updated_at: new Date().toISOString(),
     }
     if (existing?.length) {

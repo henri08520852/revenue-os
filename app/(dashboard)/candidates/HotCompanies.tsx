@@ -379,7 +379,7 @@ export default function HotCompanies({ hiring, news, sources }: { hiring: Candid
                   </div>
 
                   {h && (
-                    <div className={cn('flex size-14 shrink-0 flex-col items-center justify-center rounded-xl ring-1 ring-inset', scoreTone(s))} title="Score: Stellen, Wiederholungen, neue Stellen, Recruiting-Aufbau, Branche & Office-Anteil">
+                    <div className={cn('flex size-14 shrink-0 flex-col items-center justify-center rounded-xl ring-1 ring-inset', scoreTone(s))} title="Score: Einstellungsdruck (Stellen, Wiederholungen, neue Stellen, Recruiting-Aufbau) + ICP (KMU 10–249 MA vorne, Konzerne und Personalvermittler hinten, Industrie vorne). Größe zählt nur, wenn sie bekannt ist.">
                       <span className="tabular text-xl font-semibold leading-none">{s}</span>
                       <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wide opacity-70">Score</span>
                     </div>

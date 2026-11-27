@@ -3,6 +3,7 @@
 // Website: link on the company's Personio career page, else a checked guess from the name.
 // Server-only, service role client.
 import { employerKey, fetchBADetails, shapeOf } from './hiring'
+import { finalScore } from './icp'
 
 export type Impressum = {
   website: string | null; domain: string | null; managers: string[]; register: string | null
@@ -267,11 +268,11 @@ export async function enrichCandidates(svc: any, projectId: string, opts: { budg
       // Only a named person counts as HR contact; shared mailboxes stay on the company (impressum.hrEmail)
       const named = (x: HrContact | null | undefined) => (x?.name ? x : null)
       const hrContact: HrContact | null = named(ba?.contact) ?? (feed?.ats === 'personio' ? await personioContact(c) : null)
-      const big = (info.employees ?? 0) > 300 && !(c.enrichment_data?.impressum?.employees > 300)
-      await svc.from('candidate_companies').update({
-        enrichment_data: { ...(c.enrichment_data || {}), v: ENRICH_VERSION, impressum: info, hrContact, ...(ba && !ba.contact ? { baDetails: { shape: ba.shape, error: ba.error } } : {}) },
-        ...(big && c.score != null ? { score: Math.max(0, c.score - 30), confidence: Math.max(0, c.score - 30) } : {}),
-      }).eq('id', c.id)
+      const enrichment_data = { ...(c.enrichment_data || {}), v: ENRICH_VERSION, impressum: info, hrContact, ...(ba && !ba.contact ? { baDetails: { shape: ba.shape, error: ba.error } } : {}) }
+      // Size now known → score = hiring score + size points (see lib/discovery/icp.ts)
+      const base = c.hiring?.baseScore
+      const score = base != null ? finalScore(base, enrichment_data) : null
+      await svc.from('candidate_companies').update({ enrichment_data, ...(score != null ? { score, confidence: score } : {}) }).eq('id', c.id)
       done++
     }
   }))
