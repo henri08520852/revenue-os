@@ -1,15 +1,14 @@
 'use client'
-// Shared tab bar of the "Nachrichten" area: write, drafts & history, settings (voices, base texts, playbooks), agents
+// Tab bar of the "Nachrichten" area: write, Postfach (drafts, agent drafts to approve, sent + replies), templates & voices
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { PenLine, History, SlidersHorizontal, Bot } from 'lucide-react'
+import { PenLine, Inbox, SlidersHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const TABS = [
   { href: '/compose', label: 'Schreiben', Icon: PenLine, exact: true },
-  { href: '/compose/drafts', label: 'Entwürfe & Verlauf', Icon: History },
-  { href: '/compose/settings', label: 'Stimmen, Basistexte & Playbooks', Icon: SlidersHorizontal },
-  { href: '/agents', label: 'Agents & Freigaben', Icon: Bot },
+  { href: '/compose/drafts', label: 'Postfach', Icon: Inbox },
+  { href: '/compose/settings', label: 'Vorlagen & Stimmen', Icon: SlidersHorizontal },
 ]
 
 export default function MessagesTabs() {

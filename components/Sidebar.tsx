@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Bot, PenLine, Building2, CalendarDays, CheckSquare, CircleHelp, Flame, History, LayoutDashboard, SlidersHorizontal, Search, Settings, Users, Workflow, type LucideIcon } from 'lucide-react'
+import { Bot, PenLine, Building2, CalendarDays, CheckSquare, CircleHelp, Flame, LayoutDashboard, Search, Settings, Users, Workflow, type LucideIcon } from 'lucide-react'
 import AppSwitcher from './AppSwitcher'
 import { NewMenu } from './CreateRecord'
 import { CommandMenu } from './CommandMenu'
@@ -23,11 +23,9 @@ const SECTIONS: { title: string | null; items: { href: string; label: string; Ic
   ] },
   { title: 'Akquise', items: [
     { href: '/candidates', label: 'Heiße Firmen', Icon: Flame },
+    { href: '/compose', label: 'Nachrichten', Icon: PenLine },
   ] },
-  { title: 'Nachrichten', items: [
-    { href: '/compose', label: 'Schreiben', Icon: PenLine, exact: true },
-    { href: '/compose/drafts', label: 'Entwürfe & Verlauf', Icon: History },
-    { href: '/compose/settings', label: 'Stimmen & Playbooks', Icon: SlidersHorizontal },
+  { title: 'Automatisierung', items: [
     { href: '/agents', label: 'Agents', Icon: Bot },
   ] },
 ]

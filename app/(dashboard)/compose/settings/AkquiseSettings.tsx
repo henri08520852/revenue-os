@@ -46,7 +46,7 @@ export default function AkquiseSettings({ cfg: initial, fm: initialFm, samples }
   return (
     <div className="mx-auto max-w-[1180px] px-8 py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Stimmen, Basistexte &amp; Playbooks</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Vorlagen &amp; Stimmen</h1>
         <p className="mt-1 text-sm text-muted-foreground">Hier stellt ihr ein, wie „Schreiben“ klingt und was es weiß. Vorbelegt mit Simons Akquise-Logik aus dem Content Studio; Basistexte und Playbooks teilt sich der Bereich mit dem Erstnachricht-Agent.</p>
       </div>
       <div className="grid gap-8 lg:grid-cols-[200px_minmax(0,1fr)]">

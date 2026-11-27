@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input, Select } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { AGENTS, AgentKey, AgentSettings, SequenceStep } from '@/lib/agents/registry'
+import { AGENTS, AGENT_AREAS, AgentKey, AgentArea, AgentSettings, SequenceStep } from '@/lib/agents/registry'
 import type { Playbook } from '@/lib/outreach/playbooks'
 import { PERSONAS, type Persona } from '@/lib/outreach/persona'
 import { SIGNALS, type SignalKey } from '@/lib/outreach/playbooks'
@@ -50,12 +50,15 @@ export default function AgentsBoard({ missing, settings, items, runs, lastRun, s
   lastRun: Record<string, RunRow | null>; stats: { pending: number; runs7: number; costUsd: number; activeSequences: number }
 }) {
   const [editing, setEditing] = useState<AgentKey | null>(null)
+  const [area, setArea] = useState<AgentArea>('akquise')
+  const inArea = AGENTS.filter(a => a.area === area)
+  const areaInfo = AGENT_AREAS.find(a => a.key === area)!
 
   return (
     <div className="mx-auto max-w-[1180px] px-8 py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Agents &amp; Workflows</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Wiederkehrende Arbeit läuft automatisch – alles, was nach außen geht, wartet hier auf eure Freigabe.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Wiederkehrende Arbeit läuft automatisch, nach Bereichen sortiert. Alles, was nach außen geht, wartet im <Link href="/compose/drafts" className="underline">Postfach</Link> auf eure Freigabe.</p>
       </div>
 
       {missing && (
@@ -71,30 +74,38 @@ export default function AgentsBoard({ missing, settings, items, runs, lastRun, s
         <Kpi icon={Coins} label="KI-Kosten diesen Monat" value={usd(stats.costUsd)} tone="text-amber-600 bg-amber-50" />
       </div>
 
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="flex gap-1 rounded-md bg-muted p-1 text-[13px]">
+          {AGENT_AREAS.map(a => {
+            const n = AGENTS.filter(x => x.area === a.key).length
+            return (
+              <button key={a.key} type="button" onClick={() => setArea(a.key)} className={cn('rounded px-3 py-1.5 font-medium', area === a.key ? 'bg-card shadow-sm' : 'text-muted-foreground')}>
+                {a.label} <span className="tabular text-muted-foreground">{n}</span>
+              </button>
+            )
+          })}
+        </div>
+        <span className="text-[13px] text-muted-foreground">{areaInfo.hint}</span>
+      </div>
       <div className="mb-8 grid gap-4 md:grid-cols-2">
-        {AGENTS.map(a => (
+        {inArea.map(a => (
           <AgentCard key={a.key} agent={a} enabled={settings[a.key].enabled} last={lastRun[a.key]} disabled={missing} onSettings={() => setEditing(a.key)} />
         ))}
+        {inArea.length === 0 && (
+          <Card className="col-span-full px-6 py-10 text-center text-sm text-muted-foreground">Hier gibt es noch keinen Agent. Sag Bescheid, welche Routine in {areaInfo.label} automatisch laufen soll.</Card>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <section>
-          <div className="mb-3 flex items-center gap-2">
-            <h2 className="text-[15px] font-semibold">Freigaben</h2>
-            {items.length > 0 && <Badge tone="brand">{items.length}</Badge>}
-          </div>
-          {items.length === 0 ? (
-            <Card className="flex flex-col items-center gap-2 px-6 py-10 text-center text-sm text-muted-foreground">
-              <Inbox className="size-6" />
-              Keine offenen Entwürfe. Neue Leads aus LinkedIn oder den Heißen Firmen bekommen automatisch einen.
-            </Card>
-          ) : (
-            <div className="space-y-4">{items.map(i => i.kind === 'letter' ? <LetterCard key={i.id} item={i} /> : <DraftCard key={i.id} item={i} />)}</div>
-          )}
+          <OutreachStats rows={outreach} playbooks={settings.first_message.config.playbooks} />
+          <Link href="/compose/drafts" className="mt-6 flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3 text-sm hover:bg-accent">
+            <span className="flex items-center gap-2"><Inbox className="size-4 text-muted-foreground" />{items.length ? `${items.length} Entw${items.length === 1 ? 'urf wartet' : 'ürfe warten'} auf Freigabe` : 'Keine Entwürfe zur Freigabe'}</span>
+            <span className="text-muted-foreground">Zum Postfach →</span>
+          </Link>
         </section>
 
         <section className="space-y-6">
-          <OutreachStats rows={outreach} playbooks={settings.first_message.config.playbooks} />
           <div>
           <h2 className="mb-3 text-[15px] font-semibold">Protokoll</h2>
           <Card className="divide-y divide-border">
@@ -296,7 +307,7 @@ export function DraftCard({ item, onDone }: { item: QueueItem; onDone?: (kind: s
   )
 }
 
-function LetterCard({ item }: { item: QueueItem }) {
+export function LetterCard({ item }: { item: QueueItem }) {
   const router = useRouter()
   const d = item.data || {}
   const [body, setBody] = useState<string>(item.body ?? '')

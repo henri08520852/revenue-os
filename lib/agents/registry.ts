@@ -92,24 +92,32 @@ export type AgentConfig = {
 
 export type AgentKey = keyof AgentConfig
 
-export const AGENTS: { key: AgentKey; kind: 'agent' | 'workflow'; label: string; description: string; when: string }[] = [
+// Areas like on the tasks page; a new agent only needs its area here
+export type AgentArea = 'akquise' | 'sales' | 'operations'
+export const AGENT_AREAS: { key: AgentArea; label: string; hint: string }[] = [
+  { key: 'akquise', label: 'Akquise', hint: 'Neue Firmen ansprechen: Erstnachricht, Brief, Abfolge bis zur ersten Antwort.' },
+  { key: 'sales', label: 'Sales', hint: 'Laufende Leads und Deals am Leben halten.' },
+  { key: 'operations', label: 'Operations', hint: 'Interne Routinen: Daten pflegen, Berichte, Aufräumen.' },
+]
+
+export const AGENTS: { key: AgentKey; area: AgentArea; kind: 'agent' | 'workflow'; label: string; description: string; when: string }[] = [
   {
-    key: 'first_message', kind: 'agent', label: 'Erstnachricht',
+    key: 'first_message', area: 'akquise', kind: 'agent', label: 'Erstnachricht',
     description: 'Recherchiert Firma und Kontakt (Website, offene Stellen, Signale) und schreibt eine Vernetzungsnotiz und eine erste LinkedIn-Nachricht. Entwürfe landen in den Freigaben – verschickt wird nichts automatisch.',
     when: 'Neuer Lead aus LinkedIn oder Heiße Firmen · täglich für Leads in Ansprache ohne Entwurf',
   },
   {
-    key: 'letter', kind: 'agent', label: 'Brief',
+    key: 'letter', area: 'akquise', kind: 'agent', label: 'Brief',
     description: 'Füllt eure Brief-Vorlage für eine Firma aus: Anschrift aus dem Impressum, Ansprechpartner aus der Geschäftsführung und ein Absatz zum konkreten Anlass. Ergebnis ist ein druckfertiger Brief (DIN 5008) zum Prüfen.',
     when: 'Schritt „Brief“ in der Akquise-Abfolge · auf Knopfdruck bei einer Company',
   },
   {
-    key: 'sequence', kind: 'workflow', label: 'Akquise-Abfolge',
+    key: 'sequence', area: 'akquise', kind: 'workflow', label: 'Akquise-Abfolge',
     description: 'Legt für neue Leads Schritt für Schritt Aufgaben an: Ansprechpartner finden und vernetzen, Nachricht, Anruf, Brief, nachfassen. Der nächste Schritt kommt, sobald der vorige erledigt ist. Stoppt automatisch bei Antwort oder wenn der Lead weiterrückt.',
     when: 'Neuer Lead in „Ansprache“ · Aufgabe erledigt · täglich',
   },
   {
-    key: 'follow_up_guard', kind: 'workflow', label: 'Follow-up-Wächter',
+    key: 'follow_up_guard', area: 'sales', kind: 'workflow', label: 'Follow-up-Wächter',
     description: 'Findet offene Leads und Deals ohne Aktivität und ohne offene Aufgabe und legt dem Zuständigen eine Nachfass-Aufgabe an.',
     when: 'Täglich morgens',
   },

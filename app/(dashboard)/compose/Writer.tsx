@@ -76,7 +76,7 @@ export default function Writer({ contacts, past, preselect, initial, seed, defau
     <div className="mx-auto max-w-[1180px] px-8 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Nachricht schreiben</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Empfänger aus dem CRM wählen oder frei eintragen, Kanal, Beziehung und Thema setzen. Du bekommst zwei Varianten in deiner Stimme, jede wird als Entwurf gespeichert und ist unter „Entwürfe &amp; Verlauf“ nachvollziehbar.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Empfänger aus dem CRM wählen oder frei eintragen, Kanal, Beziehung und Thema setzen. Du bekommst zwei Varianten in deiner Stimme, jede wird als Entwurf gespeichert und ist im Postfach nachvollziehbar.</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
@@ -302,7 +302,7 @@ function Result({ draft, floskeln, sampleCount, sender, busy, onRegenerate, onCh
         {!sampleCount && (
           <div className="flex items-start gap-2 rounded-md bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
             <Lightbulb className="mt-0.5 size-4 shrink-0" />
-            <span>Noch keine echten Nachrichten von {sender} hinterlegt. Unter <Link href="/compose/settings#stimme" className="underline">Stimmen</Link> ein paar eigene Nachrichten einfügen, dann klingt es deutlich mehr nach euch.</span>
+            <span>Noch keine echten Nachrichten von {sender} hinterlegt. Unter <Link href="/compose/settings#beispiele" className="underline">Vorlagen &amp; Stimmen</Link> ein paar eigene Nachrichten einfügen, dann klingt es deutlich mehr nach euch.</span>
           </div>
         )}
       </div>

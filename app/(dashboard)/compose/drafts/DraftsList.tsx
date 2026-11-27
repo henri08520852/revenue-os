@@ -1,5 +1,5 @@
 'use client'
-// Entwürfe & Verlauf: what was written, by whom, what changed against the AI original, what was sent, who replied.
+// Postfach: what was written, by whom, what changed against the AI original, what was sent, who replied.
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input, Select } from '@/components/ui/input'
 import { CHANNELS, OFFERS, RELS, type SalesPayload, type HistoryEvent } from '@/lib/akquise/content'
 import { setArchived } from '../actions'
+import { DraftCard, LetterCard, type QueueItem } from '../../agents/AgentsBoard'
 import { cn } from '@/lib/utils'
 
 export type Entry = {
@@ -33,9 +34,9 @@ function workdaysSince(iso: string) {
   return n
 }
 
-export default function DraftsList({ entries, openId, missing }: { entries: Entry[]; openId: string | null; missing: boolean }) {
+export default function DraftsList({ entries, pending, openId, missing }: { entries: Entry[]; pending: QueueItem[]; openId: string | null; missing: boolean }) {
   const router = useRouter()
-  const [status, setStatus] = useState<'all' | 'draft' | 'published' | 'archived' | 'due'>('all')
+  const [status, setStatus] = useState<'all' | 'review' | 'draft' | 'published' | 'archived' | 'due'>(pending.length && !openId ? 'review' : 'all')
   const [author, setAuthor] = useState('all')
   const [source, setSource] = useState('all')
   const [q, setQ] = useState('')
@@ -51,6 +52,7 @@ export default function DraftsList({ entries, openId, missing }: { entries: Entr
   const sent = entries.filter(e => e.status === 'published')
   const replied = sent.filter(e => e.replied).length
   const kpis = [
+    { label: 'Zur Freigabe (Agents)', value: pending.length },
     { label: 'Offene Entwürfe', value: entries.filter(e => e.status === 'draft').length },
     { label: 'Gesendet', value: sent.length },
     { label: 'Antworten', value: `${replied}${sent.length ? ` · ${Math.round(replied / sent.length * 100)} %` : ''}` },
@@ -60,18 +62,18 @@ export default function DraftsList({ entries, openId, missing }: { entries: Entr
   return (
     <div className="mx-auto max-w-[1180px] px-8 py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Entwürfe &amp; Verlauf</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Alle Akquise-Nachrichten an einem Ort: aus „Schreiben“, aus dem Content Studio und vom Erstnachricht-Agent. Pro Nachricht siehst du, wer was geschrieben und geändert hat, was rausging und ob eine Antwort kam.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Postfach</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Alle Nachrichten an einem Ort: Entwürfe der Agents zur Freigabe, eure eigenen aus „Schreiben“ und alles Gesendete. Pro Nachricht siehst du, wer was geschrieben und geändert hat, was rausging und ob eine Antwort kam.</p>
       </div>
       {missing && <Card className="mb-4 border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Die Entwürfe-Tabelle (content_drafts) ist nicht erreichbar. Sie ist nur für @altoris.one-Konten freigegeben.</Card>}
 
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
         {kpis.map(k => <Card key={k.label} className="px-4 py-3"><div className="text-[12px] text-muted-foreground">{k.label}</div><div className="text-xl font-semibold tabular">{k.value}</div></Card>)}
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="flex gap-1 rounded-md bg-muted p-1 text-[13px]">
-          {([['all', 'Alle'], ['draft', 'Entwürfe'], ['published', 'Gesendet'], ['due', 'Follow-up fällig'], ['archived', 'Archiv']] as const).map(([v, l]) => (
+          {([['review', `Zur Freigabe${pending.length ? ` (${pending.length})` : ''}`], ['all', 'Alle'], ['draft', 'Entwürfe'], ['published', 'Gesendet'], ['due', 'Follow-up fällig'], ['archived', 'Archiv']] as const).map(([v, l]) => (
             <button key={v} type="button" onClick={() => setStatus(v)} className={cn('rounded px-3 py-1 font-medium', status === v ? 'bg-card shadow-sm' : 'text-muted-foreground')}>{l}</button>
           ))}
         </div>
@@ -87,10 +89,16 @@ export default function DraftsList({ entries, openId, missing }: { entries: Entr
         </div>
       </div>
 
+      {status === 'review' ? (
+        pending.length === 0
+          ? <Card className="px-4 py-10 text-center text-sm text-muted-foreground">Keine Entwürfe der Agents offen. Neue Leads aus LinkedIn oder den Heißen Firmen bekommen automatisch einen.</Card>
+          : <div className="grid gap-4 lg:grid-cols-2">{pending.map(i => i.kind === 'letter' ? <LetterCard key={i.id} item={i} /> : <DraftCard key={i.id} item={i} onDone={() => router.refresh()} />)}</div>
+      ) : (
       <Card className="divide-y divide-border">
         {list.length === 0 && <div className="px-4 py-10 text-center text-sm text-muted-foreground">Nichts gefunden. <Link href="/compose" className="underline">Neue Nachricht schreiben</Link></div>}
         {list.map(e => <Row key={e.id} e={e} open={e.id === openId} due={dueOf(e)} onChanged={() => router.refresh()} />)}
       </Card>
+      )}
     </div>
   )
 }
